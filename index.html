@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>敬拜投屏 · 专业版</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js" defer></script>
+    <script src="app.js" defer></script>
+</head>
+<body data-theme="dark">
+<div id="app">
+    <!-- 左侧诗歌库 -->
+    <div id="song-library">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+            <h3 style="margin:0;">📚 诗歌库</h3>
+            <button id="new-song-btn" class="icon-btn" title="新建诗歌">+</button>
+        </div>
+        <input type="text" id="search-input" placeholder="🔍 搜索诗歌..." style="width:100%; padding:8px; border-radius:12px; border:1px solid var(--border-color); background:var(--editor-bg); color:var(--text-primary); margin-bottom:10px;">
+        <div id="tag-filter" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px;"></div>
+        <ul id="song-list"></ul>
+        <button id="add-song-btn" class="add-song-btn">➕ 新建诗歌</button>
+        <div class="file-import-export">
+            <button id="export-data-btn" class="small-btn">📤 导出</button>
+            <button id="import-data-btn" class="small-btn">📥 导入</button>
+            <input type="file" id="import-file-input" accept=".worship,application/json" hidden>
+        </div>
+        <button id="batch-import-btn" class="small-btn" style="margin-top:8px;">📋 批量导入歌词</button>
+        <div class="hint-text">数据全本地保存 · 离线可用</div>
+    </div>
+
+    <div class="resize-handle" id="resize1"></div>
+
+    <!-- 中间编辑区 -->
+    <div id="editor-area">
+        <div id="current-song-title">
+            <input type="text" id="song-title-input" placeholder="诗歌标题" value="奇异恩典">
+            <button id="save-song-btn" class="btn">保存歌词</button>
+        </div>
+        <textarea id="lyric-editor-large" placeholder="输入歌词，一行一句。支持和弦注释，例如：[G]奇异恩典 何等甘甜"></textarea>
+        <div id="song-meta">
+            <span class="meta-field"><label>🎵 调性</label><input type="text" id="song-key" placeholder="C"></span>
+            <span class="meta-field"><label>⏱️ 速度</label><input type="text" id="song-tempo" placeholder="72"></span>
+            <span class="meta-field" style="flex:1; min-width:180px; max-width:300px;"><label>📝 备注</label><input type="text" id="song-notes" placeholder="如：副歌反复" style="width:100%;"></span>
+            <span class="meta-field"><label>🏷️ 标签</label><input type="text" id="song-tags" placeholder="敬拜,感恩" style="width:120px;"></span>
+        </div>
+        <div class="editor-toolbar">
+            <button id="apply-to-display" class="btn">应用到演示屏</button>
+            <button id="reset-current-song" class="btn btn-outline">重置示例</button>
+            <button id="ocr-btn" class="btn btn-outline">📷 拍照识歌词</button>
+            <input type="file" id="ocr-file-input" accept="image/*" capture="environment" hidden>
+            <span class="hint-text" style="margin-left:auto;">💡 和弦用 [G] 标记</span>
+        </div>
+        <!-- 演讲者视图卡片区域（可拖拽高度，含尺寸切换） -->
+        <div id="speaker-view" style="margin-top:16px; background:var(--bg-secondary); border-radius:20px; padding:16px; width:100%; max-width:800px; position:relative;">
+            <div id="speaker-resize-handle" title="拖拽调节高度" style="position:absolute; top:-8px; left:50%; transform:translateX(-50%); width:40px; height:12px; background:var(--accent); border-radius:6px; cursor:ns-resize; opacity:0.6;"></div>
+            <h4 style="margin-bottom:10px; color:var(--text-secondary); font-size:0.9rem; display:flex; justify-content:space-between; align-items:center;">
+                <span>🖥️ 演讲者视图：横滑预览各页</span>
+                <span style="display:flex; gap:6px; align-items:center;">
+                    <span style="font-size:0.8rem;">卡片尺寸</span>
+                    <button id="size-s" class="size-btn">S</button>
+                    <button id="size-m" class="size-btn active">M</button>
+                    <button id="size-l" class="size-btn">L</button>
+                    <span id="page-indicator" style="font-size:0.8rem; margin-left:10px;">1/1</span>
+                </span>
+            </h4>
+            <div id="card-container" style="display:flex; gap:16px; overflow-x:auto; scroll-snap-type:x mandatory; padding-bottom:8px; cursor:grab; min-height:200px;">
+            </div>
+            <div class="hint-text" style="margin-top:8px;">← 左右滑动或滚轮浏览页面卡片 · 卡片背景随主题</div>
+        </div>
+    </div>
+
+    <div class="resize-handle" id="resize2"></div>
+
+    <!-- 右侧预览与设置 -->
+    <div id="preview-panel">
+        <h3>👁️ 快速预览 <span id="preview-line-counter" style="font-size:0.9rem; color:var(--text-secondary);"></span></h3>
+        <div id="mini-preview-wrapper" style="position:relative;">
+            <div id="mini-preview"></div>
+            <div id="preview-resize-handle" title="拖拽调整高度">⋮⋮</div>
+        </div>
+        <div class="setting-group">
+            <label>🎨 背景类型</label>
+            <div class="bg-selector">
+                <div class="bg-option active" data-bg="particles" title="粒子"></div>
+                <div class="bg-option" data-bg="solid" title="纯黑"></div>
+                <div class="bg-option" data-bg="gradient" title="渐变"></div>
+                <div class="bg-option" data-bg="image" id="upload-bg-trigger" title="上传图片"></div>
+                <input type="file" id="bg-image-input" accept="image/*" hidden>
+            </div>
+            <button id="upload-bg-btn" class="btn-outline" style="width:100%; margin-top:8px;">🖼️ 上传背景图片</button>
+        </div>
+        <div class="setting-group">
+            <label>🔤 演示字体大小 <span id="font-val">56</span>px</label>
+            <input type="range" id="font-slider" min="24" max="120" value="56" step="2">
+        </div>
+        <div class="setting-group">
+            <label>📺 演示屏行数 <input type="number" id="display-lines-input" min="1" max="20" value="4" style="width:70px;"> 行 <span style="font-size:0.75rem; color:var(--text-secondary);">(影响投影)</span></label>
+        </div>
+        <div class="setting-group">
+            <label>👁️ 预览行数 <input type="number" id="preview-lines-input" min="1" max="20" value="4" style="width:70px;"> 行 <span style="font-size:0.75rem; color:var(--text-secondary);">(仅预览)</span></label>
+        </div>
+        <div class="setting-group">
+            <label>📍 垂直位置 <span id="pos-val">45</span>%</label>
+            <input type="range" id="pos-slider" min="20" max="70" value="45">
+        </div>
+        <div class="setting-group">
+            <label>⏱️ 自动播放</label>
+            <div style="display:flex; gap:8px; align-items:center;">
+                <input type="number" id="autoplay-interval" min="1" max="30" value="5" style="width:70px;"> 秒
+                <button id="autoplay-toggle" class="btn-outline btn" style="padding:6px 12px;">▶ 开始</button>
+                <button id="autoplay-stop" class="btn-outline btn" style="padding:6px 12px;">⏹️</button>
+            </div>
+            <div class="progress-bar" style="margin-top:8px;">
+                <div class="progress-fill" id="autoplay-progress"></div>
+            </div>
+        </div>
+        <div class="setting-group">
+            <label>🎭 界面主题</label>
+            <select id="theme-selector">
+                <option value="dark" selected>深色</option>
+                <option value="light">浅色</option>
+                <option value="warm">暖色</option>
+                <option value="high-contrast">高对比</option>
+            </select>
+        </div>
+        <button id="open-display-btn" class="btn" style="background:#2e7d32; width:100%;">📺 打开演示窗口 (拖至投影仪)</button>
+        <p class="hint-text">演示窗快捷键: B=黑屏, W=白屏, F=全屏</p>
+        <p class="hint-text">滚轮切换歌词 · 双击预览框跳转</p>
+    </div>
+</div>
+<div id="toast"></div>
+</body>
+</html>

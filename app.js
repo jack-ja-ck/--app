@@ -1,238 +1,805 @@
 (function () {
     "use strict";
 
-    // ========== 全局状态 ==========
     let songs = [];
     let currentSongId = null;
-    let currentLineIndex = 0;
+    let currentPageIndex = 0;
+    let currentPages = [];
     const CHORD_REGEX = /\[([^\]]+)\]/g;
     const channel = new BroadcastChannel('worship_channel');
 
-    let autoplayTimer = null;
-    let autoplayActive = false;
-    let autoplayInterval = 5;
-    let previewHeight = null;
-
+    let autoplayTimer = null, autoplayActive = false, autoplayInterval = 5;
+    let previewHeight = null, cardWidth = 320;
+    const DEFAULT_FONT_FAMILY = "'Microsoft YaHei','PingFang SC',sans-serif";
     const dom = {};
+    let activeTagFilter = '', searchQuery = '';
 
-    let activeTagFilter = '';
-    let searchQuery = '';
+    let cardContainer, pageIndicator, currentCardPage = 0, totalCardPages = 1;
 
-    let cardContainer, pageIndicator;
-    let currentCardPage = 0;
-    let totalPages = 1;
-    let cardWidth = 320; // 卡片宽度 S/M/L (240/320/400)
+    let supabase = null;
+    const SUPABASE_URL = 'https://your-project.supabase.co';
+    const SUPABASE_ANON_KEY = 'your-anon-key';
 
-    function showToast(msg, dur = 2000) {
-        dom.toast.textContent = msg;
-        dom.toast.style.opacity = '1';
-        clearTimeout(window._t);
-        window._t = setTimeout(() => dom.toast.style.opacity = '0', dur);
-    }
+    function showToast(msg, dur=2000) { dom.toast.textContent = msg; dom.toast.style.opacity='1'; clearTimeout(window._t); window._t = setTimeout(() => dom.toast.style.opacity='0', dur); }
+    function getCurrentSong() { return songs.find(s => s.id === currentSongId) || songs[0]; }
 
-    function getCurrentSong() {
-        return songs.find(s => s.id === currentSongId) || songs[0];
-    }
-
-    // ========== 数据持久化 ==========
-    function saveAllData() {
-        localStorage.setItem('worship_songs', JSON.stringify(songs));
-        localStorage.setItem('worship_current_id', currentSongId);
-        if (previewHeight) localStorage.setItem('preview_height', previewHeight);
-        if (dom.songLibrary) localStorage.setItem('panel_left_width', dom.songLibrary.style.width);
-        if (dom.previewPanel) localStorage.setItem('panel_right_width', dom.previewPanel.style.width);
-        localStorage.setItem('card_width', cardWidth);
-    }
-
-    function loadAllData() {
-        const saved = localStorage.getItem('worship_songs');
-        if (saved) { try { songs = JSON.parse(saved); } catch(e) { songs = []; } }
-        const savedId = localStorage.getItem('worship_current_id');
-        currentSongId = savedId || (songs.length ? songs[0].id : null);
-        if (!songs.length) {
-            songs.push({
-                id: '1', title: '奇异恩典',
-                lyrics: ['[G]奇异恩典 何等甘甜','[C]我罪已得赦免','[G]前我失丧 今被寻回','[Em]瞎眼今得看见'],
-                bgType: 'particles', fontSize: 56, displayLines: 4, previewLines: 4, posY: 45,
-                key: 'C', tempo: '72', notes: '', tags: ['敬拜','经典'], history: []
-            });
-            currentSongId = '1';
+    function parsePages(rawLines) {
+        if (!rawLines || !rawLines.length) return [{ lines: [], isTitle: false }];
+        let segments = [];
+        let currentSegment = [];
+        for (let line of rawLines) {
+            if (line.trim().toLowerCase() === '[page]') {
+                if (currentSegment.length > 0) { segments.push(currentSegment); currentSegment = []; }
+            } else { currentSegment.push(line); }
         }
-        const savedH = localStorage.getItem('preview_height');
-        if (savedH) previewHeight = savedH;
-        const savedCW = localStorage.getItem('card_width');
-        if (savedCW) cardWidth = parseInt(savedCW) || 320;
+        if (currentSegment.length > 0) segments.push(currentSegment);
+
+        let pageArray = [];
+        for (let seg of segments) {
+            let subSegments = [];
+            let subCurrent = [];
+            for (let line of seg) {
+                if (line.trim() === '') {
+                    if (subCurrent.length > 0) { subSegments.push(subCurrent); subCurrent = []; }
+                } else { subCurrent.push(line); }
+            }
+            if (subCurrent.length > 0) subSegments.push(subCurrent);
+            pageArray.push(...subSegments);
+        }
+
+        if (pageArray.length === 1 && !rawLines.some(l => l.trim().toLowerCase() === '[page]') && !rawLines.some(l => l.trim() === '')) {
+            return [{ lines: rawLines, isTitle: false }];
+        }
+        let pages = pageArray.map(lines => ({ lines, isTitle: false }));
+        if (pages.length > 1 && pages[0].lines.length === 1 && pages[0].lines[0].replace(CHORD_REGEX, '').trim() !== '') {
+            pages[0].isTitle = true;
+        }
+        return pages;
     }
 
-    // ========== 快速预览区 ==========
+    function rebuildPages(song) {
+        const rawLines = song.lyrics;
+        const pages = parsePages(rawLines);
+        if (pages.length === 1 && !pages[0].isTitle) {
+            const defaultLines = song.defaultLines || 4;
+            const allLines = pages[0].lines;
+            let newPages = [];
+            for (let i = 0; i < allLines.length; i += defaultLines) newPages.push({ lines: allLines.slice(i, i + defaultLines), isTitle: false });
+            currentPages = newPages;
+        } else currentPages = pages;
+        if (!currentPages.length) currentPages = [{ lines: [], isTitle: false }];
+    }
+
+    function saveAllData() {
+        const payload = {
+            songs,
+            currentSongId,
+            currentPageIndex,
+            previewHeight,
+            cardWidth,
+            panelLeftWidth: dom.songLibrary ? dom.songLibrary.style.width : '',
+            panelRightWidth: dom.previewPanel ? dom.previewPanel.style.width : ''
+        };
+        localStorage.setItem('worship_data', JSON.stringify(payload));
+        if (dom.songLibrary && dom.songLibrary.style.width) {
+            localStorage.setItem('panel_left_width', dom.songLibrary.style.width);
+        }
+        if (dom.previewPanel && dom.previewPanel.style.width) {
+            localStorage.setItem('panel_right_width', dom.previewPanel.style.width);
+        }
+        if (previewHeight) {
+            localStorage.setItem('preview_height', previewHeight);
+        }
+        localStorage.setItem('speaker_card_width', String(cardWidth));
+    }
+    function loadAllData() {
+        const fallbackSong = {
+            id: 'default-song',
+            title: '奇异恩典',
+            lyrics: [
+                '奇异恩典',
+                '',
+                '奇异恩典，何等甘甜，',
+                '我罪已得赦免；',
+                '前我失丧，今被寻回，',
+                '瞎眼今得看见。'
+            ],
+            bgType: 'solid-black',
+            bgImage: '',
+            fontSize: 56,
+            fontFamily: DEFAULT_FONT_FAMILY,
+            defaultLines: 4,
+            posY: 45,
+            key: '',
+            tempo: '',
+            notes: '',
+            tags: ['敬拜'],
+            history: []
+        };
+        try {
+            const raw = localStorage.getItem('worship_data');
+            if (raw) {
+                const data = JSON.parse(raw);
+                songs = Array.isArray(data.songs) ? data.songs : [fallbackSong];
+                songs = songs.map(song => ({ ...song, fontFamily: song.fontFamily || DEFAULT_FONT_FAMILY }));
+                currentSongId = data.currentSongId || (songs[0] && songs[0].id);
+                currentPageIndex = Number.isInteger(data.currentPageIndex) ? data.currentPageIndex : 0;
+                previewHeight = data.previewHeight || localStorage.getItem('preview_height');
+                cardWidth = parseInt(data.cardWidth || localStorage.getItem('speaker_card_width') || '320', 10);
+            } else {
+                songs = [fallbackSong];
+                currentSongId = fallbackSong.id;
+                currentPageIndex = 0;
+            }
+        } catch (e) {
+            songs = [fallbackSong];
+            currentSongId = fallbackSong.id;
+            currentPageIndex = 0;
+        }
+        if (!songs.length) {
+            songs = [fallbackSong];
+            currentSongId = fallbackSong.id;
+            currentPageIndex = 0;
+        }
+    }
+
     const MAX_PREVIEW_LINES = 20;
     const previewLineElements = [];
     function initPreviewLines() {
+        previewLineElements.length = 0;
         dom.miniPreview.innerHTML = '';
         for (let i = 0; i < MAX_PREVIEW_LINES; i++) {
-            const d = document.createElement('div');
-            d.className = 'preview-line';
-            d.style.display = 'none';
-            dom.miniPreview.appendChild(d);
-            previewLineElements.push(d);
+            const line = document.createElement('div');
+            line.className = 'preview-line';
+            line.style.opacity = '0';
+            dom.miniPreview.appendChild(line);
+            previewLineElements.push(line);
         }
-        if (previewHeight) dom.miniPreview.style.height = previewHeight;
+        const savedHeight = previewHeight || localStorage.getItem('preview_height');
+        if (savedHeight) {
+            dom.miniPreview.style.height = savedHeight;
+            previewHeight = savedHeight;
+        }
     }
-
     function applyPreviewBackground(song) {
-        const p = dom.miniPreview;
-        p.style.background = ''; p.style.backgroundColor = '';
-        if (song.bgType === 'solid') p.style.backgroundColor = '#000';
-        else if (song.bgType === 'gradient') p.style.background = 'radial-gradient(circle at 30% 30%, #1a2a4a, #000)';
-        else if (song.bgType === 'image' && song.bgImage) {
-            p.style.backgroundImage = `url(${song.bgImage})`; p.style.backgroundSize = 'cover'; p.style.backgroundPosition = 'center';
-        } else p.style.backgroundColor = '#000';
+        const bg = song.bgType || 'solid-black';
+        dom.miniPreview.classList.remove('bg-solid-black', 'bg-solid-white', 'bg-solid-gray', 'bg-particles', 'bg-gradient', 'bg-image');
+        dom.miniPreview.classList.add(`bg-${bg}`);
+        if (bg === 'image' && song.bgImage) {
+            dom.miniPreview.style.backgroundImage = `url(${song.bgImage})`;
+            dom.miniPreview.style.backgroundSize = 'cover';
+            dom.miniPreview.style.backgroundPosition = 'center';
+        } else {
+            dom.miniPreview.style.backgroundImage = '';
+        }
     }
-
     function updateMiniPreview() {
         const song = getCurrentSong();
-        if (!song) return;
+        if (!song || !dom.miniPreview) return;
         applyPreviewBackground(song);
-        const rawLines = song.lyrics;
-        const start = currentLineIndex;
-        const count = Math.min(song.previewLines || song.displayLines || 4, MAX_PREVIEW_LINES);
-        previewLineElements.forEach((el, i) => {
-            if (i < count) {
-                const idx = (start + i) % rawLines.length;
-                const line = rawLines[idx];
-                const chords = [];
-                const clean = line.replace(CHORD_REGEX, (m, c) => { chords.push(c); return ''; }).trim();
-                const isCur = (i === 0);
-                const fs = isCur ? song.fontSize : Math.max(16, song.fontSize * 0.65);
-                const op = isCur ? 1 : 0.45;
-                const chordsStr = chords.length ? `<span style="font-size:${fs*0.5}px; background:#2a4a6a; padding:2px 6px; border-radius:10px; margin-left:8px;">${chords.join(' ')}</span>` : '';
-                el.style.display = 'block'; el.style.fontSize = fs + 'px'; el.style.opacity = op;
-                el.innerHTML = clean + chordsStr;
-            } else el.style.display = 'none';
-        });
-        if (dom.previewLineCounter) dom.previewLineCounter.textContent = `${currentLineIndex+1}/${song.lyrics.length}`;
+        const page = currentPages[currentPageIndex] || { lines: [] };
+        const lines = page.lines || [];
+        const cleanLines = lines.map(line => line.replace(CHORD_REGEX, '').trim()).filter(Boolean);
+        const lineCount = cleanLines.length || 1;
+        const baseSize = Math.max(20, Math.min(song.fontSize, 220 / lineCount));
+        for (let i = 0; i < MAX_PREVIEW_LINES; i++) {
+            const node = previewLineElements[i];
+            if (!node) continue;
+            if (i < cleanLines.length) {
+                node.textContent = cleanLines[i];
+                node.style.fontSize = `${baseSize}px`;
+                node.style.fontFamily = song.fontFamily || DEFAULT_FONT_FAMILY;
+                node.style.opacity = '1';
+                node.style.lineHeight = '1.8';
+                node.style.whiteSpace = 'normal';
+                node.style.wordBreak = 'break-word';
+            } else {
+                node.textContent = '';
+                node.style.opacity = '0';
+            }
+        }
+        dom.miniPreview.style.justifyContent = 'center';
+        dom.miniPreview.style.alignItems = 'center';
+        dom.miniPreview.style.paddingTop = '0';
+        dom.miniPreview.style.transform = `translateY(${(song.posY - 45) * 0.5}px)`;
+        dom.previewLineCounter.textContent = `${currentPageIndex + 1}/${Math.max(1, currentPages.length)}`;
+        dom.fontVal.textContent = song.fontSize;
+        dom.posVal.textContent = `${song.posY}%`;
+        dom.defaultLinesInput.value = song.defaultLines || 4;
+        dom.fontSlider.value = song.fontSize || 56;
+        dom.posSlider.value = song.posY || 45;
     }
 
-    // ========== 广播 ==========
     function broadcastState() {
         const song = getCurrentSong();
-        const clean = song.lyrics.map(l => l.replace(CHORD_REGEX, '').trim());
-        channel.postMessage({ type: 'update', song: { ...song, lyrics: clean }, currentLine: currentLineIndex });
-        if (!song.history) song.history = [];
-        song.history.push(Date.now());
-        saveAllData();
-    }
-
-    // ========== 翻页 ==========
-    function nextLine() {
-        const s = getCurrentSong();
-        if (!s.lyrics.length) return;
-        currentLineIndex = (currentLineIndex + 1) % s.lyrics.length;
-        updateMiniPreview(); updateSpeakerCards(); broadcastState(); resetAutoplayProgress();
-    }
-    function prevLine() {
-        const s = getCurrentSong();
-        if (!s.lyrics.length) return;
-        currentLineIndex = (currentLineIndex - 1 + s.lyrics.length) % s.lyrics.length;
-        updateMiniPreview(); updateSpeakerCards(); broadcastState(); resetAutoplayProgress();
-    }
-
-    // ========== 自动播放 ==========
-    function startAutoplay() {
-        if (autoplayTimer) clearInterval(autoplayTimer);
-        autoplayActive = true; dom.autoplayToggle.textContent = '⏸️ 暂停';
-        let remaining = autoplayInterval; dom.autoplayProgress.style.width = '0%';
-        const step = 100 / (autoplayInterval * 10);
-        autoplayTimer = setInterval(() => {
-            if (remaining <= 0) { nextLine(); remaining = autoplayInterval; dom.autoplayProgress.style.width = '0%'; }
-            else { remaining -= 0.1; dom.autoplayProgress.style.width = ((autoplayInterval - remaining) / autoplayInterval * 100) + '%'; }
-        }, 100);
-    }
-    function pauseAutoplay() { if (autoplayTimer) clearInterval(autoplayTimer); autoplayActive = false; dom.autoplayToggle.textContent = '▶ 开始'; }
-    function stopAutoplay() { pauseAutoplay(); dom.autoplayProgress.style.width = '0%'; }
-    function resetAutoplayProgress() { if (autoplayActive) dom.autoplayProgress.style.width = '0%'; }
-
-    // ========== 诗歌列表与筛选 ==========
-    function getFilteredSongs() {
-        return songs.filter(s => {
-            const matchSearch = !searchQuery || s.title.toLowerCase().includes(searchQuery.toLowerCase());
-            const matchTag = !activeTagFilter || (s.tags && s.tags.includes(activeTagFilter));
-            return matchSearch && matchTag;
+        if (!song) return;
+        const page = currentPages[currentPageIndex] || { lines: [], isTitle: false };
+        channel.postMessage({
+            type: 'update',
+            song: {
+                ...song,
+                lyrics: page.lines
+            },
+            pages: currentPages.map(p => ({ lines: p.lines, isTitle: p.isTitle })),
+            currentPageIndex,
+            totalPages: currentPages.length || 1,
+            isTitlePage: !!page.isTitle
         });
     }
+    function nextPage() { if (currentPageIndex < currentPages.length-1) currentPageIndex++; updateAll(); }
+    function prevPage() { if (currentPageIndex > 0) currentPageIndex--; updateAll(); }
+    function updateAll() { updateMiniPreview(); updateSpeakerCards(); broadcastState(); resetAutoplayProgress(); saveAllData(); }
+
+    function jumpToPage(index) {
+        if (index < 0 || index >= currentPages.length) return;
+        currentPageIndex = index;
+        currentCardPage = index;
+        updateAll();
+    }
+
+    function createNewSong() {
+        const id = `${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+        const song = {
+            id,
+            title: `新诗歌 ${songs.length + 1}`,
+            lyrics: ['输入第一行歌词', '输入第二行歌词'],
+            bgType: 'solid-black',
+            bgImage: '',
+            fontSize: 56,
+            fontFamily: DEFAULT_FONT_FAMILY,
+            defaultLines: 4,
+            posY: 45,
+            key: '',
+            tempo: '',
+            notes: '',
+            tags: [],
+            history: []
+        };
+        songs.unshift(song);
+        currentSongId = id;
+        currentPageIndex = 0;
+        renderSongList();
+        renderTagFilters();
+        switchSong(id);
+        showToast('已新建诗歌');
+    }
+
+    function saveCurrentLyrics() {
+        const song = getCurrentSong();
+        if (!song) return;
+        const rawLines = (dom.lyricEditor.value || '').split('\n');
+        const cleanedLyrics = [];
+        rawLines.forEach((line) => {
+            const stripped = line.replace(/^\s*\d+\s*[.、）)]\s*/, '').trim();
+            if (!stripped) {
+                if (cleanedLyrics.length && cleanedLyrics[cleanedLyrics.length - 1] !== '') cleanedLyrics.push('');
+                return;
+            }
+            cleanedLyrics.push(stripped);
+        });
+        while (cleanedLyrics.length && cleanedLyrics[cleanedLyrics.length - 1] === '') cleanedLyrics.pop();
+        song.title = (dom.songTitleInput.value || '').trim() || '未命名诗歌';
+        song.lyrics = cleanedLyrics.length ? cleanedLyrics : [''];
+        song.defaultLines = parseInt(dom.defaultLinesInput.value, 10) || 4;
+        song.fontSize = parseInt(dom.fontSlider.value, 10) || 56;
+        song.fontFamily = dom.fontFamilySelector.value || DEFAULT_FONT_FAMILY;
+        song.posY = parseInt(dom.posSlider.value, 10) || 45;
+        song.key = dom.songKey.value || '';
+        song.tempo = dom.songTempo.value || '';
+        song.notes = dom.songNotes.value || '';
+        song.tags = (dom.songTags.value || '').split(',').map(t => t.trim()).filter(Boolean);
+        dom.lyricEditor.value = song.lyrics.join('\n');
+        rebuildPages(song);
+        if (currentPageIndex >= currentPages.length) currentPageIndex = Math.max(0, currentPages.length - 1);
+        renderSongList();
+        renderTagFilters();
+        updateAll();
+        showToast('已保存');
+    }
+
+    function deleteSong(id) {
+        if (songs.length <= 1) {
+            showToast('至少保留一首诗歌');
+            return;
+        }
+        songs = songs.filter(s => s.id !== id);
+        if (currentSongId === id) {
+            currentSongId = songs[0].id;
+            currentPageIndex = 0;
+        }
+        saveAllData();
+        renderSongList();
+        renderTagFilters();
+        switchSong(currentSongId);
+        showToast('已删除');
+    }
+
+    function switchSong(id) {
+        const song = songs.find(s => s.id === id);
+        if (!song) return;
+        currentSongId = id;
+        currentPageIndex = 0;
+        currentCardPage = 0;
+        dom.songTitleInput.value = song.title || '';
+        dom.lyricEditor.value = Array.isArray(song.lyrics) ? song.lyrics.join('\n') : '';
+        dom.fontSlider.value = song.fontSize || 56;
+        dom.fontFamilySelector.value = song.fontFamily || DEFAULT_FONT_FAMILY;
+        dom.defaultLinesInput.value = song.defaultLines || 4;
+        dom.posSlider.value = song.posY || 45;
+        dom.fontVal.textContent = song.fontSize || 56;
+        dom.posVal.textContent = `${song.posY || 45}%`;
+        dom.songKey.value = song.key || '';
+        dom.songTempo.value = song.tempo || '';
+        dom.songNotes.value = song.notes || '';
+        dom.songTags.value = (song.tags || []).join(', ');
+        rebuildPages(song);
+        renderSongList();
+        document.querySelectorAll('.bg-option').forEach(o => o.classList.toggle('active', o.dataset.bg === song.bgType));
+        updateAll();
+    }
+
+    function getFilteredSongs() {
+        const query = (searchQuery || '').toLowerCase();
+        return songs.filter(song => {
+            const title = (song.title || '').toLowerCase();
+            const tags = (song.tags || []).join(',').toLowerCase();
+            const queryMatched = !query || title.includes(query) || tags.includes(query);
+            const tagMatched = !activeTagFilter || (song.tags || []).includes(activeTagFilter);
+            return queryMatched && tagMatched;
+        });
+    }
+
     function renderSongList() {
+        if (!dom.songList) return;
+        const filtered = getFilteredSongs();
         dom.songList.innerHTML = '';
-        getFilteredSongs().forEach(song => {
+        if (!filtered.length) {
+            const empty = document.createElement('li');
+            empty.textContent = '没有匹配的诗歌';
+            empty.style.opacity = '0.7';
+            dom.songList.appendChild(empty);
+            return;
+        }
+        filtered.forEach(song => {
             const li = document.createElement('li');
-            li.className = 'song-item' + (song.id === currentSongId ? ' active' : '');
-            const count = song.history ? song.history.length : 0;
-            li.innerHTML = `<span style="flex:1;">${song.title}</span><span class="song-meta">${count?'🎤'+count:''}</span><span class="song-actions"><button data-id="${song.id}" class="delete-song" style="color:#f77;">✕</button></span>`;
-            li.addEventListener('click', (e) => { if (!e.target.classList.contains('delete-song')) switchSong(song.id); });
+            li.className = 'song-item';
+            if (song.id === currentSongId) li.classList.add('active');
+            li.innerHTML = `
+                <div class="song-item-main">
+                    <div class="song-title">${song.title || '未命名诗歌'}</div>
+                    <div class="song-tags">${(song.tags || []).join(' · ')}</div>
+                </div>
+                <button class="song-delete-btn" title="删除">×</button>
+            `;
+            li.addEventListener('click', (e) => {
+                if (e.target.closest('.song-delete-btn')) return;
+                switchSong(song.id);
+            });
+            const delBtn = li.querySelector('.song-delete-btn');
+            delBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (confirm(`确认删除《${song.title}》？`)) deleteSong(song.id);
+            });
             dom.songList.appendChild(li);
         });
-        document.querySelectorAll('.delete-song').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); deleteSong(b.dataset.id); }));
     }
+
     function renderTagFilters() {
-        const tags = new Set(); songs.forEach(s => { if (s.tags) s.tags.forEach(t => tags.add(t)); });
+        if (!dom.tagFilter) return;
+        const tags = new Set();
+        songs.forEach(song => (song.tags || []).forEach(tag => tags.add(tag)));
         dom.tagFilter.innerHTML = '';
-        const allBtn = document.createElement('button'); allBtn.textContent = '全部'; allBtn.className = 'small-btn';
-        if (!activeTagFilter) allBtn.style.background = 'var(--accent)';
-        allBtn.addEventListener('click', () => { activeTagFilter = ''; renderTagFilters(); renderSongList(); });
+        const allBtn = document.createElement('button');
+        allBtn.className = `tag-btn ${activeTagFilter ? '' : 'active'}`;
+        allBtn.textContent = '全部';
+        allBtn.addEventListener('click', () => {
+            activeTagFilter = '';
+            renderTagFilters();
+            renderSongList();
+        });
         dom.tagFilter.appendChild(allBtn);
-        tags.forEach(tag => {
-            const btn = document.createElement('button'); btn.textContent = tag; btn.className = 'small-btn';
-            if (activeTagFilter === tag) btn.style.background = 'var(--accent)';
-            btn.addEventListener('click', () => { activeTagFilter = tag; renderTagFilters(); renderSongList(); });
+        Array.from(tags).sort().forEach(tag => {
+            const btn = document.createElement('button');
+            btn.className = `tag-btn ${activeTagFilter === tag ? 'active' : ''}`;
+            btn.textContent = tag;
+            btn.addEventListener('click', () => {
+                activeTagFilter = activeTagFilter === tag ? '' : tag;
+                renderTagFilters();
+                renderSongList();
+            });
             dom.tagFilter.appendChild(btn);
         });
     }
 
-    function switchSong(id) {
-        currentSongId = id; const s = getCurrentSong();
-        dom.songTitleInput.value = s.title; dom.lyricEditor.value = s.lyrics.join('\n');
-        dom.fontSlider.value = s.fontSize; dom.fontVal.textContent = s.fontSize;
-        dom.displayLinesInput.value = s.displayLines || 4; dom.previewLinesInput.value = s.previewLines || 4;
-        dom.posSlider.value = s.posY; dom.posVal.textContent = s.posY + '%';
-        dom.songKey.value = s.key || ''; dom.songTempo.value = s.tempo || ''; dom.songNotes.value = s.notes || '';
-        dom.songTags.value = s.tags ? s.tags.join(',') : '';
-        document.querySelectorAll('.bg-option').forEach(o => o.classList.toggle('active', o.dataset.bg === s.bgType));
-        currentLineIndex = 0; updateMiniPreview(); updateSpeakerCards(); renderSongList(); broadcastState(); stopAutoplay(); saveAllData();
-    }
-    function deleteSong(id) {
-        if (songs.length <= 1) { showToast('至少保留一首'); return; }
-        songs = songs.filter(s => s.id !== id); if (currentSongId === id) currentSongId = songs[0].id;
-        renderSongList(); renderTagFilters(); switchSong(currentSongId);
-    }
-    function createNewSong() {
-        const id = Date.now().toString();
-        songs.push({ id, title: '新诗歌', lyrics: ['新歌词'], bgType: 'particles', fontSize: 56, displayLines: 4, previewLines: 4, posY: 45, key: '', tempo: '', notes: '', tags: [], history: [] });
-        renderSongList(); renderTagFilters(); switchSong(id);
-    }
-    function saveCurrentLyrics() {
-        const s = getCurrentSong();
-        const newLyrics = dom.lyricEditor.value.split('\n').map(l => l.trim()).filter(l => l);
-        if (!newLyrics.length) { showToast('歌词不能为空'); return; }
-        s.lyrics = newLyrics; s.title = dom.songTitleInput.value.trim() || '未命名';
-        s.key = dom.songKey.value.trim(); s.tempo = dom.songTempo.value.trim(); s.notes = dom.songNotes.value.trim();
-        s.tags = dom.songTags.value.split(',').map(t => t.trim()).filter(t => t);
-        if (currentLineIndex >= newLyrics.length) currentLineIndex = 0;
-        renderSongList(); renderTagFilters(); updateMiniPreview(); updateSpeakerCards(); broadcastState(); saveAllData();
-        showToast('已保存');
+    function startAutoplay() {
+        if (autoplayActive) return;
+        autoplayInterval = parseFloat(dom.autoplayInterval.value) || 5;
+        autoplayActive = true;
+        dom.autoplayToggle.textContent = '⏸ 暂停';
+        let remaining = autoplayInterval * 1000;
+        resetAutoplayProgress();
+        autoplayTimer = setInterval(() => {
+            remaining -= 100;
+            const progress = Math.max(0, Math.min(100, ((autoplayInterval * 1000 - remaining) / (autoplayInterval * 1000)) * 100));
+            dom.autoplayProgress.style.width = `${progress}%`;
+            if (remaining <= 0) {
+                if (currentPageIndex < currentPages.length - 1) {
+                    nextPage();
+                    remaining = autoplayInterval * 1000;
+                } else {
+                    stopAutoplay();
+                }
+            }
+        }, 100);
     }
 
-    // ========== 背景 ==========
-    function setBackground(type, imgData = null) {
-        const s = getCurrentSong(); s.bgType = type; if (type === 'image' && imgData) s.bgImage = imgData;
-        document.querySelectorAll('.bg-option').forEach(o => o.classList.toggle('active', o.dataset.bg === type));
-        updateMiniPreview(); updateSpeakerCards(); broadcastState(); saveAllData();
+    function pauseAutoplay() {
+        if (!autoplayActive) return;
+        autoplayActive = false;
+        dom.autoplayToggle.textContent = '▶ 开始';
+        clearInterval(autoplayTimer);
+        autoplayTimer = null;
     }
+
+    function stopAutoplay() {
+        autoplayActive = false;
+        clearInterval(autoplayTimer);
+        autoplayTimer = null;
+        dom.autoplayToggle.textContent = '▶ 开始';
+        resetAutoplayProgress();
+    }
+
+    function resetAutoplayProgress() {
+        if (dom.autoplayProgress) dom.autoplayProgress.style.width = '0%';
+    }
+
+    // 演讲者视图
+    function initSpeakerView() {
+        cardContainer = document.getElementById('card-container');
+        pageIndicator = document.getElementById('page-indicator');
+        const sizeS = document.getElementById('size-s');
+        const sizeM = document.getElementById('size-m');
+        const sizeL = document.getElementById('size-l');
+        const applySize = (w, btn) => {
+            cardWidth = w;
+            [sizeS, sizeM, sizeL].forEach(b => b && b.classList.remove('active'));
+            if (btn) btn.classList.add('active');
+            updateSpeakerCards();
+            saveAllData();
+        };
+        if (sizeS) sizeS.addEventListener('click', () => applySize(260, sizeS));
+        if (sizeM) sizeM.addEventListener('click', () => applySize(320, sizeM));
+        if (sizeL) sizeL.addEventListener('click', () => applySize(420, sizeL));
+        if (cardContainer) {
+            cardContainer.addEventListener('wheel', (e) => {
+                if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+                    e.preventDefault();
+                    cardContainer.scrollLeft += e.deltaY;
+                }
+            }, { passive: false });
+        }
+        updateSpeakerCards();
+    }
+
+    function applyCardBackground(card, song) {
+        const bg = song.bgType || 'solid-black';
+        card.style.backgroundImage = '';
+        card.style.backgroundSize = '';
+        card.style.backgroundPosition = '';
+        if (bg === 'solid-black') card.style.background = '#000';
+        else if (bg === 'solid-white') card.style.background = '#fff';
+        else if (bg === 'solid-gray') card.style.background = '#555';
+        else if (bg === 'gradient') card.style.background = 'radial-gradient(circle at 30% 30%, #1a2a4a, #000)';
+        else if (bg === 'image' && song.bgImage) {
+            card.style.background = '#000';
+            card.style.backgroundImage = `url(${song.bgImage})`;
+            card.style.backgroundSize = 'cover';
+            card.style.backgroundPosition = 'center';
+        } else card.style.background = '#111';
+    }
+    function updateSpeakerCards() {
+        const song = getCurrentSong();
+        if (!song || !cardContainer) return;
+        totalCardPages = currentPages.length;
+        if (totalCardPages === 0) return;
+        if (currentCardPage >= totalCardPages) currentCardPage = totalCardPages - 1;
+
+        cardContainer.innerHTML = '';
+        for (let p = 0; p < totalCardPages; p++) {
+            const page = currentPages[p];
+            const card = document.createElement('div');
+            card.className = 'card';
+            card.style.width = cardWidth + 'px';
+            if (p === currentCardPage) card.classList.add('active');
+            applyCardBackground(card, song);
+
+            const lines = page.lines;
+            if (lines.length > 0) {
+                lines.forEach((rawLine) => {
+                    const clean = rawLine.replace(CHORD_REGEX, '').trim();
+                    const baseFontSize = Math.min(song.fontSize, cardWidth * 0.12);
+                    const lineDiv = document.createElement('div');
+                    lineDiv.className = 'card-line';
+                    lineDiv.style.fontSize = baseFontSize + 'px';
+                    lineDiv.style.fontFamily = song.fontFamily || DEFAULT_FONT_FAMILY;
+                    lineDiv.style.opacity = 1;
+                    lineDiv.textContent = clean;
+                    card.appendChild(lineDiv);
+                });
+            } else {
+                card.classList.add('empty');
+                card.textContent = '…';
+            }
+
+            card.addEventListener('click', () => jumpToPage(p));
+            cardContainer.appendChild(card);
+        }
+
+        pageIndicator.textContent = `${currentCardPage + 1}/${totalCardPages}`;
+        const cards = cardContainer.children;
+        if (cards[currentCardPage]) {
+            requestAnimationFrame(() => {
+                cards[currentCardPage].scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+            });
+        }
+    }
+
+    // ========== 演示窗口（含完整底部卡片预览） ==========
+    function initDisplayMode() {
+        document.body.innerHTML = `
+            <canvas id="display-canvas" style="position:fixed;top:0;left:0;width:100%;height:100%;z-index:1;"></canvas>
+            <div id="display-lyrics" style="position:fixed;top:45%;left:50%;transform:translate(-50%,-50%);z-index:10;text-align:center;pointer-events:none;width:90%;"></div>
+            <div id="blackout-overlay" style="position:fixed;top:0;left:0;width:100%;height:100%;background:#000;z-index:100;display:none;"></div>
+            <div id="whiteout-overlay" style="position:fixed;top:0;left:0;width:100%;height:100%;background:#fff;z-index:100;display:none;"></div>
+            <div id="ended-overlay" style="position:fixed;top:0;left:0;width:100%;height:100%;background:#000;z-index:90;display:none; flex-direction:column; align-items:center; justify-content:center; color:white; font-size:3rem; font-weight:bold; text-shadow:2px 2px 8px black; text-align:center;">
+                <span>投屏已结束 ✝️</span>
+                <span style="font-size:1.5rem; margin-top:20px;">按上键返回</span>
+            </div>
+            <!-- 底部控制区 -->
+            <div id="display-controls" style="position:fixed; bottom:0; left:0; width:100%; z-index:80; display:flex; flex-direction:column; background:rgba(0,0,0,0.7); backdrop-filter:blur(8px); border-top:1px solid rgba(255,255,255,0.15); padding:8px 12px; transition: transform 0.3s ease;">
+                <!-- 卡片预览条 -->
+                <div id="display-card-preview" style="display:flex; gap:8px; overflow-x:auto; padding-bottom:6px; margin-bottom:6px;"></div>
+                <!-- 按钮栏 -->
+                <div style="position:relative; display:flex; justify-content:center; align-items:center; min-height:40px;">
+                    <div style="display:flex; justify-content:center; align-items:center; gap:16px;">
+                        <button id="dc-prev-btn" class="display-control-btn">◀ 上一页</button>
+                        <span id="dc-page-indicator" style="color:#ccc; font-size:1rem;">1/1</span>
+                        <button id="dc-next-btn" class="display-control-btn">下一页 ▶</button>
+                    </div>
+                    <button id="dc-toggle-btn" style="position:absolute; right:6px; background:none; border:none; color:#aaa; font-size:1.2rem; cursor:pointer;">▲ 隐藏</button>
+                </div>
+            </div>
+        `;
+
+        const canvas = document.getElementById('display-canvas'), ctx = canvas.getContext('2d'),
+              lyricsDiv = document.getElementById('display-lyrics'),
+              blackout = document.getElementById('blackout-overlay'),
+              whiteout = document.getElementById('whiteout-overlay'),
+              endedOverlay = document.getElementById('ended-overlay'),
+              dcPrev = document.getElementById('dc-prev-btn'),
+              dcNext = document.getElementById('dc-next-btn'),
+              dcPageIndicator = document.getElementById('dc-page-indicator'),
+              dcToggle = document.getElementById('dc-toggle-btn'),
+              dcControls = document.getElementById('display-controls'),
+              dcCardPreview = document.getElementById('display-card-preview');
+
+        let w, h, particles = [], currentState = null, ended = false, controlsVisible = true;
+        const cachedBgImage = new Image();
+        let cachedBgSrc = '';
+
+        function resize() { w = window.innerWidth; h = window.innerHeight; canvas.width = w; canvas.height = h; }
+        window.addEventListener('resize', resize); resize();
+
+        class Particle {
+            constructor() { this.x = Math.random()*w; this.y = Math.random()*h; this.vx = (Math.random()-0.5)*0.7; this.vy = (Math.random()-0.5)*0.5; this.size = Math.random()*5+2; this.color = `rgba(255,255,255,${0.7+Math.random()*0.3})`; }
+            update() { this.x+=this.vx; this.y+=this.vy; if(this.x<0||this.x>w)this.vx*=-1; if(this.y<0||this.y>h)this.vy*=-1; }
+            draw() { ctx.beginPath(); ctx.arc(this.x,this.y,this.size,0,Math.PI*2); ctx.fillStyle=this.color; ctx.shadowColor='white'; ctx.shadowBlur=10; ctx.fill(); }
+        }
+        for(let i=0;i<70;i++) particles.push(new Particle());
+
+        function drawBg(bg, img) {
+            if(bg==='solid-black'){ctx.fillStyle='#000';ctx.fillRect(0,0,w,h);}
+            else if(bg==='solid-white'){ctx.fillStyle='#fff';ctx.fillRect(0,0,w,h);}
+            else if(bg==='solid-gray'){ctx.fillStyle='#555';ctx.fillRect(0,0,w,h);}
+            else if(bg==='gradient'){const g=ctx.createRadialGradient(w*.3,h*.3,50,w*.5,h*.5,w);g.addColorStop(0,'#1a2a4a');g.addColorStop(1,'#000');ctx.fillStyle=g;ctx.fillRect(0,0,w,h);}
+            else if (bg === 'image' && img) {
+                if (cachedBgSrc !== img) {
+                    cachedBgSrc = img;
+                    cachedBgImage.src = img;
+                }
+                if (cachedBgImage.complete && cachedBgImage.naturalWidth > 0) {
+                    ctx.drawImage(cachedBgImage, 0, 0, w, h);
+                } else {
+                    ctx.fillStyle = '#000';
+                    ctx.fillRect(0, 0, w, h);
+                }
+            }
+            else if(bg==='particles'){ctx.fillStyle='rgba(0,0,0,0.15)';ctx.fillRect(0,0,w,h);particles.forEach(p=>{p.update();p.draw();});}
+            else{ctx.fillStyle='rgba(0,0,0,0.2)';ctx.fillRect(0,0,w,h);}
+        }
+
+        function render(state) {
+            if (!state || ended) return;
+            const {song, currentPageIndex, totalPages, isTitlePage} = state;
+            const lyrics = song.lyrics;
+            let html = '';
+            if (isTitlePage && lyrics.length > 0) {
+                html = `<div style="color:white; font-weight:bold; text-shadow:3px 3px 8px black; font-size:${song.fontSize*1.8}px; line-height:1.8; white-space:normal; word-break:break-word; font-family:${song.fontFamily || DEFAULT_FONT_FAMILY};">${lyrics[0]}</div>`;
+            } else {
+                lyrics.forEach(line => {
+                    html += `<div style="color:white; font-weight:bold; text-shadow:3px 3px 8px black; font-size:${song.fontSize}px; opacity:1; line-height:1.8; white-space:normal; word-break:break-word; font-family:${song.fontFamily || DEFAULT_FONT_FAMILY};">${line}</div>`;
+                });
+            }
+            lyricsDiv.innerHTML = html;
+            lyricsDiv.style.top = song.posY + '%';
+            dcPageIndicator.textContent = `${currentPageIndex+1}/${totalPages}`;
+
+            // 更新底部卡片预览
+            dcCardPreview.innerHTML = '';
+            const pages = Array.isArray(state.pages) ? state.pages : [];
+            const start = Math.max(0, currentPageIndex - 1);
+            const end = Math.min(totalPages - 1, currentPageIndex + 1);
+            for (let i = start; i <= end; i++) {
+                const mini = document.createElement('div');
+                mini.className = 'display-mini-card';
+                if (i === currentPageIndex) mini.classList.add('active');
+                const pageLines = (i < pages.length && Array.isArray(pages[i].lines)) ? pages[i].lines : [];
+                mini.textContent = pageLines.length > 0 ? pageLines[0].substring(0, 8) : '…';
+                mini.title = pageLines.join('\n');
+                dcCardPreview.appendChild(mini);
+            }
+
+            if (currentPageIndex >= totalPages - 1 && !isTitlePage) {
+                ended = true;
+                setTimeout(() => { endedOverlay.style.display = 'flex'; }, 600);
+            }
+        }
+
+        function animate() { drawBg(currentState?.song.bgType, currentState?.song.bgImage); requestAnimationFrame(animate); }
+        animate();
+
+        const dc = new BroadcastChannel('worship_channel');
+        dc.addEventListener('message', e => {
+            if (e.data.type === 'update') {
+                currentState = e.data;
+                ended = false;
+                endedOverlay.style.display = 'none';
+                lyricsDiv.style.display = 'block';
+                render(currentState);
+            }
+        });
+        dc.postMessage({ type: 'request_state' });
+
+        dcPrev.addEventListener('click', () => dc.postMessage({ type: 'prev' }));
+        dcNext.addEventListener('click', () => dc.postMessage({ type: 'next' }));
+        dcToggle.addEventListener('click', () => {
+            controlsVisible = !controlsVisible;
+            dcControls.style.transform = controlsVisible ? 'translateY(0)' : 'translateY(100%)';
+        });
+
+        window.addEventListener('keydown', e => {
+            if (e.key === 'b' || e.key === 'B') { e.preventDefault(); blackout.style.display = blackout.style.display === 'none' ? 'block' : 'none'; }
+            else if (e.key === 'w' || e.key === 'W') { e.preventDefault(); whiteout.style.display = whiteout.style.display === 'none' ? 'block' : 'none'; }
+            else if (e.key === 'f' || e.key === 'F') { e.preventDefault(); document.documentElement.requestFullscreen(); }
+            else if (e.key === 'Escape') { blackout.style.display = 'none'; whiteout.style.display = 'none'; }
+            else if (e.key === 'ArrowUp' && ended) { ended = false; endedOverlay.style.display = 'none'; lyricsDiv.style.display = 'block'; dc.postMessage({ type: 'prev' }); }
+        });
+    }
+
+    // ========== Supabase 集成 ==========
+    async function initSupabase() {
+        if (SUPABASE_URL.includes('your-project') || SUPABASE_ANON_KEY.includes('your-anon-key')) {
+            console.warn('Supabase 未配置，云端功能禁用。');
+            supabase = null;
+            return;
+        }
+        try {
+            const { createClient } = window.supabase || {};
+            if (!createClient) return;
+            supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            const { error } = await supabase.auth.signInAnonymously();
+            if (error) console.error('匿名登录失败', error);
+        } catch(e) {
+            console.error('Supabase 初始化失败', e);
+            supabase = null;
+        }
+    }
+
+    async function publishSong() {
+        if (!supabase) { showToast('云端功能未配置'); return; }
+        const s = getCurrentSong();
+        if (!s.lyrics.length) { showToast('无歌词可发布'); return; }
+        try {
+            const { error } = await supabase.from('hymns').insert([{ title: s.title, lyrics: s.lyrics, tags: s.tags || [] }]);
+            if (error) throw error;
+            showToast('已发布到云端');
+        } catch(e) { showToast('发布失败'); }
+    }
+
+    // ========== 在线诗歌搜索 ==========
+    let onlineHymns = [];
+    async function loadOnlineHymns() {
+        onlineHymns = [];
+        try {
+            const res = await fetch('./hymns.json', { cache: 'no-cache' });
+            if (res.ok) {
+                const data = await res.json();
+                if (Array.isArray(data)) {
+                    onlineHymns = data.filter(item => item && item.title && Array.isArray(item.lyrics));
+                }
+            }
+        } catch(e) {
+            console.warn('加载 hymns.json 失败', e);
+        }
+        if (supabase) {
+            try {
+                const { data, error } = await supabase.from('hymns').select('title,lyrics,tags');
+                if (data && !error) {
+                    const localTitles = new Set(onlineHymns.map(h => h.title));
+                    data.forEach(item => { if (!localTitles.has(item.title)) onlineHymns.push(item); });
+                }
+            } catch(e) {}
+        }
+    }
+
+    function searchOnlineHymns(query) {
+        const q = query.trim().toLowerCase();
+        if (!q) return [];
+        return onlineHymns.filter(h => (h.title || '').toLowerCase().includes(q)).slice(0, 6);
+    }
+
+    function renderOnlineResults(results) {
+        dom.onlineResults.innerHTML = '';
+        if (!results.length) {
+            dom.onlineResults.innerHTML = '<div style="color:var(--text-secondary); padding:6px;">未找到</div>';
+            return;
+        }
+        results.forEach(hymn => {
+            const div = document.createElement('div');
+            div.className = 'online-result-item';
+            div.innerHTML = `<span>${hymn.title}</span><button class="online-import-btn">导入</button>`;
+            div.querySelector('.online-import-btn').addEventListener('click', e => { e.stopPropagation(); importOnlineHymn(hymn); });
+            dom.onlineResults.appendChild(div);
+        });
+    }
+
+    function importOnlineHymn(hymn) {
+        const newSong = {
+            id: Date.now().toString(), title: hymn.title, lyrics: hymn.lyrics,
+            bgType: 'particles', fontSize: 56, defaultLines: 4, posY: 45,
+            key: '', tempo: '', notes: '', tags: hymn.tags || [], history: [], fontFamily: DEFAULT_FONT_FAMILY
+        };
+        songs.push(newSong); saveAllData(); renderSongList(); renderTagFilters(); switchSong(newSong.id);
+        showToast(`已导入《${hymn.title}》`);
+    }
+
+    // ========== 背景设置 ==========
+    function setBackground(type, imgData = null) {
+        const s = getCurrentSong();
+        s.bgType = type;
+        if (type === 'image' && imgData) s.bgImage = imgData;
+        const imgOpt = document.querySelector('.bg-option[data-bg="image"]');
+        if (imgOpt) {
+            if (s.bgImage) {
+                imgOpt.style.backgroundImage = `url(${s.bgImage})`;
+                imgOpt.style.backgroundSize = 'cover';
+                imgOpt.style.borderStyle = 'solid';
+            } else {
+                imgOpt.style.backgroundImage = '';
+                imgOpt.style.borderStyle = 'dashed';
+            }
+        }
+        document.querySelectorAll('.bg-option').forEach(o => o.classList.toggle('active', o.dataset.bg === type));
+        updateAll();
+    }
+
     function handleBgImageUpload(file) {
         const reader = new FileReader();
-        reader.onload = (e) => { setBackground('image', e.target.result); showToast('背景图片已上传'); };
+        reader.onload = (e) => { setBackground('image', e.target.result); showToast('背景已上传'); };
         reader.readAsDataURL(file);
     }
 
-    // ========== OCR ==========
+    // ========== OCR 等辅助功能 ==========
     function initOCR() {
         dom.ocrBtn.addEventListener('click', () => dom.ocrFileInput.click());
         dom.ocrFileInput.addEventListener('change', async (e) => {
@@ -246,7 +813,6 @@
         });
     }
 
-    // ========== 批量导入 ==========
     function showBatchImportDialog() {
         const text = prompt('📋 批量导入歌词\n\n每首诗歌空行隔开，第一行为标题。');
         if (!text || !text.trim()) return;
@@ -254,322 +820,296 @@
         blocks.forEach(block => {
             const lines = block.split('\n').map(l => l.trim()).filter(l => l);
             if (lines.length < 2) return;
-            songs.push({ id: Date.now().toString()+Math.random(), title: lines[0], lyrics: lines.slice(1), bgType:'particles', fontSize:56, displayLines:4, previewLines:4, posY:45, key:'', tempo:'', notes:'', tags:[], history:[] });
+            songs.push({
+                id: Date.now().toString(), title: lines[0], lyrics: lines.slice(1),
+                bgType:'particles', fontSize:56, defaultLines:4, posY:45, key:'', tempo:'', notes:'', tags:[], history:[],
+                fontFamily: DEFAULT_FONT_FAMILY
+            });
             count++;
         });
         if (count) { saveAllData(); renderSongList(); renderTagFilters(); switchSong(songs[songs.length-1].id); showToast(`导入 ${count} 首`); }
         else showToast('未识别到有效诗歌');
     }
 
-    // ========== 主题 ==========
     function initTheme() {
         const saved = localStorage.getItem('worship_theme') || 'dark';
         document.body.setAttribute('data-theme', saved); dom.themeSelector.value = saved;
-        dom.themeSelector.addEventListener('change', (e) => { document.body.setAttribute('data-theme', e.target.value); localStorage.setItem('worship_theme', e.target.value); });
+        dom.themeSelector.addEventListener('change', (e) => {
+            document.body.setAttribute('data-theme', e.target.value);
+            localStorage.setItem('worship_theme', e.target.value);
+        });
     }
 
-    // ========== 拖拽分隔条 ==========
     function initResizable() {
         const lp = dom.songLibrary, rp = dom.previewPanel, h1 = dom.resize1, h2 = dom.resize2;
-        const savedLeft = localStorage.getItem('panel_left_width'), savedRight = localStorage.getItem('panel_right_width');
-        if (savedLeft) lp.style.width = savedLeft; if (savedRight) rp.style.width = savedRight;
+        const savedLeft = localStorage.getItem('panel_left_width');
+        const savedRight = localStorage.getItem('panel_right_width');
+        lp.style.width = savedLeft || '260px';
+        rp.style.width = savedRight || '280px';
+
         let resizing = false, cur = null, sx, sw;
-        const down = (e) => { resizing = true; cur = e.target; sx = e.clientX; sw = cur === h1 ? lp.offsetWidth : rp.offsetWidth; cur.classList.add('active'); document.body.style.cursor = 'col-resize'; document.body.style.userSelect = 'none'; };
-        const move = (e) => { if (!resizing) return; const dx = e.clientX - sx; if (cur === h1) lp.style.width = Math.max(120, Math.min(900, sw + dx)) + 'px'; else rp.style.width = Math.max(180, Math.min(900, sw - dx)) + 'px'; };
-        const up = () => { if (resizing) { resizing = false; cur.classList.remove('active'); document.body.style.cursor = ''; document.body.style.userSelect = ''; saveAllData(); } };
+        const down = (e) => {
+            resizing = true; cur = e.target; sx = e.clientX;
+            sw = cur === h1 ? lp.offsetWidth : rp.offsetWidth;
+            cur.classList.add('active');
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+        };
+        const move = (e) => {
+            if (!resizing) return;
+            const dx = e.clientX - sx;
+            if (cur === h1) lp.style.width = Math.max(120, Math.min(900, sw + dx)) + 'px';
+            else rp.style.width = Math.max(180, Math.min(900, sw - dx)) + 'px';
+        };
+        const up = () => {
+            if (resizing) {
+                resizing = false; cur.classList.remove('active');
+                document.body.style.cursor = ''; document.body.style.userSelect = '';
+                saveAllData();
+            }
+        };
         h1.addEventListener('mousedown', down); h2.addEventListener('mousedown', down);
         window.addEventListener('mousemove', move); window.addEventListener('mouseup', up);
     }
 
-    // ========== 预览框高度拖拽 ==========
     function initPreviewResize() {
         const handle = document.getElementById('preview-resize-handle'), preview = dom.miniPreview;
         let y, h;
         handle.addEventListener('mousedown', e => {
-            e.preventDefault(); y = e.clientY; h = preview.offsetHeight; document.body.style.cursor = 'ns-resize';
-            const onMove = (ev) => { const nh = Math.max(80, Math.min(500, h + (ev.clientY - y))) + 'px'; preview.style.height = nh; previewHeight = nh; };
-            const onUp = () => { document.body.style.cursor = ''; window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); saveAllData(); };
-            window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp);
-        });
-    }
-
-    // ========== 智能滚轮 ==========
-    function initScroll() {
-        dom.previewPanel.addEventListener('wheel', e => {
-            if (e.target.closest('#mini-preview')) { e.preventDefault(); e.deltaY > 0 ? nextLine() : prevLine(); }
-        }, { passive: false });
-    }
-    // ========== 演讲者视图 ==========
-    function initSpeakerView() {
-        cardContainer = document.getElementById('card-container');
-        pageIndicator = document.getElementById('page-indicator');
-        cardContainer.addEventListener('scroll', () => updateCurrentCardFromScroll());
-
-        // 卡片尺寸切换按钮
-        const sizeS = document.getElementById('size-s');
-        const sizeM = document.getElementById('size-m');
-        const sizeL = document.getElementById('size-l');
-        const setActiveSize = (active, others) => {
-            active.classList.add('active');
-            others.forEach(b => b.classList.remove('active'));
-        };
-        sizeS.addEventListener('click', () => { cardWidth = 240; setActiveSize(sizeS, [sizeM, sizeL]); saveAllData(); updateSpeakerCards(); });
-        sizeM.addEventListener('click', () => { cardWidth = 320; setActiveSize(sizeM, [sizeS, sizeL]); saveAllData(); updateSpeakerCards(); });
-        sizeL.addEventListener('click', () => { cardWidth = 400; setActiveSize(sizeL, [sizeS, sizeM]); saveAllData(); updateSpeakerCards(); });
-        // 恢复上次激活状态
-        if (cardWidth === 240) setActiveSize(sizeS, [sizeM, sizeL]);
-        else if (cardWidth === 400) setActiveSize(sizeL, [sizeS, sizeM]);
-        else setActiveSize(sizeM, [sizeS, sizeL]);
-
-        // 演讲者区域高度拖拽
-        const speakerView = document.getElementById('speaker-view');
-        const speakerHandle = document.getElementById('speaker-resize-handle');
-        let sy, sh;
-        speakerHandle.addEventListener('mousedown', e => {
-            e.preventDefault(); sy = e.clientY; sh = speakerView.offsetHeight;
+            e.preventDefault(); y = e.clientY; h = preview.offsetHeight;
             document.body.style.cursor = 'ns-resize';
             const onMove = (ev) => {
-                const newH = Math.max(180, Math.min(600, sh + (ev.clientY - sy))) + 'px';
-                speakerView.style.height = newH;
-                localStorage.setItem('speaker_height', newH);
+                const nh = Math.max(80, Math.min(500, h + (ev.clientY - y))) + 'px';
+                preview.style.height = nh; previewHeight = nh;
             };
             const onUp = () => {
                 document.body.style.cursor = '';
                 window.removeEventListener('mousemove', onMove);
                 window.removeEventListener('mouseup', onUp);
+                saveAllData();
             };
             window.addEventListener('mousemove', onMove);
             window.addEventListener('mouseup', onUp);
         });
-        const savedSH = localStorage.getItem('speaker_height');
-        if (savedSH) speakerView.style.height = savedSH;
     }
 
-    function createParticleBackground(card) {
-        const bgDiv = document.createElement('div');
-        bgDiv.className = 'particle-bg';
-        for (let i = 0; i < 12; i++) {
-            const dot = document.createElement('div');
-            dot.className = 'particle-dot';
-            const size = Math.random() * 4 + 2;
-            dot.style.width = size + 'px';
-            dot.style.height = size + 'px';
-            dot.style.left = Math.random() * 100 + '%';
-            dot.style.top = Math.random() * 100 + '%';
-            dot.style.animationDuration = (Math.random() * 6 + 4) + 's';
-            dot.style.animationDelay = (Math.random() * 4) + 's';
-            bgDiv.appendChild(dot);
-        }
-        card.appendChild(bgDiv);
-    }
-
-    function applyCardBackground(card, song) {
-        const oldParticle = card.querySelector('.particle-bg');
-        if (oldParticle) oldParticle.remove();
-        card.style.background = '';
-        card.style.backgroundImage = '';
-        if (song.bgType === 'solid') {
-            card.style.backgroundColor = '#000';
-        } else if (song.bgType === 'gradient') {
-            card.style.background = 'radial-gradient(circle at 30% 30%, #1a2a4a, #000)';
-        } else if (song.bgType === 'image' && song.bgImage) {
-            card.style.backgroundImage = `url(${song.bgImage})`;
-            card.style.backgroundSize = 'cover';
-            card.style.backgroundPosition = 'center';
-        } else {
-            card.style.backgroundColor = '#000';
-            createParticleBackground(card);
-        }
-    }
-
-    function updateSpeakerCards() {
-        const song = getCurrentSong();
-        if (!song || !cardContainer) return;
-        const lines = song.lyrics, displayCount = song.displayLines || 4;
-        totalPages = Math.ceil(lines.length / displayCount) || 1;
-        currentCardPage = Math.floor(currentLineIndex / displayCount);
-
-        cardContainer.innerHTML = '';
-        for (let p = 0; p < totalPages; p++) {
-            const start = p * displayCount;
-            const card = document.createElement('div');
-            card.className = 'card';
-            card.style.width = cardWidth + 'px';
-            if (p === currentCardPage) card.classList.add('active');
-
-            applyCardBackground(card, song);
-
-            for (let i = 0; i < displayCount; i++) {
-                const idx = start + i;
-                if (idx < lines.length) {
-                    const clean = lines[idx].replace(CHORD_REGEX, '').trim();
-                    const isCur = (p === currentCardPage && i === 0);
-                    const baseFontSize = Math.min(song.fontSize, cardWidth * 0.12);
-                    const fontSize = isCur ? baseFontSize : Math.max(16, baseFontSize * 0.65);
-                    const lineDiv = document.createElement('div');
-                    lineDiv.className = 'card-line';
-                    lineDiv.style.fontSize = fontSize + 'px';
-                    lineDiv.style.opacity = isCur ? 1 : 0.6;
-                    lineDiv.textContent = clean;
-                    card.appendChild(lineDiv);
-                }
-            }
-            if (start >= lines.length) { card.classList.add('empty'); card.textContent = '…'; }
-            card.addEventListener('click', () => jumpToPage(p));
-            cardContainer.appendChild(card);
-        }
-        pageIndicator.textContent = `${currentCardPage+1}/${totalPages}`;
-        const cards = cardContainer.children;
-        if (cards[currentCardPage]) cards[currentCardPage].scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
-    }
-
-    function jumpToPage(pageIndex) {
-        const song = getCurrentSong(), displayCount = song.displayLines || 4;
-        const newLine = pageIndex * displayCount;
-        if (newLine < song.lyrics.length) { currentLineIndex = newLine; updateMiniPreview(); updateSpeakerCards(); broadcastState(); }
-    }
-
-    function updateCurrentCardFromScroll() {
-        const cards = cardContainer.children; if (!cards.length) return;
-        const containerRect = cardContainer.getBoundingClientRect(), centerX = containerRect.left + containerRect.width / 2;
-        let closestIdx = 0, minDist = Infinity;
-        for (let i = 0; i < cards.length; i++) {
-            const rect = cards[i].getBoundingClientRect(), cardCenter = rect.left + rect.width / 2;
-            const dist = Math.abs(centerX - cardCenter);
-            if (dist < minDist) { minDist = dist; closestIdx = i; }
-        }
-        if (closestIdx !== currentCardPage) {
-            currentCardPage = closestIdx; pageIndicator.textContent = `${currentCardPage+1}/${totalPages}`;
-            for (let i = 0; i < cards.length; i++) cards[i].classList.toggle('active', i === currentCardPage);
-        }
-    }
-
-    // ========== 演示窗口 ==========
-    function initDisplayMode() {
-        document.body.innerHTML = `
-            <canvas id="display-canvas" style="position:fixed;top:0;left:0;width:100%;height:100%;z-index:1;"></canvas>
-            <div id="display-lyrics" style="position:fixed;top:45%;left:50%;transform:translate(-50%,-50%);z-index:10;text-align:center;pointer-events:none;"></div>
-            <div id="blackout-overlay" style="position:fixed;top:0;left:0;width:100%;height:100%;background:#000;z-index:100;display:none;"></div>
-            <div id="whiteout-overlay" style="position:fixed;top:0;left:0;width:100%;height:100%;background:#fff;z-index:100;display:none;"></div>
-            <div id="ended-overlay" style="position:fixed;top:0;left:0;width:100%;height:100%;background:#000;z-index:90;display:none; flex-direction:column; align-items:center; justify-content:center; color:white; font-size:3rem; font-weight:bold; text-shadow:2px 2px 8px black; text-align:center;">
-                <span>投屏已结束 ✝️</span>
-                <span style="font-size:1.5rem; margin-top:20px;">按上键返回</span>
-            </div>
-        `;
-        const canvas = document.getElementById('display-canvas'), ctx = canvas.getContext('2d'), lyricsDiv = document.getElementById('display-lyrics'),
-              blackout = document.getElementById('blackout-overlay'), whiteout = document.getElementById('whiteout-overlay'),
-              endedOverlay = document.getElementById('ended-overlay');
-        let w, h, particles = [], currentState = null, ended = false;
-        function resize() { w = window.innerWidth; h = window.innerHeight; canvas.width = w; canvas.height = h; }
-        window.addEventListener('resize', resize); resize();
-        class Particle {
-            constructor() { this.x = Math.random()*w; this.y = Math.random()*h; this.vx = (Math.random()-0.5)*0.7; this.vy = (Math.random()-0.5)*0.5; this.size = Math.random()*5+2; this.color = `rgba(255,255,255,${0.7+Math.random()*0.3})`; }
-            update() { this.x+=this.vx; this.y+=this.vy; if(this.x<0||this.x>w)this.vx*=-1; if(this.y<0||this.y>h)this.vy*=-1; }
-            draw() { ctx.beginPath(); ctx.arc(this.x,this.y,this.size,0,Math.PI*2); ctx.fillStyle=this.color; ctx.shadowColor='white'; ctx.shadowBlur=10; ctx.fill(); }
-        }
-        for(let i=0;i<70;i++) particles.push(new Particle());
-        function drawBg(bg, img) { if(bg==='solid'){ctx.fillStyle='#000';ctx.fillRect(0,0,w,h);} else if(bg==='gradient'){const g=ctx.createRadialGradient(w*.3,h*.3,50,w*.5,h*.5,w);g.addColorStop(0,'#1a2a4a');g.addColorStop(1,'#000');ctx.fillStyle=g;ctx.fillRect(0,0,w,h);} else if(bg==='image'&&img){const i=new Image();i.onload=()=>ctx.drawImage(i,0,0,w,h);i.src=img;} else{ctx.fillStyle='rgba(0,0,0,0.15)';ctx.fillRect(0,0,w,h);particles.forEach(p=>{p.update();p.draw();});} }
-        function render(state) {
-            if (!state || ended) return;
-            const {song, currentLine} = state, lines = song.lyrics;
-            let html = '';
-            for (let i=0;i<song.displayLines;i++) {
-                const idx = (currentLine + i) % lines.length;
-                const fs = i===0 ? song.fontSize : Math.max(16, song.fontSize*0.65), op = i===0 ? 1 : 0.5;
-                html += `<div style="color:white;font-weight:bold;text-shadow:3px 3px 8px black;font-size:${fs}px;opacity:${op};line-height:1.5;white-space:nowrap;">${lines[idx]}</div>`;
-            }
-            lyricsDiv.innerHTML = html; lyricsDiv.style.top = song.posY + '%';
-            const remaining = lines.length - currentLine;
-            if (remaining <= song.displayLines) {
-                ended = true;
-                setTimeout(() => { endedOverlay.style.display = 'flex'; }, 600);
-            }
-        }
-        function animate() { drawBg(currentState?.song.bgType, currentState?.song.bgImage); requestAnimationFrame(animate); }
-        animate();
-        const dc = new BroadcastChannel('worship_channel');
-        dc.addEventListener('message', e => {
-            if (e.data.type === 'update') {
-                currentState = e.data;
-                ended = false;
-                endedOverlay.style.display = 'none';
-                lyricsDiv.style.display = 'block';
-                render(currentState);
-            }
-        });
-        dc.postMessage({ type: 'request_state' });
-        window.addEventListener('keydown', e => {
-            if (e.key === 'b' || e.key === 'B') { e.preventDefault(); blackout.style.display = blackout.style.display === 'none' ? 'block' : 'none'; }
-            else if (e.key === 'w' || e.key === 'W') { e.preventDefault(); whiteout.style.display = whiteout.style.display === 'none' ? 'block' : 'none'; }
-            else if (e.key === 'f' || e.key === 'F') { e.preventDefault(); document.documentElement.requestFullscreen(); }
-            else if (e.key === 'Escape') { blackout.style.display = 'none'; whiteout.style.display = 'none'; }
-            else if (e.key === 'ArrowUp' && ended) { ended = false; endedOverlay.style.display = 'none'; lyricsDiv.style.display = 'block'; dc.postMessage({ type: 'prev' }); }
-        });
-    }
-
-    // ========== 控制台监听演示窗请求 ==========
-    function initControlChannel() {
-        channel.addEventListener('message', e => {
-            if (e.data.type === 'request_state') {
-                broadcastState();
-            }
-        });
+    // 全局滚轮：跳过输入区域
+    function initScroll() {
+        window.addEventListener('wheel', (e) => {
+            if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT' || e.target.isContentEditable) return;
+            if (e.target.closest('#preview-panel') && !e.target.closest('#mini-preview')) return;
+            e.preventDefault();
+            e.deltaY > 0 ? nextPage() : prevPage();
+        }, { passive: false });
     }
 
     // ========== 事件绑定 ==========
     function bindEvents() {
-        dom.newSongBtn.addEventListener('click', createNewSong);
-        dom.addSongBtn.addEventListener('click', createNewSong);
-        dom.saveSongBtn.addEventListener('click', saveCurrentLyrics);
-        dom.applyToDisplay.addEventListener('click', () => { saveCurrentLyrics(); showToast('已应用'); });
-        dom.resetCurrentSong.addEventListener('click', () => { const s = getCurrentSong(); s.lyrics = ['[G]奇异恩典 何等甘甜','[C]我罪已得赦免','[G]前我失丧 今被寻回','[Em]瞎眼今得看见']; dom.lyricEditor.value = s.lyrics.join('\n'); saveCurrentLyrics(); });
-        dom.fontSlider.addEventListener('input', () => { const s = getCurrentSong(); s.fontSize = parseInt(dom.fontSlider.value); dom.fontVal.textContent = s.fontSize; updateMiniPreview(); updateSpeakerCards(); broadcastState(); saveAllData(); });
-        dom.displayLinesInput.addEventListener('input', () => { const s = getCurrentSong(); s.displayLines = parseInt(dom.displayLinesInput.value) || 4; updateMiniPreview(); updateSpeakerCards(); broadcastState(); saveAllData(); });
-        dom.previewLinesInput.addEventListener('input', () => { const s = getCurrentSong(); s.previewLines = parseInt(dom.previewLinesInput.value) || 4; updateMiniPreview(); saveAllData(); });
-        dom.posSlider.addEventListener('input', () => { const s = getCurrentSong(); s.posY = parseInt(dom.posSlider.value); dom.posVal.textContent = s.posY+'%'; updateMiniPreview(); broadcastState(); saveAllData(); });
-        document.querySelectorAll('.bg-option').forEach(o => { if (o.id === 'upload-bg-trigger') o.addEventListener('click', () => dom.bgImageInput.click()); else o.addEventListener('click', () => setBackground(o.dataset.bg)); });
-        document.getElementById('upload-bg-btn').addEventListener('click', () => dom.bgImageInput.click());
-        dom.bgImageInput.addEventListener('change', e => { if (e.target.files[0]) handleBgImageUpload(e.target.files[0]); });
-        dom.autoplayToggle.addEventListener('click', () => { autoplayInterval = parseFloat(dom.autoplayInterval.value) || 5; autoplayActive ? pauseAutoplay() : startAutoplay(); });
-        dom.autoplayStop.addEventListener('click', stopAutoplay);
-        dom.openDisplayBtn.addEventListener('click', () => { const url = window.location.href.split('?')[0] + '?display'; const win = window.open(url, '_blank', 'width=1280,height=720'); if (win) showToast('演示窗口已打开'); else showToast('弹窗被阻止，请允许弹出窗口'); });
-        dom.exportDataBtn.addEventListener('click', () => { const d = JSON.stringify({ songs, currentSongId }); const b = new Blob([d], { type: 'application/json' }); const u = URL.createObjectURL(b); const a = document.createElement('a'); a.href = u; a.download = `worship_backup_${new Date().toISOString().slice(0,10)}.worship`; a.click(); URL.revokeObjectURL(u); showToast('已导出'); });
-        dom.importDataBtn.addEventListener('click', () => dom.importFileInput.click());
-        dom.importFileInput.addEventListener('change', e => { const f = e.target.files[0]; if (!f) return; const r = new FileReader(); r.onload = ev => { try { const data = JSON.parse(ev.target.result); if (data.songs) { songs = data.songs; currentSongId = data.currentSongId || songs[0].id; saveAllData(); renderSongList(); renderTagFilters(); switchSong(currentSongId); showToast('导入成功'); } } catch { showToast('文件无效'); } }; r.readAsText(f); });
-        dom.batchImportBtn.addEventListener('click', showBatchImportDialog);
-        dom.searchInput.addEventListener('input', e => { searchQuery = e.target.value.trim(); renderSongList(); });
-        dom.miniPreview.addEventListener('dblclick', () => { const total = getCurrentSong().lyrics.length; const line = prompt(`跳转到行号 (1-${total}):`); if (line) { const idx = parseInt(line) - 1; if (!isNaN(idx) && idx >= 0 && idx < total) { currentLineIndex = idx; updateMiniPreview(); updateSpeakerCards(); broadcastState(); } } });
-        window.addEventListener('keydown', e => { if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return; if (e.key === ' ' || e.key === 'Space') { e.preventDefault(); nextLine(); } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); nextLine(); } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); prevLine(); } });
-        initScroll(); initPreviewResize(); initSpeakerView();
+        const safeOn = (el, event, handler) => {
+            if (!el) return;
+            if (typeof handler !== 'function') {
+                console.error(`[bindEvents] handler missing for ${event}`);
+                return;
+            }
+            el.addEventListener(event, handler);
+        };
+
+        safeOn(dom.newSongBtn, 'click', createNewSong);
+        safeOn(dom.addSongBtn, 'click', createNewSong);
+        safeOn(dom.saveSongBtn, 'click', saveCurrentLyrics);
+        safeOn(dom.publishSongBtn, 'click', publishSong);
+        safeOn(dom.applyToDisplay, 'click', () => {
+            saveCurrentLyrics();
+            updateAll();
+            broadcastState();
+            showToast('已应用到演示屏');
+        });
+        safeOn(dom.resetCurrentSong, 'click', () => {
+            const s = getCurrentSong();
+            s.lyrics = [
+                '奇异恩典',
+                '',
+                '奇异恩典，何等甘甜，',
+                '我罪已得赦免；',
+                '前我失丧，今被寻回，',
+                '瞎眼今得看见。',
+                '',
+                '如此恩典，使我敬畏，',
+                '使我心得安慰；',
+                '初信之时，即蒙恩惠，',
+                '真是何等宝贵。'
+            ];
+            dom.lyricEditor.value = s.lyrics.join('\n');
+            saveCurrentLyrics();
+        });
+        safeOn(dom.fontSlider, 'input', () => {
+            const s = getCurrentSong();
+            s.fontSize = parseInt(dom.fontSlider.value);
+            dom.fontVal.textContent = s.fontSize;
+            updateAll();
+        });
+        safeOn(dom.defaultLinesInput, 'input', () => {
+            const s = getCurrentSong();
+            s.defaultLines = parseInt(dom.defaultLinesInput.value) || 4;
+            rebuildPages(s);
+            if (currentPageIndex >= currentPages.length) currentPageIndex = Math.max(0, currentPages.length - 1);
+            updateAll();
+        });
+        safeOn(dom.posSlider, 'input', () => {
+            const s = getCurrentSong();
+            s.posY = parseInt(dom.posSlider.value);
+            dom.posVal.textContent = s.posY + '%';
+            updateAll();
+        });
+        safeOn(dom.fontFamilySelector, 'change', () => {
+            const s = getCurrentSong();
+            if (!s) return;
+            s.fontFamily = dom.fontFamilySelector.value || DEFAULT_FONT_FAMILY;
+            updateAll();
+        });
+        safeOn(dom.songTitleInput, 'input', renderSongList);
+        safeOn(dom.lyricEditor, 'input', () => {
+            const s = getCurrentSong();
+            if (!s) return;
+            s.lyrics = dom.lyricEditor.value.split('\n');
+            rebuildPages(s);
+            updateAll();
+        });
+        document.querySelectorAll('.bg-option').forEach(o => {
+            if (o.id === 'upload-bg-trigger') safeOn(o, 'click', () => dom.bgImageInput.click());
+            else safeOn(o, 'click', () => setBackground(o.dataset.bg));
+        });
+        safeOn(document.getElementById('upload-bg-btn'), 'click', () => dom.bgImageInput.click());
+        safeOn(document.getElementById('free-bg-link'), 'click', () => {
+            window.open('https://www.pexels.com/zh-cn/search/video/worship%20background/', '_blank');
+        });
+        safeOn(dom.bgImageInput, 'change', e => { if (e.target.files[0]) handleBgImageUpload(e.target.files[0]); });
+        safeOn(dom.autoplayToggle, 'click', () => {
+            autoplayInterval = parseFloat(dom.autoplayInterval.value) || 5;
+            autoplayActive ? pauseAutoplay() : startAutoplay();
+        });
+        safeOn(dom.autoplayStop, 'click', stopAutoplay);
+        safeOn(dom.openDisplayBtn, 'click', () => {
+            const url = window.location.href.split('?')[0] + '?display';
+            const win = window.open(url, '_blank', 'width=1280,height=720');
+            win ? showToast('演示窗口已打开') : showToast('弹窗被阻止，请允许弹出窗口');
+        });
+        safeOn(dom.exportDataBtn, 'click', () => {
+            const d = JSON.stringify({ songs, currentSongId });
+            const b = new Blob([d], { type: 'application/json' });
+            const u = URL.createObjectURL(b);
+            const a = document.createElement('a'); a.href = u;
+            a.download = `worship_backup_${new Date().toISOString().slice(0,10)}.worship`;
+            a.click(); URL.revokeObjectURL(u); showToast('已导出');
+        });
+        safeOn(dom.importDataBtn, 'click', () => dom.importFileInput.click());
+        safeOn(dom.importFileInput, 'change', e => {
+            const f = e.target.files[0]; if (!f) return;
+            const r = new FileReader();
+            r.onload = ev => {
+                try {
+                    const data = JSON.parse(ev.target.result);
+                    if (data.songs) {
+                        songs = data.songs; currentSongId = data.currentSongId || songs[0].id;
+                        saveAllData(); renderSongList(); renderTagFilters(); switchSong(currentSongId);
+                        showToast('导入成功');
+                    }
+                } catch { showToast('文件无效'); }
+            };
+            r.readAsText(f);
+        });
+        safeOn(dom.batchImportBtn, 'click', showBatchImportDialog);
+        safeOn(dom.searchInput, 'input', e => { searchQuery = e.target.value.trim(); renderSongList(); });
+        safeOn(dom.onlineSearchInput, 'input', e => {
+            const results = searchOnlineHymns(e.target.value);
+            renderOnlineResults(results);
+        });
+        safeOn(dom.miniPreview, 'dblclick', () => {
+            const total = currentPages.length;
+            const page = prompt(`跳转到页码 (1-${total}):`);
+            if (page) {
+                const idx = parseInt(page) - 1;
+                if (!isNaN(idx) && idx >= 0 && idx < total) {
+                    currentPageIndex = idx;
+                    updateAll();
+                }
+            }
+        });
+        window.addEventListener('keydown', e => {
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+            if (e.key === ' ' || e.key === 'Space') { e.preventDefault(); nextPage(); }
+            else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); nextPage(); }
+            else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); prevPage(); }
+        });
+        channel.addEventListener('message', e => {
+            if (e.data.type === 'prev') prevPage();
+            else if (e.data.type === 'next') nextPage();
+            else if (e.data.type === 'request_state') broadcastState();
+        });
+        initScroll();
+        initPreviewResize();
+        initSpeakerView();
     }
 
     // ========== 初始化入口 ==========
     function init() {
         if (window.location.search.includes('display')) { initDisplayMode(); return; }
-        dom.songList = document.getElementById('song-list'); dom.songTitleInput = document.getElementById('song-title-input');
-        dom.lyricEditor = document.getElementById('lyric-editor-large'); dom.miniPreview = document.getElementById('mini-preview');
-        dom.fontSlider = document.getElementById('font-slider'); dom.fontVal = document.getElementById('font-val');
-        dom.displayLinesInput = document.getElementById('display-lines-input'); dom.previewLinesInput = document.getElementById('preview-lines-input');
-        dom.posSlider = document.getElementById('pos-slider'); dom.posVal = document.getElementById('pos-val');
-        dom.toast = document.getElementById('toast'); dom.newSongBtn = document.getElementById('new-song-btn');
-        dom.addSongBtn = document.getElementById('add-song-btn'); dom.saveSongBtn = document.getElementById('save-song-btn');
-        dom.applyToDisplay = document.getElementById('apply-to-display'); dom.resetCurrentSong = document.getElementById('reset-current-song');
-        dom.ocrBtn = document.getElementById('ocr-btn'); dom.ocrFileInput = document.getElementById('ocr-file-input');
-        dom.autoplayToggle = document.getElementById('autoplay-toggle'); dom.autoplayStop = document.getElementById('autoplay-stop');
-        dom.autoplayInterval = document.getElementById('autoplay-interval'); dom.autoplayProgress = document.getElementById('autoplay-progress');
-        dom.openDisplayBtn = document.getElementById('open-display-btn'); dom.exportDataBtn = document.getElementById('export-data-btn');
-        dom.importDataBtn = document.getElementById('import-data-btn'); dom.importFileInput = document.getElementById('import-file-input');
-        dom.batchImportBtn = document.getElementById('batch-import-btn'); dom.bgImageInput = document.getElementById('bg-image-input');
-        dom.songKey = document.getElementById('song-key'); dom.songTempo = document.getElementById('song-tempo');
-        dom.songNotes = document.getElementById('song-notes'); dom.songTags = document.getElementById('song-tags');
-        dom.themeSelector = document.getElementById('theme-selector'); dom.resize1 = document.getElementById('resize1');
-        dom.resize2 = document.getElementById('resize2'); dom.songLibrary = document.getElementById('song-library');
-        dom.previewPanel = document.getElementById('preview-panel'); dom.searchInput = document.getElementById('search-input');
-        dom.tagFilter = document.getElementById('tag-filter'); dom.previewLineCounter = document.getElementById('preview-line-counter');
 
-        loadAllData(); initPreviewLines(); renderSongList(); renderTagFilters(); switchSong(currentSongId);
-        initOCR(); initResizable(); initTheme(); initControlChannel(); bindEvents();
-        showToast('✨ 所有功能已恢复，拖动试试看', 3000);
+        dom.songList = document.getElementById('song-list');
+        dom.songTitleInput = document.getElementById('song-title-input');
+        dom.lyricEditor = document.getElementById('lyric-editor-large');
+        dom.miniPreview = document.getElementById('mini-preview');
+        dom.fontSlider = document.getElementById('font-slider');
+        dom.fontFamilySelector = document.getElementById('font-family-selector');
+        dom.fontVal = document.getElementById('font-val');
+        dom.defaultLinesInput = document.getElementById('default-lines-input');
+        dom.posSlider = document.getElementById('pos-slider');
+        dom.posVal = document.getElementById('pos-val');
+        dom.toast = document.getElementById('toast');
+        dom.newSongBtn = document.getElementById('new-song-btn');
+        dom.addSongBtn = document.getElementById('add-song-btn');
+        dom.saveSongBtn = document.getElementById('save-song-btn');
+        dom.publishSongBtn = document.getElementById('publish-song-btn');
+        dom.applyToDisplay = document.getElementById('apply-to-display');
+        dom.resetCurrentSong = document.getElementById('reset-current-song');
+        dom.ocrBtn = document.getElementById('ocr-btn');
+        dom.ocrFileInput = document.getElementById('ocr-file-input');
+        dom.autoplayToggle = document.getElementById('autoplay-toggle');
+        dom.autoplayStop = document.getElementById('autoplay-stop');
+        dom.autoplayInterval = document.getElementById('autoplay-interval');
+        dom.autoplayProgress = document.getElementById('autoplay-progress');
+        dom.openDisplayBtn = document.getElementById('open-display-btn');
+        dom.exportDataBtn = document.getElementById('export-data-btn');
+        dom.importDataBtn = document.getElementById('import-data-btn');
+        dom.importFileInput = document.getElementById('import-file-input');
+        dom.batchImportBtn = document.getElementById('batch-import-btn');
+        dom.bgImageInput = document.getElementById('bg-image-input');
+        dom.songKey = document.getElementById('song-key');
+        dom.songTempo = document.getElementById('song-tempo');
+        dom.songNotes = document.getElementById('song-notes');
+        dom.songTags = document.getElementById('song-tags');
+        dom.themeSelector = document.getElementById('theme-selector');
+        dom.resize1 = document.getElementById('resize1');
+        dom.resize2 = document.getElementById('resize2');
+        dom.songLibrary = document.getElementById('song-library');
+        dom.previewPanel = document.getElementById('preview-panel');
+        dom.searchInput = document.getElementById('search-input');
+        dom.onlineSearchInput = document.getElementById('online-search-input');
+        dom.onlineResults = document.getElementById('online-results');
+        dom.tagFilter = document.getElementById('tag-filter');
+        dom.previewLineCounter = document.getElementById('preview-line-counter');
+
+        loadAllData();
+        initPreviewLines();
+        renderSongList();
+        renderTagFilters();
+        switchSong(currentSongId);
+        initOCR();
+        initResizable();
+        initTheme();
+        initSupabase().then(() => loadOnlineHymns());
+        bindEvents();
+        showToast('✨ 工具已就绪', 3000);
     }
 
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

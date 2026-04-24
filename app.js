@@ -7,9 +7,63 @@
     let currentPages = [];
     const CHORD_REGEX = /\[([^\]]+)\]/g;
     const channel = new BroadcastChannel('worship_channel');
+    const HYMNS_DATA = [
+        { title: "奇异恩典", lyrics: ["奇异恩典，何等甘甜，", "我罪已得赦免；", "前我失丧，今被寻回，", "瞎眼今得看见。"], tags: ["敬拜", "经典"] },
+        { title: "新的诗歌", lyrics: ["祂使我口唱新歌，", "就是赞美我们神的话。"], tags: ["赞美"] },
+        { title: "荣耀歌", lyrics: ["荣耀归于至高神，", "地上平安归与祂所喜悦的人。"], tags: ["赞美"] },
+        { title: "普世欢腾", lyrics: ["普世欢腾，救主下降，", "大地接祂君王。"], tags: ["圣诞", "经典"] },
+        { title: "平安夜", lyrics: ["平安夜，圣善夜，", "万暗中，光华射。"], tags: ["圣诞"] },
+        { title: "圣哉三一", lyrics: ["圣哉，圣哉，圣哉，全能大主宰！", "清晨我众歌声，穿云上达至尊。"], tags: ["敬拜", "经典"] },
+        { title: "荣耀大君王", lyrics: ["齐来崇拜荣耀大君王，", "主权能力慈爱高扬。"], tags: ["赞美"] },
+        { title: "万福源头", lyrics: ["万福源头，众生都当颂扬，", "天使天军歌唱，赞美主名。"], tags: ["赞美", "经典"] },
+        { title: "耶稣爱我", lyrics: ["耶稣爱我我知道，", "因有圣经告诉我。"], tags: ["安慰"] },
+        { title: "耶稣领我", lyrics: ["耶稣领我，我真欢喜，", "蒙主引导无忧无惧。"], tags: ["信靠"] },
+        { title: "亲爱主牵我手", lyrics: ["亲爱主，牵我手，", "引导我，走前路。"], tags: ["祷告"] },
+        { title: "每一天", lyrics: ["每一天，主赐恩典何等甘甜，", "我一切需要，主都预备完全。"], tags: ["感恩"] },
+        { title: "沙漠中的赞美", lyrics: ["在沙漠中我仍要赞美，", "因祢是我力量。"], tags: ["赞美"] },
+        { title: "恩典之路", lyrics: ["你是我的主，牵我走恩典道路，", "十架宝血遮盖我。"], tags: ["恩典"] },
+        { title: "工人的祷告", lyrics: ["主啊，差遣我，", "进入禾场收割庄稼。"], tags: ["差传"] },
+        { title: "耶和华祝福满满", lyrics: ["耶和华祝福满满，", "就像海边的沙那么多。"], tags: ["祝福"] },
+        { title: "耶稣给你平安", lyrics: ["耶稣给你平安，", "让你心里不再忧伤。"], tags: ["安慰"] },
+        { title: "赐福与你", lyrics: ["愿耶和华赐福给你，保护你，", "使祂脸光照你。"], tags: ["祝福"] },
+        { title: "我们成为一家人", lyrics: ["我们成为一家人，", "因着耶稣，因着耶稣。"], tags: ["团契"] },
+        { title: "爱使我们相聚一起", lyrics: ["爱使我们相聚一起，", "主爱使我们不分离。"], tags: ["团契"] },
+        { title: "基督精兵", lyrics: ["基督精兵前进，", "高举十架向前行。"], tags: ["争战"] },
+        { title: "靠主刚强", lyrics: ["你们要靠着主，倚赖祂的大能大力，", "作刚强的人。"], tags: ["争战"] },
+        { title: "主是我力量", lyrics: ["主是我力量，主是我诗歌，", "祂也成了我的拯救。"], tags: ["信心"] },
+        { title: "耶稣你是宝贵", lyrics: ["耶稣你是宝贵，", "你比万有更美。"], tags: ["敬拜"] },
+        { title: "唯有耶稣", lyrics: ["唯有耶稣是我盼望，", "唯有耶稣是我力量。"], tags: ["敬拜"] },
+        { title: "这里有神的同在", lyrics: ["这里有神的同在，", "噢这里有神的言语。"], tags: ["敬拜"] },
+        { title: "主我高举你名", lyrics: ["主我高举你名，", "主我深深爱你。"], tags: ["赞美"] },
+        { title: "坐在宝座上圣洁羔羊", lyrics: ["坐在宝座上圣洁羔羊，", "我们俯伏敬拜你。"], tags: ["敬拜"] },
+        { title: "主祷文", lyrics: ["我们在天上的父，愿人都尊你的名为圣。", "愿你的国降临。"], tags: ["祷告"] },
+        { title: "主你是我最知心的朋友", lyrics: ["主你是我最知心的朋友，", "主你是我最亲爱的伴侣。"], tags: ["亲近神"] },
+        { title: "开我的眼睛", lyrics: ["开我的眼睛使我看见，", "你律法中的奇妙。"], tags: ["祷告"] },
+        { title: "安静", lyrics: ["安静，安静，", "当在主前安静。"], tags: ["默想"] },
+        { title: "如鹿切慕溪水", lyrics: ["如鹿切慕溪水，", "我的心也切慕你。"], tags: ["敬拜"] },
+        { title: "你真伟大", lyrics: ["主啊我神，我每逢举目观看，", "你手所造一切奇妙大工。"], tags: ["经典"] },
+        { title: "我知谁掌管明天", lyrics: ["我不知明天将如何，", "每一步道路似乎孤独。"], tags: ["安慰"] },
+        { title: "有福的确据", lyrics: ["有福的确据，耶稣属我，", "我今得先尝，主荣耀喜乐。"], tags: ["经典"] },
+        { title: "因他活着", lyrics: ["神差爱子，人称祂耶稣，", "祂赐下爱，医治宽恕。"], tags: ["复活"] },
+        { title: "献上感恩", lyrics: ["献上感恩的心，", "归给至圣全能神。"], tags: ["感恩"] },
+        { title: "在主爱里", lyrics: ["在主爱里我们合一，", "在主爱里彼此相顾。"], tags: ["团契"] },
+        { title: "充满我", lyrics: ["圣灵请你来充满我，", "点燃我心中爱火。"], tags: ["圣灵"] },
+        { title: "十字架", lyrics: ["我每逢思念那十字架，", "并主如何在上受苦。"], tags: ["受难"] },
+        { title: "这一生最美的祝福", lyrics: ["在无数的夜晚里，", "我用心寻找你。"], tags: ["见证"] },
+        { title: "祢真配得", lyrics: ["祢真配得，祢真配得，", "配得一切尊贵荣耀。"], tags: ["敬拜"] },
+        { title: "何等恩典", lyrics: ["何等恩典，祢竟然拣选我，", "在生命中让我与你同工。"], tags: ["恩典"] },
+        { title: "宝贵十架", lyrics: ["主耶稣我感谢你，", "你的身体为我而舍。"], tags: ["十架"] },
+        { title: "主的喜乐是我力量", lyrics: ["主的喜乐是我力量，", "你的救恩是我盼望。"], tags: ["喜乐"] },
+        { title: "主恩典够我用", lyrics: ["主恩典够我用，", "胜过一切试炼。"], tags: ["恩典"] },
+        { title: "我愿触动你心弦", lyrics: ["我愿触动你心弦，", "全心献上赞美。"], tags: ["敬拜"] },
+        { title: "一生爱你", lyrics: ["亲爱的主耶稣，", "我愿一生爱你。"], tags: ["献上"] },
+        { title: "渴慕你", lyrics: ["我的心切切渴慕你，", "如鹿切慕溪水。"], tags: ["渴慕"] },
+        { title: "让赞美飞扬", lyrics: ["让赞美飞扬，这地要看见荣耀，", "让万民都来敬拜。"], tags: ["赞美"] },
+        { title: "耶和华是爱", lyrics: ["耶和华是爱，", "让我安歇青草地。"], tags: ["安慰"] }
+    ];
 
     let autoplayTimer = null, autoplayActive = false, autoplayInterval = 5;
-    let previewHeight = null, cardWidth = 320;
+    let previewHeight = null, cardWidth = 280;
     const DEFAULT_FONT_FAMILY = "'Microsoft YaHei','PingFang SC',sans-serif";
     const dom = {};
     let activeTagFilter = '', searchQuery = '';
@@ -17,6 +71,7 @@
     let cardContainer, pageIndicator, currentCardPage = 0, totalCardPages = 1;
 
     let supabase = null;
+    let sharedBackgrounds = [];
     const SUPABASE_URL = 'https://your-project.supabase.co';
     const SUPABASE_ANON_KEY = 'your-anon-key';
 
@@ -90,7 +145,7 @@
         if (previewHeight) {
             localStorage.setItem('preview_height', previewHeight);
         }
-        localStorage.setItem('speaker_card_width', String(cardWidth));
+        localStorage.setItem('speaker_card_width', '280');
     }
     function loadAllData() {
         const fallbackSong = {
@@ -125,7 +180,7 @@
                 currentSongId = data.currentSongId || (songs[0] && songs[0].id);
                 currentPageIndex = Number.isInteger(data.currentPageIndex) ? data.currentPageIndex : 0;
                 previewHeight = data.previewHeight || localStorage.getItem('preview_height');
-                cardWidth = parseInt(data.cardWidth || localStorage.getItem('speaker_card_width') || '320', 10);
+                cardWidth = 280;
             } else {
                 songs = [fallbackSong];
                 currentSongId = fallbackSong.id;
@@ -226,14 +281,25 @@
             isTitlePage: !!page.isTitle
         });
     }
-    function nextPage() { if (currentPageIndex < currentPages.length-1) currentPageIndex++; updateAll(); }
-    function prevPage() { if (currentPageIndex > 0) currentPageIndex--; updateAll(); }
+    function nextPage() {
+        if (!currentPages.length) return;
+        if (currentPageIndex < currentPages.length - 1) currentPageIndex++;
+        currentCardPage = currentPageIndex;
+        updateAll();
+    }
+    function prevPage() {
+        if (!currentPages.length) return;
+        if (currentPageIndex > 0) currentPageIndex--;
+        currentCardPage = currentPageIndex;
+        updateAll();
+    }
     function updateAll() { updateMiniPreview(); updateSpeakerCards(); broadcastState(); resetAutoplayProgress(); saveAllData(); }
 
     function jumpToPage(index) {
-        if (index < 0 || index >= currentPages.length) return;
-        currentPageIndex = index;
-        currentCardPage = index;
+        if (!currentPages.length) return;
+        const safeIndex = Math.max(0, Math.min(index, currentPages.length - 1));
+        currentPageIndex = safeIndex;
+        currentCardPage = safeIndex;
         updateAll();
     }
 
@@ -509,7 +575,7 @@
             const page = currentPages[p];
             const card = document.createElement('div');
             card.className = 'card';
-            card.style.width = cardWidth + 'px';
+            card.style.width = '280px';
             if (p === currentCardPage) card.classList.add('active');
             applyCardBackground(card, song);
 
@@ -517,10 +583,9 @@
             if (lines.length > 0) {
                 lines.forEach((rawLine) => {
                     const clean = rawLine.replace(CHORD_REGEX, '').trim();
-                    const baseFontSize = Math.min(song.fontSize, cardWidth * 0.12);
                     const lineDiv = document.createElement('div');
                     lineDiv.className = 'card-line';
-                    lineDiv.style.fontSize = baseFontSize + 'px';
+                    lineDiv.style.fontSize = '18px';
                     lineDiv.style.fontFamily = song.fontFamily || DEFAULT_FONT_FAMILY;
                     lineDiv.style.opacity = 1;
                     lineDiv.textContent = clean;
@@ -556,9 +621,9 @@
                 <span style="font-size:1.5rem; margin-top:20px;">按上键返回</span>
             </div>
             <!-- 底部控制区 -->
-            <div id="display-controls" style="position:fixed; bottom:0; left:0; width:100%; z-index:80; display:flex; flex-direction:column; background:rgba(0,0,0,0.7); backdrop-filter:blur(8px); border-top:1px solid rgba(255,255,255,0.15); padding:8px 12px; transition: transform 0.3s ease;">
+            <div id="display-controls" style="position:fixed; bottom:0; left:0; width:100%; z-index:80; display:flex; flex-direction:column; background:rgba(0,0,0,0.7); backdrop-filter:blur(8px); border-top:1px solid rgba(255,255,255,0.15); padding:6px 10px; transition: transform 0.3s ease;">
                 <!-- 卡片预览条 -->
-                <div id="display-card-preview" style="display:flex; gap:8px; overflow-x:auto; padding-bottom:6px; margin-bottom:6px;"></div>
+                <div id="display-card-preview" style="display:flex; gap:8px; overflow-x:auto; padding:2px 0 4px 0; margin-bottom:4px; min-height:64px; align-items:center;"></div>
                 <!-- 按钮栏 -->
                 <div style="position:relative; display:flex; justify-content:center; align-items:center; min-height:40px;">
                     <div style="display:flex; justify-content:center; align-items:center; gap:16px;">
@@ -705,6 +770,19 @@
         }
     }
 
+    async function loadSharedBackgrounds() {
+        if (!supabase) return;
+        try {
+            const { data, error } = await supabase.from('shared_backgrounds').select('url');
+            if (error) throw error;
+            if (Array.isArray(data)) {
+                sharedBackgrounds = data.map(item => item.url).filter(Boolean);
+            }
+        } catch (e) {
+            console.warn('加载共享背景失败', e);
+        }
+    }
+
     async function publishSong() {
         if (!supabase) { showToast('云端功能未配置'); return; }
         const s = getCurrentSong();
@@ -719,18 +797,7 @@
     // ========== 在线诗歌搜索 ==========
     let onlineHymns = [];
     async function loadOnlineHymns() {
-        onlineHymns = [];
-        try {
-            const res = await fetch('./hymns.json', { cache: 'no-cache' });
-            if (res.ok) {
-                const data = await res.json();
-                if (Array.isArray(data)) {
-                    onlineHymns = data.filter(item => item && item.title && Array.isArray(item.lyrics));
-                }
-            }
-        } catch(e) {
-            console.warn('加载 hymns.json 失败', e);
-        }
+        onlineHymns = HYMNS_DATA.map(item => ({ ...item, lyrics: Array.isArray(item.lyrics) ? item.lyrics : [] }));
         if (supabase) {
             try {
                 const { data, error } = await supabase.from('hymns').select('title,lyrics,tags');
@@ -743,9 +810,16 @@
     }
 
     function searchOnlineHymns(query) {
-        const q = query.trim().toLowerCase();
+        const q = query.trim();
         if (!q) return [];
-        return onlineHymns.filter(h => (h.title || '').toLowerCase().includes(q)).slice(0, 6);
+        const normalized = q.toLowerCase();
+        return onlineHymns.filter(h => {
+            const title = h.title || '';
+            const tags = Array.isArray(h.tags) ? h.tags.join(' ') : '';
+            const lyrics = Array.isArray(h.lyrics) ? h.lyrics.join(' ') : '';
+            const haystack = `${title} ${tags} ${lyrics}`;
+            return haystack.includes(q) || haystack.toLowerCase().includes(normalized);
+        }).slice(0, 8);
     }
 
     function renderOnlineResults(results) {
@@ -777,7 +851,10 @@
     function setBackground(type, imgData = null) {
         const s = getCurrentSong();
         s.bgType = type;
-        if (type === 'image' && imgData) s.bgImage = imgData;
+        if (type === 'image' && imgData) {
+            s.bgImage = imgData;
+            if (!sharedBackgrounds.includes(imgData)) sharedBackgrounds.push(imgData);
+        }
         const imgOpt = document.querySelector('.bg-option[data-bg="image"]');
         if (imgOpt) {
             if (s.bgImage) {
@@ -1107,7 +1184,10 @@
         initOCR();
         initResizable();
         initTheme();
-        initSupabase().then(() => loadOnlineHymns());
+        initSupabase().then(async () => {
+            await loadOnlineHymns();
+            await loadSharedBackgrounds();
+        });
         bindEvents();
         showToast('✨ 工具已就绪', 3000);
     }

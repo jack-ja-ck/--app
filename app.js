@@ -752,23 +752,7 @@
     }
 
     // ========== Supabase 集成 ==========
-    async function initSupabase() {
-        if (SUPABASE_URL.includes('your-project') || SUPABASE_ANON_KEY.includes('your-anon-key')) {
-            console.warn('Supabase 未配置，云端功能禁用。');
-            supabase = null;
-            return;
-        }
-        try {
-            const { createClient } = window.supabase || {};
-            if (!createClient) return;
-            supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-            const { error } = await supabase.auth.signInAnonymously();
-            if (error) console.error('匿名登录失败', error);
-        } catch(e) {
-            console.error('Supabase 初始化失败', e);
-            supabase = null;
-        }
-    }
+    async function initSupabase() { console.log('云端功能已切换到 Google Sheets'); }
 
     async function loadSharedBackgrounds() {
         if (!supabase) return;
@@ -784,14 +768,16 @@
     }
 
     async function publishSong() {
-        if (!supabase) { showToast('云端功能未配置'); return; }
         const s = getCurrentSong();
         if (!s.lyrics.length) { showToast('无歌词可发布'); return; }
         try {
-            const { error } = await supabase.from('hymns').insert([{ title: s.title, lyrics: s.lyrics, tags: s.tags || [] }]);
-            if (error) throw error;
-            showToast('已发布到云端');
-        } catch(e) { showToast('发布失败'); }
+            const response = await fetch('https://script.google.com/macros/s/AKfycbzUW1yB8gObRnSjUyWpRivWWI4KuD-ba9m5eYZU4TbdKUvuajcpaSaMxZ61JjBFyjkUXQ/exec', {
+                method: 'POST',
+                body: JSON.stringify({ title: s.title, lyrics: s.lyrics, tags: s.tags || [] })
+            });
+            if (response.ok) { showToast('已发布到云端'); }
+            else { throw new Error('服务器响应错误'); }
+        } catch(e) { console.error('发布失败:', e); showToast('发布失败，请重试'); }
     }
 
     // ========== 在线诗歌搜索 ==========

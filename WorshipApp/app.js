@@ -752,7 +752,7 @@
     }
 
     // ========== Supabase 集成 ==========
-    async function initSupabase() { console.log('云端存储已切换到 Google Sheets'); }
+    async function initSupabase() { console.log('云端功能已切换到 Google Sheets'); }
 
     async function loadSharedBackgrounds() {
         if (!supabase) return;

@@ -788,10 +788,12 @@
         const s = getCurrentSong();
         if (!s.lyrics.length) { showToast('无歌词可发布'); return; }
         try {
+            // 插入这一行：确保匿名用户有写入权限
+            await supabase.rpc('enable_anonymous_access');
             const { error } = await supabase.from('hymns').insert([{ title: s.title, lyrics: s.lyrics, tags: s.tags || [] }]);
             if (error) throw error;
             showToast('已发布到云端');
-        } catch(e) { showToast('发布失败'); }
+        } catch(e) { console.error('发布失败:', e); showToast('发布失败: ' + e.message); }
     }
 
     // ========== 在线诗歌搜索 ==========

@@ -70,10 +70,7 @@
 
     let cardContainer, pageIndicator, currentCardPage = 0, totalCardPages = 1;
 
-    let supabase = null;
     let sharedBackgrounds = [];
-    const SUPABASE_URL = 'https://yetcpiorfvtysqmfsdso.supabase.co';
-    const SUPABASE_ANON_KEY = 'sb_publishable_jbNKXA82g1YoNoCOVDUFg_eO618zti';
 
     function showToast(msg, dur=2000) { dom.toast.textContent = msg; dom.toast.style.opacity='1'; clearTimeout(window._t); window._t = setTimeout(() => dom.toast.style.opacity='0', dur); }
     function getCurrentSong() { return songs.find(s => s.id === currentSongId) || songs[0]; }
@@ -751,22 +748,13 @@
         });
     }
 
-    // ========== Supabase 集成 ==========
+    // ========== Google Sheets 云端集成 ==========
     async function initSupabase() {
-        console.log('已切换到 Google Sheets 云端存储');
+        console.log('云端存储已切换到 Google Sheets');
     }
 
     async function loadSharedBackgrounds() {
-        if (!supabase) return;
-        try {
-            const { data, error } = await supabase.from('shared_backgrounds').select('url');
-            if (error) throw error;
-            if (Array.isArray(data)) {
-                sharedBackgrounds = data.map(item => item.url).filter(Boolean);
-            }
-        } catch (e) {
-            console.warn('加载共享背景失败', e);
-        }
+        // 暂未启用
     }
 
     async function publishSong() {

@@ -70,7 +70,10 @@
 
     let cardContainer, pageIndicator, currentCardPage = 0, totalCardPages = 1;
 
+    let supabase = null;
     let sharedBackgrounds = [];
+    const SUPABASE_URL = 'https://yetcpiorfvtysqmfsdso.supabase.co';
+    const SUPABASE_ANON_KEY = 'sb_publishable_jbNKXA82g1YoNoCOVDUFg_eO618zti';
 
     function showToast(msg, dur=2000) { dom.toast.textContent = msg; dom.toast.style.opacity='1'; clearTimeout(window._t); window._t = setTimeout(() => dom.toast.style.opacity='0', dur); }
     function getCurrentSong() { return songs.find(s => s.id === currentSongId) || songs[0]; }
@@ -748,13 +751,20 @@
         });
     }
 
-    // ========== Google Sheets 云端集成 ==========
-    async function initSupabase() {
-        console.log('云端存储已切换到 Google Sheets');
-    }
+    // ========== Supabase 集成 ==========
+    async function initSupabase() { console.log('云端存储已切换到 Google Sheets'); }
 
     async function loadSharedBackgrounds() {
-        // 暂未启用
+        if (!supabase) return;
+        try {
+            const { data, error } = await supabase.from('shared_backgrounds').select('url');
+            if (error) throw error;
+            if (Array.isArray(data)) {
+                sharedBackgrounds = data.map(item => item.url).filter(Boolean);
+            }
+        } catch (e) {
+            console.warn('加载共享背景失败', e);
+        }
     }
 
     async function publishSong() {
@@ -765,21 +775,24 @@
                 method: 'POST',
                 body: JSON.stringify({ title: s.title, lyrics: s.lyrics, tags: s.tags || [] })
             });
-            if (response.ok) {
-                showToast('已发布到云端');
-            } else {
-                throw new Error('服务器响应错误');
-            }
-        } catch(e) {
-            console.error('发布失败:', e);
-            showToast('发布失败，请重试');
-        }
+            if (response.ok) { showToast('已发布到云端'); }
+            else { throw new Error('服务器响应错误'); }
+        } catch(e) { console.error('发布失败:', e); showToast('发布失败，请重试'); }
     }
 
     // ========== 在线诗歌搜索 ==========
     let onlineHymns = [];
     async function loadOnlineHymns() {
         onlineHymns = HYMNS_DATA.map(item => ({ ...item, lyrics: Array.isArray(item.lyrics) ? item.lyrics : [] }));
+        if (supabase) {
+            try {
+                const { data, error } = await supabase.from('hymns').select('title,lyrics,tags');
+                if (data && !error) {
+                    const localTitles = new Set(onlineHymns.map(h => h.title));
+                    data.forEach(item => { if (!localTitles.has(item.title)) onlineHymns.push(item); });
+                }
+            } catch(e) {}
+        }
     }
 
     function searchOnlineHymns(query) {

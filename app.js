@@ -636,7 +636,7 @@
                 </div>
             </div>
             <!-- 恢复按钮（隐藏时显示） -->
-            <div id="dc-restore-dot" style="position:fixed; bottom:10px; right:10px; width:36px; height:36px; background:rgba(255,255,255,0.15); backdrop-filter:blur(5px); border-radius:50%; cursor:pointer; z-index:90; display:none; align-items:center; justify-content:center; border:1px solid rgba(255,255,255,0.25); transition: all 0.2s ease;">
+            <div id="dc-restore-dot" style="position:fixed; bottom:10px; right:10px; width:36px; height:36px; background:rgba(255,255,255,0.15); backdrop-filter:blur(5px); border-radius:50%; cursor:pointer; z-index:90; display:none; align-items:center; justify-content:center; border:1px solid rgba(255,255,255,0.25); transition: all 0.2s ease;" onmouseover="this.style.background='rgba(255,255,255,0.3)'" onmouseout="this.style.background='rgba(255,255,255,0.15)'">
                 <span style="color:#aaa; font-size:0.8rem;">⋮</span>
             </div>
         `;
@@ -705,25 +705,45 @@
             lyricsDiv.style.top = song.posY + '%';
             dcPageIndicator.textContent = `${currentPageIndex+1}/${totalPages}`;
 
-            // 更新底部卡片预览 - 显示所有页面，自动换行
+            // 更新底部卡片预览 - 显示所有页面，自动换行，显示完整歌词
             dcCardPreview.innerHTML = '';
             const pages = Array.isArray(state.pages) ? state.pages : [];
-            // 计算每行可显示的卡片数（基于容器宽度）
-            const containerWidth = dcCardPreview.offsetWidth || window.innerWidth;
-            const cardWidth = 80; // 每个小卡片宽度
-            const cardGap = 6;
-            const cardsPerRow = Math.floor((containerWidth - cardGap) / (cardWidth + cardGap));
             
             for (let i = 0; i < totalPages; i++) {
                 const mini = document.createElement('div');
                 mini.className = 'display-mini-card';
                 if (i === currentPageIndex) mini.classList.add('active');
+                
                 const pageLines = (i < pages.length && Array.isArray(pages[i].lines)) ? pages[i].lines : [];
-                mini.textContent = pageLines.length > 0 ? pageLines[0].substring(0, 6) : '…';
-                mini.title = pageLines.join('\n');
-                mini.style.width = cardWidth + 'px';
-                mini.style.height = '50px';
-                mini.style.fontSize = '0.65rem';
+                const cleanLines = pageLines.map(line => line.replace(/\[([^\]]+)\]/g, '').trim()).filter(Boolean);
+                
+                // 根据行数自动调整卡片高度
+                const lineCount = cleanLines.length || 1;
+                const baseHeight = 35;
+                const lineHeight = 18;
+                const cardHeight = Math.max(baseHeight, Math.min(100, baseHeight + (lineCount - 1) * lineHeight));
+                
+                mini.style.height = cardHeight + 'px';
+                mini.style.minWidth = '70px';
+                mini.style.maxWidth = '120px';
+                mini.style.padding = '6px 8px';
+                mini.style.display = 'flex';
+                mini.style.flexDirection = 'column';
+                mini.style.justifyContent = 'center';
+                mini.style.alignItems = 'center';
+                
+                // 显示完整歌词（限制最多4行）
+                const displayLines = cleanLines.slice(0, 4);
+                mini.innerHTML = displayLines.map(line => 
+                    `<div style="font-size:0.6rem;line-height:1.4;color:${i === currentPageIndex ? '#fff' : '#aaa'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;">${line}</div>`
+                ).join('');
+                
+                if (cleanLines.length > 4) {
+                    mini.innerHTML += '<div style="font-size:0.55rem;color:#666;margin-top:2px;">...</div>';
+                }
+                
+                mini.title = cleanLines.join('\n');
+                
                 mini.addEventListener('click', () => {
                     dc.postMessage({ type: 'jump', pageIndex: i });
                 });
@@ -779,34 +799,172 @@
     // ========== 主领提词视图 ==========
     function initLeaderView() {
         document.body.innerHTML = `
-            <div id="leader-view" style="position:fixed;top:0;left:0;width:100%;height:100%;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:1;">
-                <div id="leader-lyrics" style="text-align:center;color:white;font-weight:bold;text-shadow:3px 3px 8px black;width:90%;max-width:1200px;"></div>
-                <div id="leader-next-preview" style="margin-top:30px;color:#666;font-size:1.5rem;text-align:center;width:80%;max-width:800px;min-height:40px;"></div>
-                <div id="leader-page-num" style="position:fixed;top:20px;right:30px;color:#aaa;font-size:1.2rem;"></div>
-                <div id="leader-notes" style="position:fixed;bottom:30px;left:50%;transform:translateX(-50%);color:#888;font-size:1rem;text-align:center;"></div>
-                <div id="leader-meta" style="position:fixed;bottom:10px;right:20px;color:#666;font-size:0.9rem;"></div>
+            <div id="leader-view" style="position:fixed;top:0;left:0;width:100%;height:100%;background:linear-gradient(135deg,#0a0e27 0%,#1a1a2e 50%,#000 100%);overflow:hidden;z-index:1;">
+                <!-- 微光粒子画布 -->
+                <canvas id="leader-particles" style="position:absolute;top:0;left:0;width:100%;height:100%;z-index:0;pointer-events:none;"></canvas>
+                
+                <!-- 顶部控制栏 -->
+                <div style="position:fixed;top:0;left:0;width:100%;z-index:10;display:flex;justify-content:space-between;align-items:center;padding:15px 20px;background:rgba(0,0,0,0.3);backdrop-filter:blur(10px);">
+                    <div style="display:flex;gap:10px;align-items:center;">
+                        <button id="leader-mode-scroll" style="padding:8px 16px;border-radius:20px;border:1px solid rgba(255,255,255,0.3);background:transparent;color:#aaa;cursor:pointer;font-size:0.9rem;transition:all 0.2s;">📜 滚动模式</button>
+                        <button id="leader-mode-page" style="padding:8px 16px;border-radius:20px;border:1px solid rgba(255,255,255,0.3);background:rgba(212,175,55,0.3);color:#fff;cursor:pointer;font-size:0.9rem;transition:all 0.2s;">🖥️ 分页模式</button>
+                    </div>
+                    <div style="display:flex;gap:15px;align-items:center;">
+                        <span id="leader-song-title" style="color:#ddd;font-size:1rem;font-weight:bold;"></span>
+                        <span id="leader-page-num" style="color:#888;font-size:0.9rem;"></span>
+                    </div>
+                </div>
+                
+                <!-- 核心内容区 -->
+                <div id="leader-content" style="position:absolute;top:70px;left:0;width:100%;height:calc(100% - 70px);overflow-y:auto;padding:20px;z-index:5;">
+                    <!-- 分页模式内容 -->
+                    <div id="leader-page-mode" style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100%;">
+                        <div id="leader-lyrics" style="text-align:center;color:white;font-weight:bold;width:90%;max-width:1200px;"></div>
+                        <div id="leader-next-preview" style="margin-top:40px;color:rgba(255,255,255,0.4);font-size:1.3rem;text-align:center;width:80%;max-width:800px;min-height:40px;"></div>
+                    </div>
+                    
+                    <!-- 滚动模式内容 -->
+                    <div id="leader-scroll-mode" style="display:none;max-width:900px;margin:0 auto;padding:20px 0 100px 0;">
+                        <div id="leader-all-lyrics"></div>
+                    </div>
+                </div>
+                
+                <!-- 底部信息栏 -->
+                <div style="position:fixed;bottom:0;left:0;width:100%;z-index:10;background:rgba(0,0,0,0.4);backdrop-filter:blur(10px);padding:10px 20px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;">
+                        <div style="display:flex;gap:20px;align-items:center;">
+                            <span id="leader-meta" style="color:rgba(255,255,255,0.5);font-size:0.85rem;"></span>
+                            <button id="leader-notes-toggle" style="padding:5px 12px;border-radius:15px;border:1px solid rgba(255,255,255,0.2);background:transparent;color:#aaa;cursor:pointer;font-size:0.8rem;">📝 备注</button>
+                        </div>
+                        <div style="color:rgba(255,255,255,0.3);font-size:0.75rem;">敬拜主领视图</div>
+                    </div>
+                </div>
+                
+                <!-- 备注面板（可折叠） -->
+                <div id="leader-notes-panel" style="position:fixed;bottom:50px;left:50%;transform:translateX(-50%);width:90%;max-width:700px;max-height:60vh;background:rgba(15,15,30,0.95);backdrop-filter:blur(15px);border-radius:20px;border:1px solid rgba(255,255,255,0.1);z-index:20;display:none;flex-direction:column;box-shadow:0 10px 40px rgba(0,0,0,0.5);">
+                    <div style="padding:15px 20px;border-bottom:1px solid rgba(255,255,255,0.1);display:flex;justify-content:space-between;align-items:center;">
+                        <span style="color:#d4af37;font-weight:bold;font-size:1rem;">📝 主领备注 / 祷告词</span>
+                        <div style="display:flex;gap:8px;">
+                            <button id="leader-notes-refresh" style="padding:5px 12px;border-radius:12px;border:1px solid rgba(212,175,55,0.5);background:rgba(212,175,55,0.1);color:#d4af37;cursor:pointer;font-size:0.8rem;">🔄 刷新备注</button>
+                            <button id="leader-notes-close" style="padding:5px 12px;border-radius:12px;border:1px solid rgba(255,255,255,0.2);background:transparent;color:#aaa;cursor:pointer;font-size:0.8rem;">✕</button>
+                        </div>
+                    </div>
+                    <textarea id="leader-notes-textarea" placeholder="在此输入当前歌曲的备注、祷告词或提示..." style="flex:1;padding:15px 20px;background:transparent;border:none;color:#ddd;font-size:0.95rem;line-height:1.8;resize:none;outline:none;font-family:'Microsoft YaHei',sans-serif;"></textarea>
+                    <div style="padding:10px 20px;border-top:1px solid rgba(255,255,255,0.1);display:flex;justify-content:flex-end;">
+                        <button id="leader-notes-save" style="padding:8px 20px;border-radius:15px;border:none;background:linear-gradient(135deg,#d4af37,#b8960c);color:#000;font-weight:bold;cursor:pointer;font-size:0.9rem;">💾 保存备注</button>
+                    </div>
+                </div>
             </div>
         `;
 
         const leaderLyrics = document.getElementById('leader-lyrics');
         const leaderNextPreview = document.getElementById('leader-next-preview');
         const leaderPageNum = document.getElementById('leader-page-num');
-        const leaderNotes = document.getElementById('leader-notes');
         const leaderMeta = document.getElementById('leader-meta');
+        const leaderSongTitle = document.getElementById('leader-song-title');
+        const leaderAllLyrics = document.getElementById('leader-all-lyrics');
+        const leaderScrollMode = document.getElementById('leader-scroll-mode');
+        const leaderPageMode = document.getElementById('leader-page-mode');
+        const leaderNotesPanel = document.getElementById('leader-notes-panel');
+        const leaderNotesTextarea = document.getElementById('leader-notes-textarea');
+        const leaderNotesToggle = document.getElementById('leader-notes-toggle');
+        const leaderNotesClose = document.getElementById('leader-notes-close');
+        const leaderNotesSave = document.getElementById('leader-notes-save');
+        const leaderNotesRefresh = document.getElementById('leader-notes-refresh');
+        const modeScrollBtn = document.getElementById('leader-mode-scroll');
+        const modePageBtn = document.getElementById('leader-mode-page');
 
         let currentState = null;
+        let currentMode = 'page'; // 'page' or 'scroll'
+        let currentSongId = '';
+        let particles = [];
+        let particleCtx = null;
 
-        function render(state) {
-            if (!state) return;
-            currentState = state;
+        // 初始化粒子背景
+        function initParticles() {
+            const canvas = document.getElementById('leader-particles');
+            if (!canvas) return;
+            particleCtx = canvas.getContext('2d');
+            
+            function resize() {
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+            }
+            resize();
+            window.addEventListener('resize', resize);
+
+            class Particle {
+                constructor() {
+                    this.reset();
+                }
+                reset() {
+                    this.x = Math.random() * canvas.width;
+                    this.y = Math.random() * canvas.height;
+                    this.size = Math.random() * 2 + 0.5;
+                    this.speedX = (Math.random() - 0.5) * 0.3;
+                    this.speedY = (Math.random() - 0.5) * 0.3;
+                    this.opacity = Math.random() * 0.3 + 0.05;
+                }
+                update() {
+                    this.x += this.speedX;
+                    this.y += this.speedY;
+                    if (this.x < 0 || this.x > canvas.width || this.y < 0 || this.y > canvas.height) {
+                        this.reset();
+                    }
+                }
+                draw() {
+                    particleCtx.beginPath();
+                    particleCtx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                    particleCtx.fillStyle = `rgba(212,175,55,${this.opacity})`;
+                    particleCtx.fill();
+                }
+            }
+
+            for (let i = 0; i < 50; i++) {
+                particles.push(new Particle());
+            }
+
+            function animate() {
+                particleCtx.clearRect(0, 0, canvas.width, canvas.height);
+                particles.forEach(p => {
+                    p.update();
+                    p.draw();
+                });
+                requestAnimationFrame(animate);
+            }
+            animate();
+        }
+
+        // 切换模式
+        function switchMode(mode) {
+            currentMode = mode;
+            if (mode === 'scroll') {
+                modeScrollBtn.style.background = 'rgba(212,175,55,0.3)';
+                modeScrollBtn.style.color = '#fff';
+                modePageBtn.style.background = 'transparent';
+                modePageBtn.style.color = '#aaa';
+                leaderScrollMode.style.display = 'block';
+                leaderPageMode.style.display = 'none';
+                renderScrollMode();
+            } else {
+                modePageBtn.style.background = 'rgba(212,175,55,0.3)';
+                modePageBtn.style.color = '#fff';
+                modeScrollBtn.style.background = 'transparent';
+                modeScrollBtn.style.color = '#aaa';
+                leaderScrollMode.style.display = 'none';
+                leaderPageMode.style.display = 'flex';
+            }
+        }
+
+        // 渲染分页模式
+        function renderPageMode(state) {
             const { song, currentPageIndex, totalPages, pages } = state;
-
-            // 当前歌词（大号显示）
             const lyrics = song.lyrics || [];
-            const fontSize = (song.fontSize || 56) * 1.5;
+            const fontSize = (song.fontSize || 56) * 1.3;
+            
             let html = '';
             lyrics.forEach(line => {
-                html += `<div style="font-size:${fontSize}px;line-height:1.8;white-space:normal;word-break:break-word;font-family:${song.fontFamily || DEFAULT_FONT_FAMILY};">${line}</div>`;
+                html += `<div style="font-size:${fontSize}px;line-height:1.8;white-space:normal;word-break:break-word;font-family:${song.fontFamily || DEFAULT_FONT_FAMILY};margin-bottom:10px;">${line}</div>`;
             });
             leaderLyrics.innerHTML = html;
 
@@ -819,18 +977,121 @@
                 leaderNextPreview.textContent = '';
             }
 
-            // 页码
             leaderPageNum.textContent = `${currentPageIndex + 1}/${totalPages}`;
+        }
 
-            // 备注
-            leaderNotes.textContent = song.notes || '';
+        // 渲染滚动模式
+        function renderScrollMode() {
+            if (!currentState) return;
+            const { pages, currentPageIndex } = currentState;
+            if (!pages || !pages.length) return;
 
-            // 调性和速度
+            const fontSize = (currentState.song.fontSize || 56) * 1.1;
+            let html = '';
+            
+            pages.forEach((page, idx) => {
+                const isCurrentPage = idx === currentPageIndex;
+                const pageLines = page.lines || [];
+                
+                html += `<div style="margin-bottom:30px;padding:20px;border-radius:15px;${isCurrentPage ? 'background:rgba(212,175,55,0.15);border:1px solid rgba(212,175,55,0.3);' : 'background:transparent;border:1px solid rgba(255,255,255,0.05);'}">`;
+                
+                if (page.isTitle && pageLines.length > 0) {
+                    html += `<div style="font-size:${fontSize * 1.3}px;color:#d4af37;font-weight:bold;text-align:center;margin-bottom:15px;font-family:${currentState.song.fontFamily || DEFAULT_FONT_FAMILY};">${pageLines[0]}</div>`;
+                }
+                
+                pageLines.forEach((line, lineIdx) => {
+                    if (page.isTitle && lineIdx === 0) return;
+                    const cleanLine = line.replace(/\[([^\]]+)\]/g, '').trim();
+                    if (!cleanLine) return;
+                    html += `<div style="font-size:${fontSize}px;line-height:2;color:${isCurrentPage ? '#fff' : 'rgba(255,255,255,0.6)'};font-weight:${isCurrentPage ? 'bold' : 'normal'};font-family:${currentState.song.fontFamily || DEFAULT_FONT_FAMILY};padding:5px 10px;${isCurrentPage ? 'background:rgba(212,175,55,0.1);border-radius:8px;' : ''}">${cleanLine}</div>`;
+                });
+                
+                html += `</div>`;
+            });
+            
+            leaderAllLyrics.innerHTML = html;
+            
+            // 自动滚动到当前页
+            if (currentPageIndex >= 0) {
+                const currentEl = leaderAllLyrics.children[currentPageIndex];
+                if (currentEl) {
+                    currentEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            }
+        }
+
+        // 加载备注
+        function loadNotes(songId) {
+            const saved = localStorage.getItem(`leader_notes_${songId}`);
+            leaderNotesTextarea.value = saved || '';
+        }
+
+        // 保存备注
+        function saveNotes() {
+            if (!currentSongId) return;
+            const content = leaderNotesTextarea.value;
+            localStorage.setItem(`leader_notes_${currentSongId}`, content);
+            // 同时保存到云端
+            saveLeaderNote(currentSongId, content);
+            showToast('备注已保存');
+        }
+
+        // 从 Google Sheets 刷新备注
+        async function refreshNotesFromSheet() {
+            if (!currentState || !currentSongId) return;
+            const note = await loadLeaderNote(currentSongId);
+            if (note !== null) {
+                leaderNotesTextarea.value = note;
+                saveNotes();
+                showToast('✝️ 备注已从云端刷新');
+            } else {
+                showToast('云端暂无备注');
+            }
+        }
+
+        // 渲染主函数
+        function render(state) {
+            if (!state) return;
+            currentState = state;
+            const { song } = state;
+            
+            // 更新歌曲标题
+            leaderSongTitle.textContent = song.title || '未命名诗歌';
+            
+            // 更新元信息
             const metaParts = [];
             if (song.key) metaParts.push(`${song.key}大调`);
             if (song.tempo) metaParts.push(`${song.tempo} BPM`);
             leaderMeta.textContent = metaParts.join(' · ');
+            
+            // 更新当前歌曲ID并加载备注
+            if (song.id !== currentSongId) {
+                currentSongId = song.id;
+                loadNotes(currentSongId);
+            }
+            
+            // 根据模式渲染
+            if (currentMode === 'page') {
+                renderPageMode(state);
+            } else {
+                renderScrollMode();
+            }
         }
+
+        // 事件绑定
+        modeScrollBtn.addEventListener('click', () => switchMode('scroll'));
+        modePageBtn.addEventListener('click', () => switchMode('page'));
+        
+        leaderNotesToggle.addEventListener('click', () => {
+            leaderNotesPanel.style.display = leaderNotesPanel.style.display === 'flex' ? 'none' : 'flex';
+        });
+        
+        leaderNotesClose.addEventListener('click', () => {
+            leaderNotesPanel.style.display = 'none';
+        });
+        
+        leaderNotesSave.addEventListener('click', saveNotes);
+        leaderNotesRefresh.addEventListener('click', refreshNotesFromSheet);
 
         // 监听 BroadcastChannel
         const dc = new BroadcastChannel('worship_channel');
@@ -840,6 +1101,12 @@
             }
         });
         dc.postMessage({ type: 'request_state' });
+
+        // 初始化粒子
+        initParticles();
+        
+        // 默认分页模式
+        switchMode('page');
     }
 
     // ========== Google Sheets 云端集成 ==========
@@ -864,6 +1131,14 @@
     async function publishSong() {
         const s = getCurrentSong();
         if (!s.lyrics.length) { showToast('无歌词可发布'); return; }
+        
+        // 防重复提交：禁用按钮
+        const btn = dom.publishSongBtn;
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = '⏳ 上传中...';
+        }
+        
         try {
             const response = await fetch('https://script.google.com/macros/s/AKfycbzUW1yB8gObRnSjUyWpRivWWI4KuD-ba9m5eYZU4TbdKUvuajcpaSaMxZ61JjBFyjkUXQ/exec', {
                 method: 'POST',
@@ -871,9 +1146,103 @@
             });
             if (response.ok) {
                 const msg = ENCOURAGEMENTS[Math.floor(Math.random() * ENCOURAGEMENTS.length)];
-                showToast(msg);
+                // 在按钮旁显示反馈气泡
+                showPublishFeedback(btn, msg);
             } else { throw new Error('服务器响应错误'); }
-        } catch(e) { console.error('发布失败:', e); showToast('发布失败，请重试'); }
+        } catch(e) { 
+            console.error('发布失败:', e); 
+            showPublishFeedback(btn, '✝️ 发布失败，请重试', true);
+        } finally {
+            // 恢复按钮状态
+            if (btn) {
+                setTimeout(() => {
+                    btn.disabled = false;
+                    btn.textContent = '☁️ 发布到云端';
+                }, 2000);
+            }
+        }
+    }
+
+    // 在按钮旁显示发布反馈
+    function showPublishFeedback(button, message, isError = false) {
+        if (!button) return;
+        
+        // 移除旧的反馈
+        const oldFeedback = document.getElementById('publish-feedback');
+        if (oldFeedback) oldFeedback.remove();
+        
+        // 创建反馈气泡
+        const feedback = document.createElement('span');
+        feedback.id = 'publish-feedback';
+        feedback.innerHTML = `✝️ ${message}`;
+        feedback.style.cssText = `
+            display:inline-block;
+            margin-left:10px;
+            padding:6px 14px;
+            background:${isError ? 'rgba(255,80,80,0.2)' : 'rgba(212,175,55,0.2)'};
+            border:1px solid ${isError ? 'rgba(255,80,80,0.5)' : 'rgba(212,175,55,0.5)'};
+            border-radius:20px;
+            color:${isError ? '#ff6b6b' : '#d4af37'};
+            font-size:0.85rem;
+            animation:bounceIn 0.4s ease;
+            opacity:1;
+            transition:opacity 0.3s ease;
+            white-space:nowrap;
+        `;
+        
+        // 插入到按钮后面
+        button.parentNode.insertBefore(feedback, button.nextSibling);
+        
+        // 2秒后渐隐消失
+        setTimeout(() => {
+            feedback.style.opacity = '0';
+            setTimeout(() => feedback.remove(), 300);
+        }, 2000);
+    }
+
+    // ========== 主领备注云端同步 ==========
+    const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzUW1yB8gObRnSjUyWpRivWWI4KuD-ba9m5eYZU4TbdKUvuajcpaSaMxZ61JjBFyjkUXQ/exec';
+
+    // 保存主领备注到 Google Sheets
+    async function saveLeaderNote(songId, noteText) {
+        if (!songId || !noteText) return false;
+        try {
+            const response = await fetch(GOOGLE_SCRIPT_URL, {
+                method: 'POST',
+                body: JSON.stringify({
+                    action: 'saveNote',
+                    songId: songId,
+                    note: noteText
+                })
+            });
+            if (response.ok) {
+                showToast('✝️ 备注已同步到云端');
+                return true;
+            } else {
+                throw new Error('服务器响应错误');
+            }
+        } catch(e) {
+            console.error('保存备注失败:', e);
+            showToast('⚠️ 云端同步失败，已保存到本地');
+            return false;
+        }
+    }
+
+    // 从 Google Sheets 加载主领备注
+    async function loadLeaderNote(songId) {
+        if (!songId) return null;
+        try {
+            const response = await fetch(`${GOOGLE_SCRIPT_URL}?action=getNote&songId=${encodeURIComponent(songId)}`);
+            if (response.ok) {
+                const data = await response.json();
+                return data.note || null;
+            } else {
+                throw new Error('服务器响应错误');
+            }
+        } catch(e) {
+            console.error('加载备注失败:', e);
+            return null;
+        }
     }
 
     // ========== 在线诗歌搜索 ==========

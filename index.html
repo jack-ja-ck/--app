@@ -6,7 +6,6 @@
     <title>敬拜投屏 · 专业版</title>
     <link rel="stylesheet" href="style.css">
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
     <script src="app.js" defer></script>
 </head>
 <body data-theme="dark">
@@ -47,12 +46,15 @@
             <button id="publish-song-btn" class="btn btn-outline">☁️ 发布到云端</button>
         </div>
         <textarea id="lyric-editor-large" placeholder="输入歌词，一行一句。用空行或 [page] 分隔页面。第一页若为单行将作为歌名。"></textarea>
-        <div id="song-meta">
-            <span class="meta-field"><label>🎵 调性</label><input type="text" id="song-key" placeholder="C"></span>
-            <span class="meta-field"><label>⏱️ 速度</label><input type="text" id="song-tempo" placeholder="72"></span>
-            <span class="meta-field" style="flex:1; min-width:180px; max-width:300px;"><label>📝 备注</label><input type="text" id="song-notes" placeholder="如：副歌反复" style="width:100%;"></span>
-            <span class="meta-field"><label>🏷️ 标签</label><input type="text" id="song-tags" placeholder="敬拜,感恩" style="width:120px;"></span>
-        </div>
+        <details id="song-meta-details" style="margin-bottom:10px;">
+            <summary style="cursor:pointer;padding:8px 12px;background:rgba(255,255,255,0.05);border-radius:10px;color:var(--text-secondary);font-size:0.9rem;list-style:none;user-select:none;">🎵 更多歌曲信息</summary>
+            <div id="song-meta" style="padding:12px;display:flex;gap:15px;align-items:center;flex-wrap:wrap;">
+                <span class="meta-field"><label>🎵 调性</label><input type="text" id="song-key" placeholder="C"></span>
+                <span class="meta-field"><label>⏱️ 速度</label><input type="text" id="song-tempo" placeholder="72"></span>
+                <span class="meta-field" style="flex:1; min-width:180px; max-width:300px;"><label>📝 备注</label><input type="text" id="song-notes" placeholder="如：副歌反复" style="width:100%;"></span>
+                <span class="meta-field"><label>🏷️ 标签</label><input type="text" id="song-tags" placeholder="敬拜,感恩" style="width:120px;"></span>
+            </div>
+        </details>
         <div class="editor-toolbar">
             <button id="apply-to-display" class="btn">应用到演示屏</button>
             <button id="reset-current-song" class="btn btn-outline">重置示例</button>
@@ -148,6 +150,7 @@
         </div>
         <button id="open-display-btn" class="btn" style="background:#2e7d32; width:100%;">📺 打开演示窗口</button>
         <button id="open-leader-btn" class="btn btn-outline" style="width:100%; margin-top:8px;">📱 主领视图</button>
+        <p class="hint-text" style="margin-top:6px;">📱 手机也可打开此链接</p>
         <p class="hint-text">B=黑屏 W=白屏 F=全屏</p>
     </div>
 </div>

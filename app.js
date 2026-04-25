@@ -666,10 +666,25 @@
         for(let i=0;i<70;i++) particles.push(new Particle());
 
         function drawBg(bg, img) {
-            if(bg==='solid-black'){ctx.fillStyle='#000';ctx.fillRect(0,0,w,h);}
-            else if(bg==='solid-white'){ctx.fillStyle='#fff';ctx.fillRect(0,0,w,h);}
-            else if(bg==='solid-gray'){ctx.fillStyle='#555';ctx.fillRect(0,0,w,h);}
-            else if(bg==='gradient'){const g=ctx.createRadialGradient(w*.3,h*.3,50,w*.5,h*.5,w);g.addColorStop(0,'#1a2a4a');g.addColorStop(1,'#000');ctx.fillStyle=g;ctx.fillRect(0,0,w,h);}
+            if(bg==='solid-black'){
+                ctx.fillStyle='#000';
+                ctx.fillRect(0,0,w,h);
+            }
+            else if(bg==='solid-white'){
+                ctx.fillStyle='#fff';
+                ctx.fillRect(0,0,w,h);
+            }
+            else if(bg==='solid-gray'){
+                ctx.fillStyle='#555';
+                ctx.fillRect(0,0,w,h);
+            }
+            else if(bg==='gradient'){
+                const g=ctx.createRadialGradient(w*.3,h*.3,50,w*.5,h*.5,w);
+                g.addColorStop(0,'#1a2a4a');
+                g.addColorStop(1,'#000');
+                ctx.fillStyle=g;
+                ctx.fillRect(0,0,w,h);
+            }
             else if (bg === 'image') {
                 // 后备机制：如果img为空，尝试从currentState获取
                 const imageUrl = img || (currentState && currentState.song && currentState.song.bgImage);
@@ -686,23 +701,28 @@
                         // 图片加载中，先显示粒子背景
                         ctx.fillStyle='#000';
                         ctx.fillRect(0,0,w,h);
+                        ctx.shadowBlur = 0;
                         particles.forEach(p=>{p.update();p.draw();});
                     }
                 } else {
                     // 没有图片数据，显示粒子背景作为后备
                     ctx.fillStyle='#000';
                     ctx.fillRect(0,0,w,h);
+                    ctx.shadowBlur = 0;
                     particles.forEach(p=>{p.update();p.draw();});
                 }
             }
             else if(bg==='particles'){
-                // 粒子背景：先用纯黑色清除画布，再更新和绘制粒子
+                // 粒子背景：先用纯黑色清除画布，再重置阴影，最后更新并绘制粒子
                 ctx.fillStyle='#000';
                 ctx.fillRect(0,0,w,h);
                 ctx.shadowBlur = 0;
                 particles.forEach(p=>{p.update();p.draw();});
             }
-            else{ctx.fillStyle='#000';ctx.fillRect(0,0,w,h);}
+            else{
+                ctx.fillStyle='#000';
+                ctx.fillRect(0,0,w,h);
+            }
         }
 
         function render(state) {
@@ -789,14 +809,45 @@
         });
 
         window.addEventListener('keydown', e => {
-            if (e.key === 'b' || e.key === 'B') { e.preventDefault(); blackout.style.display = blackout.style.display === 'none' ? 'block' : 'none'; }
-            else if (e.key === 'w' || e.key === 'W') { e.preventDefault(); whiteout.style.display = whiteout.style.display === 'none' ? 'block' : 'none'; }
-            else if (e.key === 'f' || e.key === 'F') { e.preventDefault(); document.documentElement.requestFullscreen(); }
-            else if (e.key === 'Escape') { blackout.style.display = 'none'; whiteout.style.display = 'none'; }
-            else if (e.key === 'ArrowUp' && ended) { ended = false; endedOverlay.style.display = 'none'; lyricsDiv.style.display = 'block'; dc.postMessage({ type: 'prev' }); }
-            else if (e.key === 'ArrowLeft') { e.preventDefault(); dc.postMessage({ type: 'prev' }); }
-            else if (e.key === 'ArrowRight') { e.preventDefault(); dc.postMessage({ type: 'next' }); }
-        });
+            if (e.key === 'b' || e.key === 'B') { 
+                e.preventDefault(); 
+                blackout.style.display = blackout.style.display === 'none' ? 'block' : 'none'; 
+            }
+            else if (e.key === 'w' || e.key === 'W') { 
+                e.preventDefault(); 
+                whiteout.style.display = whiteout.style.display === 'none' ? 'block' : 'none'; 
+            }
+            else if (e.key === 'f' || e.key === 'F') { 
+                e.preventDefault(); 
+                document.documentElement.requestFullscreen(); 
+            }
+            else if (e.key === 'Escape') { 
+                e.preventDefault();
+                blackout.style.display = 'none'; 
+                whiteout.style.display = 'none'; 
+            }
+            else if (e.key === 'ArrowUp') { 
+                e.preventDefault(); 
+                if (ended) {
+                    ended = false; 
+                    endedOverlay.style.display = 'none'; 
+                    lyricsDiv.style.display = 'block'; 
+                }
+                dc.postMessage({ type: 'prev' }); 
+            }
+            else if (e.key === 'ArrowDown') { 
+                e.preventDefault(); 
+                dc.postMessage({ type: 'next' }); 
+            }
+            else if (e.key === 'ArrowLeft') { 
+                e.preventDefault(); 
+                dc.postMessage({ type: 'prev' }); 
+            }
+            else if (e.key === 'ArrowRight') { 
+                e.preventDefault(); 
+                dc.postMessage({ type: 'next' }); 
+            }
+        }, true);  // 使用捕获阶段，确保事件不会冒泡到主页面
     }
 
     // ========== 主领提词视图 ==========
@@ -1164,9 +1215,17 @@
 
         // 渲染主函数
         function render(state) {
-            if (!state) return;
+            if (!state) {
+                console.warn('[LeaderView] render called with null state');
+                return;
+            }
             currentState = state;
             const { song } = state;
+            
+            if (!song) {
+                console.warn('[LeaderView] No song data in state');
+                return;
+            }
             
             // 更新歌曲标题
             leaderSongTitle.textContent = song.title || '未命名诗歌';
@@ -1652,7 +1711,9 @@
         // 监听 BroadcastChannel
         const dc = new BroadcastChannel('worship_channel');
         dc.addEventListener('message', e => {
+            console.log('[LeaderView] Received message:', e.data.type);
             if (e.data.type === 'update') {
+                console.log('[LeaderView] Updating state with song:', e.data.song?.title);
                 render(e.data);
             } else if (e.data.type === 'prev') {
                 // 处理上一页命令（从演示窗口同步）
@@ -1670,10 +1731,14 @@
             }
         });
         
-        // 延迟发送请求，确保主窗口已准备好
+        // 立即发送请求，然后延迟再次请求以确保主窗口已准备好
+        dc.postMessage({ type: 'request_state' });
         setTimeout(() => {
             dc.postMessage({ type: 'request_state' });
         }, 100);
+        setTimeout(() => {
+            dc.postMessage({ type: 'request_state' });
+        }, 500);
 
         // 初始化粒子
         initParticles();

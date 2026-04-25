@@ -70,12 +70,10 @@
 
     let cardContainer, pageIndicator, currentCardPage = 0, totalCardPages = 1;
 
-    let supabase = null;
     let sharedBackgrounds = [];
-    const SUPABASE_URL = 'https://yetcpiorfvtysqmfsdso.supabase.co';
-    const SUPABASE_ANON_KEY = 'sb_publishable_jbNKXA82g1YoNoCOVDUFg_eO618zti';
+    let uploadedBackgrounds = [];
 
-    function showToast(msg, dur=2000) { dom.toast.textContent = msg; dom.toast.style.opacity='1'; clearTimeout(window._t); window._t = setTimeout(() => dom.toast.style.opacity='0', dur); }
+    function showToast(msg, dur=2000) { dom.toast.textContent = msg; dom.toast.style.opacity='1'; dom.toast.classList.remove('bounceIn'); void dom.toast.offsetWidth; dom.toast.classList.add('bounceIn'); clearTimeout(window._t); window._t = setTimeout(() => dom.toast.style.opacity='0', dur); }
     function getCurrentSong() { return songs.find(s => s.id === currentSongId) || songs[0]; }
 
     function parsePages(rawLines) {
@@ -283,13 +281,13 @@
     }
     function nextPage() {
         if (!currentPages.length) return;
-        if (currentPageIndex < currentPages.length - 1) currentPageIndex++;
+        currentPageIndex = Math.min(currentPageIndex + 1, currentPages.length - 1);
         currentCardPage = currentPageIndex;
         updateAll();
     }
     function prevPage() {
         if (!currentPages.length) return;
-        if (currentPageIndex > 0) currentPageIndex--;
+        currentPageIndex = Math.max(currentPageIndex - 1, 0);
         currentCardPage = currentPageIndex;
         updateAll();
     }
@@ -519,7 +517,7 @@
         if (dom.autoplayProgress) dom.autoplayProgress.style.width = '0%';
     }
 
-    // 演讲者视图
+    // 投屏预览
     function initSpeakerView() {
         cardContainer = document.getElementById('card-container');
         pageIndicator = document.getElementById('page-indicator');
@@ -568,7 +566,7 @@
         if (!song || !cardContainer) return;
         totalCardPages = currentPages.length;
         if (totalCardPages === 0) return;
-        if (currentCardPage >= totalCardPages) currentCardPage = totalCardPages - 1;
+        currentCardPage = Math.max(0, Math.min(currentCardPage, totalCardPages - 1));
 
         cardContainer.innerHTML = '';
         for (let p = 0; p < totalCardPages; p++) {
@@ -576,16 +574,19 @@
             const card = document.createElement('div');
             card.className = 'card';
             card.style.width = '280px';
+            card.style.height = '200px';
             if (p === currentCardPage) card.classList.add('active');
             applyCardBackground(card, song);
 
             const lines = page.lines;
             if (lines.length > 0) {
+                const lineCount = lines.length;
+                const fontSize = Math.max(12, Math.min(24, 200 / (lineCount * 1.8)));
                 lines.forEach((rawLine) => {
                     const clean = rawLine.replace(CHORD_REGEX, '').trim();
                     const lineDiv = document.createElement('div');
                     lineDiv.className = 'card-line';
-                    lineDiv.style.fontSize = '18px';
+                    lineDiv.style.fontSize = fontSize + 'px';
                     lineDiv.style.fontFamily = song.fontFamily || DEFAULT_FONT_FAMILY;
                     lineDiv.style.opacity = 1;
                     lineDiv.textContent = clean;
@@ -751,21 +752,24 @@
         });
     }
 
-    // ========== Supabase 集成 ==========
-    async function initSupabase() { console.log('云端功能已切换到 Google Sheets'); }
+    // ========== Google Sheets 云端集成 ==========
+    async function initSupabase() { console.log('云端存储已切换到 Google Sheets'); }
 
     async function loadSharedBackgrounds() {
-        if (!supabase) return;
+        // 从本地加载已上传的背景
         try {
-            const { data, error } = await supabase.from('shared_backgrounds').select('url');
-            if (error) throw error;
-            if (Array.isArray(data)) {
-                sharedBackgrounds = data.map(item => item.url).filter(Boolean);
-            }
-        } catch (e) {
-            console.warn('加载共享背景失败', e);
-        }
+            const saved = localStorage.getItem('uploaded_backgrounds');
+            if (saved) uploadedBackgrounds = JSON.parse(saved);
+        } catch(e) { uploadedBackgrounds = []; }
     }
+
+    const ENCOURAGEMENTS = [
+        '感谢你的分享，愿这首诗歌祝福更多人！',
+        '已发布到云端，弟兄姐妹都能看到了！',
+        '赞美主！诗歌已成功保存！',
+        '做得好！这首歌会成为很多人的祝福！',
+        '发布成功！愿神使用这首诗歌！'
+    ];
 
     async function publishSong() {
         const s = getCurrentSong();
@@ -775,8 +779,10 @@
                 method: 'POST',
                 body: JSON.stringify({ title: s.title, lyrics: s.lyrics, tags: s.tags || [] })
             });
-            if (response.ok) { showToast('已发布到云端'); }
-            else { throw new Error('服务器响应错误'); }
+            if (response.ok) {
+                const msg = ENCOURAGEMENTS[Math.floor(Math.random() * ENCOURAGEMENTS.length)];
+                showToast(msg);
+            } else { throw new Error('服务器响应错误'); }
         } catch(e) { console.error('发布失败:', e); showToast('发布失败，请重试'); }
     }
 
@@ -784,15 +790,6 @@
     let onlineHymns = [];
     async function loadOnlineHymns() {
         onlineHymns = HYMNS_DATA.map(item => ({ ...item, lyrics: Array.isArray(item.lyrics) ? item.lyrics : [] }));
-        if (supabase) {
-            try {
-                const { data, error } = await supabase.from('hymns').select('title,lyrics,tags');
-                if (data && !error) {
-                    const localTitles = new Set(onlineHymns.map(h => h.title));
-                    data.forEach(item => { if (!localTitles.has(item.title)) onlineHymns.push(item); });
-                }
-            } catch(e) {}
-        }
     }
 
     function searchOnlineHymns(query) {
@@ -839,7 +836,9 @@
         s.bgType = type;
         if (type === 'image' && imgData) {
             s.bgImage = imgData;
-            if (!sharedBackgrounds.includes(imgData)) sharedBackgrounds.push(imgData);
+            if (!uploadedBackgrounds.includes(imgData)) uploadedBackgrounds.push(imgData);
+            localStorage.setItem('uploaded_backgrounds', JSON.stringify(uploadedBackgrounds));
+            renderMyBackgrounds();
         }
         const imgOpt = document.querySelector('.bg-option[data-bg="image"]');
         if (imgOpt) {
@@ -854,6 +853,21 @@
         }
         document.querySelectorAll('.bg-option').forEach(o => o.classList.toggle('active', o.dataset.bg === type));
         updateAll();
+    }
+
+    function renderMyBackgrounds() {
+        const container = document.getElementById('my-backgrounds-container');
+        if (!container) return;
+        container.innerHTML = '';
+        uploadedBackgrounds.forEach((bg, idx) => {
+            const thumb = document.createElement('div');
+            thumb.className = 'my-bg-thumb';
+            thumb.style.backgroundImage = `url(${bg})`;
+            const s = getCurrentSong();
+            if (s.bgImage === bg) thumb.classList.add('active');
+            thumb.addEventListener('click', () => setBackground('image', bg));
+            container.appendChild(thumb);
+        });
     }
 
     function handleBgImageUpload(file) {
@@ -1173,6 +1187,7 @@
         initSupabase().then(async () => {
             await loadOnlineHymns();
             await loadSharedBackgrounds();
+            renderMyBackgrounds();
         });
         bindEvents();
         showToast('✨ 工具已就绪', 3000);

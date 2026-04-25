@@ -144,7 +144,16 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
 .bg-option[data-bg="solid-black"] { background:#000; }
 .bg-option[data-bg="solid-white"] { background:#fff; }
 .bg-option[data-bg="solid-gray"] { background:#555; }
-.bg-option[data-bg="particles"] { background: radial-gradient(circle at 20% 30%, #333, #000); }
+.bg-option[data-bg="particles"] { 
+    background: radial-gradient(circle at 20% 30%, #333, #000);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:1.4rem;
+}
+.bg-option[data-bg="particles"]::before {
+    content:'✨';
+}
 .bg-option[data-bg="gradient"] { background: radial-gradient(circle at 30% 30%, #1a2a4a, #000); }
 .bg-option[data-bg="image"] { background:#2a2a3c; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2'%3E%3Crect x='3' y='3' width='18' height='18' rx='2'/%3E%3Ccircle cx='8.5' cy='8.5' r='1.5'/%3E%3Cpolyline points='21 15 16 10 5 21'/%3E%3C/svg%3E"); background-size:60%; background-position:center; background-repeat:no-repeat; border-style:dashed; border-color:#666; }
 #upload-bg-btn { padding:7px 0; text-align:center; margin-top:6px; }
@@ -243,11 +252,14 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
 }
 #display-controls { background:rgba(10,10,20,0.62) !important; backdrop-filter:blur(10px) !important; padding:6px 10px !important; }
 #display-card-preview { 
-    padding:6px 8px !important; 
+    padding:8px 10px !important; 
     margin-bottom:4px !important; 
-    min-height:80px !important; 
+    min-height:auto !important;
+    height:auto !important;
+    flex:1 !important;
     align-items:center !important;
-    gap:8px !important;
+    justify-content:center !important;
+    gap:10px !important;
 }
 
 /* ========== 主领视角专用样式 ========== */

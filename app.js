@@ -659,8 +659,17 @@
         const cachedBgImage = new Image();
         let cachedBgSrc = '';
 
-        function resize() { w = window.innerWidth; h = window.innerHeight; canvas.width = w; canvas.height = h; }
-        window.addEventListener('resize', resize); resize();
+        function resize() { 
+            w = window.innerWidth; 
+            h = window.innerHeight; 
+            canvas.width = w; 
+            canvas.height = h; 
+            // 窗口大小改变时重新初始化粒子数组
+            particles = [];
+            for(let i=0;i<70;i++) particles.push(new Particle());
+        }
+        window.addEventListener('resize', resize); 
+        resize();
 
         class Particle {
             constructor() { this.x = Math.random()*w; this.y = Math.random()*h; this.vx = (Math.random()-0.5)*0.7; this.vy = (Math.random()-0.5)*0.5; this.size = Math.random()*5+2; this.color = `rgba(255,255,255,${0.7+Math.random()*0.3})`; }

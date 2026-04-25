@@ -72,8 +72,8 @@
 
     let supabase = null;
     let sharedBackgrounds = [];
-    const SUPABASE_URL = 'https://your-project.supabase.co';
-    const SUPABASE_ANON_KEY = '你从Supabase → Settings → API里复制的anon public key';
+    const SUPABASE_URL = 'https://yetcpiorfvtysqmfsdso.supabase.co';
+    const SUPABASE_ANON_KEY = 'sb_publishable_jbNKXA82g1YoNoCOVDUFg_eO618zti';
 
     function showToast(msg, dur=2000) { dom.toast.textContent = msg; dom.toast.style.opacity='1'; clearTimeout(window._t); window._t = setTimeout(() => dom.toast.style.opacity='0', dur); }
     function getCurrentSong() { return songs.find(s => s.id === currentSongId) || songs[0]; }

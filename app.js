@@ -624,7 +624,7 @@
             <!-- 底部控制区 -->
             <div id="display-controls" style="position:fixed; bottom:0; left:0; width:100%; z-index:80; display:flex; flex-direction:column; background:rgba(0,0,0,0.7); backdrop-filter:blur(8px); border-top:1px solid rgba(255,255,255,0.15); padding:6px 10px; transition: transform 0.3s ease;">
                 <!-- 卡片预览条 -->
-                <div id="display-card-preview" style="display:flex; gap:8px; overflow-x:auto; padding:2px 0 4px 0; margin-bottom:4px; min-height:64px; align-items:center;"></div>
+                <div id="display-card-preview" style="display:flex; flex-wrap:wrap; gap:6px; overflow-y:auto; padding:2px 0 4px 0; margin-bottom:4px; max-height:120px; align-items:center;"></div>
                 <!-- 按钮栏 -->
                 <div style="position:relative; display:flex; justify-content:center; align-items:center; min-height:40px;">
                     <div style="display:flex; justify-content:center; align-items:center; gap:16px;">
@@ -634,6 +634,10 @@
                     </div>
                     <button id="dc-toggle-btn" style="position:absolute; right:6px; background:none; border:none; color:#aaa; font-size:1.2rem; cursor:pointer;">▲ 隐藏</button>
                 </div>
+            </div>
+            <!-- 恢复按钮（隐藏时显示） -->
+            <div id="dc-restore-dot" style="position:fixed; bottom:10px; right:10px; width:36px; height:36px; background:rgba(255,255,255,0.15); backdrop-filter:blur(5px); border-radius:50%; cursor:pointer; z-index:90; display:none; align-items:center; justify-content:center; border:1px solid rgba(255,255,255,0.25); transition: all 0.2s ease;">
+                <span style="color:#aaa; font-size:0.8rem;">⋮</span>
             </div>
         `;
 
@@ -647,7 +651,8 @@
               dcPageIndicator = document.getElementById('dc-page-indicator'),
               dcToggle = document.getElementById('dc-toggle-btn'),
               dcControls = document.getElementById('display-controls'),
-              dcCardPreview = document.getElementById('display-card-preview');
+              dcCardPreview = document.getElementById('display-card-preview'),
+              dcRestoreDot = document.getElementById('dc-restore-dot');
 
         let w, h, particles = [], currentState = null, ended = false, controlsVisible = true;
         const cachedBgImage = new Image();
@@ -680,7 +685,7 @@
                     ctx.fillRect(0, 0, w, h);
                 }
             }
-            else if(bg==='particles'){ctx.fillStyle='rgba(0,0,0,0.15)';ctx.fillRect(0,0,w,h);particles.forEach(p=>{p.update();p.draw();});}
+            else if(bg==='particles'){ctx.fillStyle='#000';ctx.fillRect(0,0,w,h);particles.forEach(p=>{p.update();p.draw();});}
             else{ctx.fillStyle='rgba(0,0,0,0.2)';ctx.fillRect(0,0,w,h);}
         }
 
@@ -700,18 +705,28 @@
             lyricsDiv.style.top = song.posY + '%';
             dcPageIndicator.textContent = `${currentPageIndex+1}/${totalPages}`;
 
-            // 更新底部卡片预览
+            // 更新底部卡片预览 - 显示所有页面，自动换行
             dcCardPreview.innerHTML = '';
             const pages = Array.isArray(state.pages) ? state.pages : [];
-            const start = Math.max(0, currentPageIndex - 1);
-            const end = Math.min(totalPages - 1, currentPageIndex + 1);
-            for (let i = start; i <= end; i++) {
+            // 计算每行可显示的卡片数（基于容器宽度）
+            const containerWidth = dcCardPreview.offsetWidth || window.innerWidth;
+            const cardWidth = 80; // 每个小卡片宽度
+            const cardGap = 6;
+            const cardsPerRow = Math.floor((containerWidth - cardGap) / (cardWidth + cardGap));
+            
+            for (let i = 0; i < totalPages; i++) {
                 const mini = document.createElement('div');
                 mini.className = 'display-mini-card';
                 if (i === currentPageIndex) mini.classList.add('active');
                 const pageLines = (i < pages.length && Array.isArray(pages[i].lines)) ? pages[i].lines : [];
-                mini.textContent = pageLines.length > 0 ? pageLines[0].substring(0, 8) : '…';
+                mini.textContent = pageLines.length > 0 ? pageLines[0].substring(0, 6) : '…';
                 mini.title = pageLines.join('\n');
+                mini.style.width = cardWidth + 'px';
+                mini.style.height = '50px';
+                mini.style.fontSize = '0.65rem';
+                mini.addEventListener('click', () => {
+                    dc.postMessage({ type: 'jump', pageIndex: i });
+                });
                 dcCardPreview.appendChild(mini);
             }
 
@@ -732,6 +747,9 @@
                 endedOverlay.style.display = 'none';
                 lyricsDiv.style.display = 'block';
                 render(currentState);
+            } else if (e.data.type === 'jump') {
+                // 跳转到指定页面
+                dc.postMessage({ type: 'jump', pageIndex: e.data.pageIndex });
             }
         });
         dc.postMessage({ type: 'request_state' });
@@ -741,6 +759,12 @@
         dcToggle.addEventListener('click', () => {
             controlsVisible = !controlsVisible;
             dcControls.style.transform = controlsVisible ? 'translateY(0)' : 'translateY(100%)';
+            dcRestoreDot.style.display = controlsVisible ? 'none' : 'flex';
+        });
+        dcRestoreDot.addEventListener('click', () => {
+            controlsVisible = true;
+            dcControls.style.transform = 'translateY(0)';
+            dcRestoreDot.style.display = 'none';
         });
 
         window.addEventListener('keydown', e => {
@@ -750,6 +774,72 @@
             else if (e.key === 'Escape') { blackout.style.display = 'none'; whiteout.style.display = 'none'; }
             else if (e.key === 'ArrowUp' && ended) { ended = false; endedOverlay.style.display = 'none'; lyricsDiv.style.display = 'block'; dc.postMessage({ type: 'prev' }); }
         });
+    }
+
+    // ========== 主领提词视图 ==========
+    function initLeaderView() {
+        document.body.innerHTML = `
+            <div id="leader-view" style="position:fixed;top:0;left:0;width:100%;height:100%;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:1;">
+                <div id="leader-lyrics" style="text-align:center;color:white;font-weight:bold;text-shadow:3px 3px 8px black;width:90%;max-width:1200px;"></div>
+                <div id="leader-next-preview" style="margin-top:30px;color:#666;font-size:1.5rem;text-align:center;width:80%;max-width:800px;min-height:40px;"></div>
+                <div id="leader-page-num" style="position:fixed;top:20px;right:30px;color:#aaa;font-size:1.2rem;"></div>
+                <div id="leader-notes" style="position:fixed;bottom:30px;left:50%;transform:translateX(-50%);color:#888;font-size:1rem;text-align:center;"></div>
+                <div id="leader-meta" style="position:fixed;bottom:10px;right:20px;color:#666;font-size:0.9rem;"></div>
+            </div>
+        `;
+
+        const leaderLyrics = document.getElementById('leader-lyrics');
+        const leaderNextPreview = document.getElementById('leader-next-preview');
+        const leaderPageNum = document.getElementById('leader-page-num');
+        const leaderNotes = document.getElementById('leader-notes');
+        const leaderMeta = document.getElementById('leader-meta');
+
+        let currentState = null;
+
+        function render(state) {
+            if (!state) return;
+            currentState = state;
+            const { song, currentPageIndex, totalPages, pages } = state;
+
+            // 当前歌词（大号显示）
+            const lyrics = song.lyrics || [];
+            const fontSize = (song.fontSize || 56) * 1.5;
+            let html = '';
+            lyrics.forEach(line => {
+                html += `<div style="font-size:${fontSize}px;line-height:1.8;white-space:normal;word-break:break-word;font-family:${song.fontFamily || DEFAULT_FONT_FAMILY};">${line}</div>`;
+            });
+            leaderLyrics.innerHTML = html;
+
+            // 下一句预览
+            if (pages && currentPageIndex < pages.length - 1) {
+                const nextPage = pages[currentPageIndex + 1];
+                const nextLines = (nextPage.lines || []).slice(0, 2).join(' ');
+                leaderNextPreview.textContent = nextLines || '';
+            } else {
+                leaderNextPreview.textContent = '';
+            }
+
+            // 页码
+            leaderPageNum.textContent = `${currentPageIndex + 1}/${totalPages}`;
+
+            // 备注
+            leaderNotes.textContent = song.notes || '';
+
+            // 调性和速度
+            const metaParts = [];
+            if (song.key) metaParts.push(`${song.key}大调`);
+            if (song.tempo) metaParts.push(`${song.tempo} BPM`);
+            leaderMeta.textContent = metaParts.join(' · ');
+        }
+
+        // 监听 BroadcastChannel
+        const dc = new BroadcastChannel('worship_channel');
+        dc.addEventListener('message', e => {
+            if (e.data.type === 'update') {
+                render(e.data);
+            }
+        });
+        dc.postMessage({ type: 'request_state' });
     }
 
     // ========== Google Sheets 云端集成 ==========
@@ -915,6 +1005,23 @@
             document.body.setAttribute('data-theme', e.target.value);
             localStorage.setItem('worship_theme', e.target.value);
         });
+        // 加载保存的主题背景
+        const savedBg = localStorage.getItem('theme_bg_image');
+        if (savedBg) applyThemeBackground(savedBg);
+    }
+
+    function applyThemeBackground(imageData) {
+        document.documentElement.style.setProperty('--theme-bg-image', `url(${imageData})`);
+        localStorage.setItem('theme_bg_image', imageData);
+    }
+
+    function handleThemeBgUpload(file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            applyThemeBackground(e.target.result);
+            showToast('主题背景已应用');
+        };
+        reader.readAsDataURL(file);
     }
 
     function initResizable() {
@@ -1061,6 +1168,8 @@
             window.open('https://www.pexels.com/zh-cn/search/video/worship%20background/', '_blank');
         });
         safeOn(dom.bgImageInput, 'change', e => { if (e.target.files[0]) handleBgImageUpload(e.target.files[0]); });
+        safeOn(dom.themeBgUploadBtn, 'click', () => dom.themeBgInput.click());
+        safeOn(dom.themeBgInput, 'change', e => { if (e.target.files[0]) handleThemeBgUpload(e.target.files[0]); });
         safeOn(dom.autoplayToggle, 'click', () => {
             autoplayInterval = parseFloat(dom.autoplayInterval.value) || 5;
             autoplayActive ? pauseAutoplay() : startAutoplay();
@@ -1070,6 +1179,11 @@
             const url = window.location.href.split('?')[0] + '?display';
             const win = window.open(url, '_blank', 'width=1280,height=720');
             win ? showToast('演示窗口已打开') : showToast('弹窗被阻止，请允许弹出窗口');
+        });
+        safeOn(dom.openLeaderBtn, 'click', () => {
+            const url = window.location.href.split('?')[0] + '?leader';
+            const win = window.open(url, '_blank', 'width=1280,height=720');
+            win ? showToast('主领视图已打开') : showToast('弹窗被阻止，请允许弹出窗口');
         });
         safeOn(dom.exportDataBtn, 'click', () => {
             const d = JSON.stringify({ songs, currentSongId });
@@ -1121,6 +1235,7 @@
         channel.addEventListener('message', e => {
             if (e.data.type === 'prev') prevPage();
             else if (e.data.type === 'next') nextPage();
+            else if (e.data.type === 'jump') jumpToPage(e.data.pageIndex);
             else if (e.data.type === 'request_state') broadcastState();
         });
         initScroll();
@@ -1131,6 +1246,7 @@
     // ========== 初始化入口 ==========
     function init() {
         if (window.location.search.includes('display')) { initDisplayMode(); return; }
+        if (window.location.search.includes('leader')) { initLeaderView(); return; }
 
         dom.songList = document.getElementById('song-list');
         dom.songTitleInput = document.getElementById('song-title-input');
@@ -1156,6 +1272,7 @@
         dom.autoplayInterval = document.getElementById('autoplay-interval');
         dom.autoplayProgress = document.getElementById('autoplay-progress');
         dom.openDisplayBtn = document.getElementById('open-display-btn');
+        dom.openLeaderBtn = document.getElementById('open-leader-btn');
         dom.exportDataBtn = document.getElementById('export-data-btn');
         dom.importDataBtn = document.getElementById('import-data-btn');
         dom.importFileInput = document.getElementById('import-file-input');
@@ -1166,6 +1283,8 @@
         dom.songNotes = document.getElementById('song-notes');
         dom.songTags = document.getElementById('song-tags');
         dom.themeSelector = document.getElementById('theme-selector');
+        dom.themeBgUploadBtn = document.getElementById('theme-bg-upload-btn');
+        dom.themeBgInput = document.getElementById('theme-bg-input');
         dom.resize1 = document.getElementById('resize1');
         dom.resize2 = document.getElementById('resize2');
         dom.songLibrary = document.getElementById('song-library');

@@ -699,6 +699,7 @@
                 // 粒子背景：先用纯黑色清除画布，再更新和绘制粒子
                 ctx.fillStyle='#000';
                 ctx.fillRect(0,0,w,h);
+                ctx.shadowBlur = 0;
                 particles.forEach(p=>{p.update();p.draw();});
             }
             else{ctx.fillStyle='#000';ctx.fillRect(0,0,w,h);}
@@ -720,7 +721,7 @@
             lyricsDiv.style.top = song.posY + '%';
             dcPageIndicator.textContent = `${currentPageIndex+1}/${totalPages}`;
 
-            // 更新底部卡片预览 - 显示所有页面，自动换行，显示完整歌词（最多5行）
+            // 更新底部卡片预览 - 显示所有页面，自动换行，显示完整歌词（最多4行）
             dcCardPreview.innerHTML = '';
             const pages = Array.isArray(state.pages) ? state.pages : [];
             
@@ -732,34 +733,14 @@
                 const pageLines = (i < pages.length && Array.isArray(pages[i].lines)) ? pages[i].lines : [];
                 const cleanLines = pageLines.map(line => line.replace(/\[([^\]]+)\]/g, '').trim()).filter(Boolean);
                 
-                // 根据行数自动调整卡片高度和字体
-                const lineCount = cleanLines.length || 1;
-                const displayLineCount = Math.min(lineCount, 5);
-                const baseHeight = 30;
-                const lineHeight = 16;
-                const cardHeight = baseHeight + (displayLineCount - 1) * lineHeight;
-                
-                // 字体大小自适应，确保所有行完整显示
-                const fontSize = Math.max(0.5, Math.min(0.75, 12 / displayLineCount));
-                
-                mini.style.height = cardHeight + 'px';
-                mini.style.minWidth = '65px';
-                mini.style.maxWidth = '110px';
-                mini.style.padding = '5px 7px';
-                mini.style.display = 'flex';
-                mini.style.flexDirection = 'column';
-                mini.style.justifyContent = 'center';
-                mini.style.alignItems = 'center';
-                mini.style.overflow = 'hidden';
-                
-                // 显示完整歌词（限制最多5行）
-                const displayLines = cleanLines.slice(0, 5);
+                // 显示完整歌词（限制最多4行）
+                const displayLines = cleanLines.slice(0, 4);
                 mini.innerHTML = displayLines.map(line => 
-                    `<div style="font-size:${fontSize}rem;line-height:1.3;color:${i === currentPageIndex ? '#fff' : '#aaa'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;text-align:center;">${line}</div>`
+                    `<div style="font-size:10px;line-height:1.3;color:${i === currentPageIndex ? '#fff' : '#aaa'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;text-align:center;">${line}</div>`
                 ).join('');
                 
-                if (cleanLines.length > 5) {
-                    mini.innerHTML += '<div style="font-size:0.5rem;color:#666;margin-top:1px;">...</div>';
+                if (cleanLines.length > 4) {
+                    mini.innerHTML += '<div style="font-size:8px;color:#666;margin-top:2px;">...</div>';
                 }
                 
                 mini.title = cleanLines.join('\n');

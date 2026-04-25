@@ -65,12 +65,46 @@ body { font-family: 'Microsoft YaHei','PingFang SC',sans-serif; background: var(
 #song-meta-details summary::-webkit-details-marker { display:none; }
 #song-meta-details[open] summary { border-radius:10px 10px 0 0; }
 
-.btn { background:var(--accent); color:white; border:none; padding:8px 18px; border-radius:24px; cursor:pointer; font-size:0.95rem; font-weight:bold; transition:all 0.15s ease; box-shadow:0 2px 6px rgba(0,0,0,0.2); }
-.btn:hover { box-shadow:0 0 15px rgba(74,111,165,0.5); transform:translateY(-1px); }
-.btn:active { transform:scale(0.96); }
-.btn-outline { background:transparent; border:1px solid var(--accent); color:var(--accent); box-shadow:none; transition:all 0.15s ease; }
-.btn-outline:hover { box-shadow:0 0 12px rgba(74,111,165,0.4); background:rgba(74,111,165,0.1); transform:translateY(-1px); }
-.btn-outline:active { transform:scale(0.96); }
+.btn { 
+    background:var(--accent); 
+    color:white; 
+    border:none; 
+    padding:10px 18px; 
+    border-radius:12px; 
+    cursor:pointer; 
+    font-size:0.95rem; 
+    font-weight:bold; 
+    transition:all 0.15s ease; 
+    box-shadow:0 2px 6px rgba(0,0,0,0.2);
+    height:auto;
+}
+.btn:hover { 
+    box-shadow:0 0 15px rgba(74,111,165,0.5); 
+    transform:translateY(-1px); 
+}
+.btn:active { 
+    transform:scale(0.96); 
+}
+.btn-outline { 
+    background:transparent; 
+    border:1px solid var(--accent); 
+    color:var(--accent); 
+    box-shadow:none; 
+    transition:all 0.15s ease;
+    padding:10px 18px;
+    border-radius:12px;
+    font-size:0.95rem;
+    font-weight:bold;
+    height:auto;
+}
+.btn-outline:hover { 
+    box-shadow:0 0 12px rgba(74,111,165,0.4); 
+    background:rgba(74,111,165,0.1); 
+    transform:translateY(-1px); 
+}
+.btn-outline:active { 
+    transform:scale(0.96); 
+}
 .btn:disabled { opacity:0.5; cursor:not-allowed; }
 .icon-btn { background:none; border:none; color:var(--text-primary); font-size:1.4rem; cursor:pointer; }
 .small-btn { width:100%; padding:8px; background:#2a2a3c; border:1px dashed #666; color:#ccc; border-radius:10px; cursor:pointer; margin-top:6px; transition:all 0.15s ease; }
@@ -117,8 +151,48 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
 .resize-handle { width:5px; background:#2a2a3c; cursor:col-resize; transition:background 0.2s; flex-shrink:0; }
 .resize-handle:hover, .resize-handle.active { background:var(--accent); }
 
-#theme-selector { margin-top:12px; padding:8px; background:var(--editor-bg); color:var(--text-primary); border:1px solid var(--border-color); border-radius:10px; width:100%; font-size:0.9rem; }
-#font-family-selector { margin-top:8px; padding:8px; background:var(--editor-bg); color:var(--text-primary); border:1px solid var(--border-color); border-radius:10px; width:100%; font-size:0.9rem; }
+#theme-selector { 
+    margin-top:8px; 
+    padding:10px 12px; 
+    background:var(--editor-bg); 
+    color:var(--text-primary); 
+    border:1px solid var(--border-color); 
+    border-radius:12px; 
+    width:100%; 
+    font-size:0.9rem;
+    cursor:pointer;
+    transition:all 0.15s ease;
+}
+#theme-selector:hover {
+    border-color:var(--accent-light);
+    box-shadow:0 0 0 2px rgba(107,142,201,0.15);
+}
+#theme-selector:focus {
+    outline:none;
+    border-color:var(--accent);
+    box-shadow:0 0 0 3px rgba(74,111,165,0.2);
+}
+#font-family-selector { 
+    margin-top:8px; 
+    padding:10px 12px; 
+    background:var(--editor-bg); 
+    color:var(--text-primary); 
+    border:1px solid var(--border-color); 
+    border-radius:12px; 
+    width:100%; 
+    font-size:0.9rem;
+    cursor:pointer;
+    transition:all 0.15s ease;
+}
+#font-family-selector:hover {
+    border-color:var(--accent-light);
+    box-shadow:0 0 0 2px rgba(107,142,201,0.15);
+}
+#font-family-selector:focus {
+    outline:none;
+    border-color:var(--accent);
+    box-shadow:0 0 0 3px rgba(74,111,165,0.2);
+}
 .setting-tip { margin-top:6px; color:var(--text-secondary); font-size:0.78rem; line-height:1.4; }
 #toast { position:fixed; bottom:30px; left:50%; transform:translateX(-50%); background:#333; color:white; padding:10px 22px; border-radius:30px; z-index:1000; opacity:0; transition:0.3s; }
 @keyframes bounceIn { 0%{transform:translateX(-50%) scale(0.3);opacity:0} 50%{transform:translateX(-50%) scale(1.05)} 70%{transform:translateX(-50%) scale(0.9)} 100%{transform:translateX(-50%) scale(1);opacity:1} }
@@ -137,10 +211,39 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
 .speaker-view-label { margin-bottom:10px; padding:8px 10px; border-radius:10px; background:rgba(74,111,165,0.26); border:1px solid rgba(107,142,201,0.7); color:#d9e8ff; font-size:1rem; font-weight:700; }
 
 .display-control-btn { background:rgba(255,255,255,0.15); backdrop-filter:blur(5px); border:1px solid rgba(255,255,255,0.25); color:white; padding:6px 16px; border-radius:20px; cursor:pointer; font-size:0.9rem; }
-.display-mini-card { flex:0 0 auto; width:120px; height:80px; background:rgba(255,255,255,0.05); border-radius:8px; display:flex; align-items:center; justify-content:center; color:#aaa; font-size:0.7rem; border:1px solid rgba(255,255,255,0.15); }
-.display-mini-card.active { border-color:var(--accent); background:rgba(255,255,255,0.15); color:white; }
+.display-mini-card { 
+    flex:0 0 auto; 
+    width:100px; 
+    height:70px; 
+    background:rgba(255,255,255,0.05); 
+    border-radius:8px; 
+    display:flex; 
+    flex-direction:column;
+    align-items:center; 
+    justify-content:center; 
+    color:#aaa; 
+    font-size:10px; 
+    line-height:1.3;
+    text-align:center;
+    border:1px solid rgba(255,255,255,0.15);
+    padding:6px;
+    overflow:hidden;
+    transition:all 0.2s ease;
+}
+.display-mini-card.active { 
+    border-color:#d4af37; 
+    background:rgba(212,175,55,0.2); 
+    color:white;
+    box-shadow:0 0 10px rgba(212,175,55,0.3);
+}
 #display-controls { background:rgba(10,10,20,0.62) !important; backdrop-filter:blur(10px) !important; padding:6px 10px !important; }
-#display-card-preview { padding:2px 0 4px 0 !important; margin-bottom:4px !important; min-height:64px !important; align-items:center !important; }
+#display-card-preview { 
+    padding:6px 8px !important; 
+    margin-bottom:4px !important; 
+    min-height:80px !important; 
+    align-items:center !important;
+    gap:8px !important;
+}
 
 /* ========== 主领视角专用样式 ========== */
 .leader-line-note-marker {

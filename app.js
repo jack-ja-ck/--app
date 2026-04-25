@@ -534,11 +534,13 @@
         if (sizeS) sizeS.addEventListener('click', () => applySize(260, sizeS));
         if (sizeM) sizeM.addEventListener('click', () => applySize(320, sizeM));
         if (sizeL) sizeL.addEventListener('click', () => applySize(420, sizeL));
-        if (cardContainer) {
-            cardContainer.addEventListener('wheel', (e) => {
+        // 投屏预览卡片滚动 - 仅在#display-card-preview容器内生效
+        const displayCardPreview = document.getElementById('display-card-preview');
+        if (displayCardPreview) {
+            displayCardPreview.addEventListener('wheel', (e) => {
                 if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
                     e.preventDefault();
-                    cardContainer.scrollLeft += e.deltaY;
+                    displayCardPreview.scrollLeft += e.deltaY;
                 }
             }, { passive: false });
         }
@@ -614,6 +616,8 @@
     function initDisplayMode() {
         document.body.innerHTML = `
             <canvas id="display-canvas" style="position:fixed;top:0;left:0;width:100%;height:100%;z-index:1;"></canvas>
+            <!-- GIF动态背景隐藏元素 -->
+            <img id="gif-bg" style="position:fixed;top:0;left:0;width:100%;height:100%;object-fit:cover;z-index:0;display:none;" alt="">
             <div id="display-lyrics" style="position:fixed;top:45%;left:50%;transform:translate(-50%,-50%);z-index:10;text-align:center;pointer-events:none;width:90%;"></div>
             <div id="blackout-overlay" style="position:fixed;top:0;left:0;width:100%;height:100%;background:#000;z-index:100;display:none;"></div>
             <div id="whiteout-overlay" style="position:fixed;top:0;left:0;width:100%;height:100%;background:#fff;z-index:100;display:none;"></div>
@@ -666,19 +670,46 @@
         for(let i=0;i<70;i++) particles.push(new Particle());
 
         function drawBg(bg, img) {
-            if(bg==='solid-black'){
+            // 优先处理粒子背景 - 纯黑清除画布，重置阴影，更新并绘制粒子
+            if(bg==='particles'){
+                // 隐藏GIF背景元素
+                const gifBg = document.getElementById('gif-bg');
+                if (gifBg) gifBg.style.display = 'none';
+                
+                ctx.fillStyle='#000';
+                ctx.fillRect(0,0,w,h);
+                ctx.shadowBlur = 0;
+                particles.forEach(p=>{p.update();p.draw();});
+            }
+            else if(bg==='solid-black'){
+                // 隐藏GIF背景元素
+                const gifBg = document.getElementById('gif-bg');
+                if (gifBg) gifBg.style.display = 'none';
+                
                 ctx.fillStyle='#000';
                 ctx.fillRect(0,0,w,h);
             }
             else if(bg==='solid-white'){
+                // 隐藏GIF背景元素
+                const gifBg = document.getElementById('gif-bg');
+                if (gifBg) gifBg.style.display = 'none';
+                
                 ctx.fillStyle='#fff';
                 ctx.fillRect(0,0,w,h);
             }
             else if(bg==='solid-gray'){
+                // 隐藏GIF背景元素
+                const gifBg = document.getElementById('gif-bg');
+                if (gifBg) gifBg.style.display = 'none';
+                
                 ctx.fillStyle='#555';
                 ctx.fillRect(0,0,w,h);
             }
             else if(bg==='gradient'){
+                // 隐藏GIF背景元素
+                const gifBg = document.getElementById('gif-bg');
+                if (gifBg) gifBg.style.display = 'none';
+                
                 const g=ctx.createRadialGradient(w*.3,h*.3,50,w*.5,h*.5,w);
                 g.addColorStop(0,'#1a2a4a');
                 g.addColorStop(1,'#000');
@@ -690,36 +721,56 @@
                 const imageUrl = img || (currentState && currentState.song && currentState.song.bgImage);
                 
                 if (imageUrl) {
-                    // 加载或更新图片（浏览器自动处理GIF动画）
-                    if (cachedBgSrc !== imageUrl) {
-                        cachedBgSrc = imageUrl;
-                        cachedBgImage.src = imageUrl;
-                    }
-                    if (cachedBgImage.complete && cachedBgImage.naturalWidth > 0) {
-                        ctx.drawImage(cachedBgImage, 0, 0, w, h);
+                    // 检查是否为GIF格式
+                    const isGif = imageUrl.startsWith('data:image/gif') || imageUrl.toLowerCase().endsWith('.gif');
+                    
+                    if (isGif) {
+                        // GIF动态背景：使用隐藏的img元素让浏览器原生播放
+                        const gifBg = document.getElementById('gif-bg');
+                        if (gifBg) {
+                            if (gifBg.src !== imageUrl) {
+                                gifBg.src = imageUrl;
+                            }
+                            gifBg.style.display = 'block';
+                        }
+                        // 不在Canvas上绘制，直接返回
+                        return;
                     } else {
-                        // 图片加载中，先显示粒子背景
-                        ctx.fillStyle='#000';
-                        ctx.fillRect(0,0,w,h);
-                        ctx.shadowBlur = 0;
-                        particles.forEach(p=>{p.update();p.draw();});
+                        // 静态图片：继续使用Canvas绘制
+                        const gifBg = document.getElementById('gif-bg');
+                        if (gifBg) gifBg.style.display = 'none';
+                        
+                        // 加载或更新图片
+                        if (cachedBgSrc !== imageUrl) {
+                            cachedBgSrc = imageUrl;
+                            cachedBgImage.src = imageUrl;
+                        }
+                        if (cachedBgImage.complete && cachedBgImage.naturalWidth > 0) {
+                            ctx.drawImage(cachedBgImage, 0, 0, w, h);
+                        } else {
+                            // 图片加载中，先显示粒子背景
+                            ctx.fillStyle='#000';
+                            ctx.fillRect(0,0,w,h);
+                            ctx.shadowBlur = 0;
+                            particles.forEach(p=>{p.update();p.draw();});
+                        }
                     }
                 } else {
-                    // 没有图片数据，显示粒子背景作为后备
+                    // 没有图片数据，隐藏GIF元素，显示粒子背景作为后备
+                    const gifBg = document.getElementById('gif-bg');
+                    if (gifBg) gifBg.style.display = 'none';
+                    
                     ctx.fillStyle='#000';
                     ctx.fillRect(0,0,w,h);
                     ctx.shadowBlur = 0;
                     particles.forEach(p=>{p.update();p.draw();});
                 }
             }
-            else if(bg==='particles'){
-                // 粒子背景：先用纯黑色清除画布，再重置阴影，最后更新并绘制粒子
-                ctx.fillStyle='#000';
-                ctx.fillRect(0,0,w,h);
-                ctx.shadowBlur = 0;
-                particles.forEach(p=>{p.update();p.draw();});
-            }
             else{
+                // 隐藏GIF背景元素
+                const gifBg = document.getElementById('gif-bg');
+                if (gifBg) gifBg.style.display = 'none';
+                
                 ctx.fillStyle='#000';
                 ctx.fillRect(0,0,w,h);
             }
@@ -771,10 +822,11 @@
                 dcCardPreview.appendChild(mini);
             }
 
-            if (currentPageIndex >= totalPages - 1 && !isTitlePage) {
-                ended = true;
-                setTimeout(() => { endedOverlay.style.display = 'flex'; }, 600);
-            }
+            // 移除自动结束逻辑，让投屏停留在最后一页
+            // if (currentPageIndex >= totalPages - 1 && !isTitlePage) {
+            //     ended = true;
+            //     setTimeout(() => { endedOverlay.style.display = 'flex'; }, 600);
+            // }
         }
 
         function animate() { drawBg(currentState?.song.bgType, currentState?.song.bgImage); requestAnimationFrame(animate); }
@@ -1714,7 +1766,14 @@
             console.log('[LeaderView] Received message:', e.data.type);
             if (e.data.type === 'update') {
                 console.log('[LeaderView] Updating state with song:', e.data.song?.title);
-                render(e.data);
+                console.log('[LeaderView] Lyrics:', e.data.song?.lyrics);
+                console.log('[LeaderView] Pages:', e.data.pages);
+                // 确保数据完整性
+                if (e.data.song && e.data.song.lyrics) {
+                    render(e.data);
+                } else {
+                    console.warn('[LeaderView] Incomplete data received');
+                }
             } else if (e.data.type === 'prev') {
                 // 处理上一页命令（从演示窗口同步）
                 if (currentState && currentState.currentPageIndex > 0) {
@@ -1727,7 +1786,9 @@
                 }
             } else if (e.data.type === 'jump') {
                 // 处理跳转命令
-                render({ ...currentState, currentPageIndex: e.data.pageIndex });
+                if (currentState) {
+                    render({ ...currentState, currentPageIndex: e.data.pageIndex });
+                }
             }
         });
         

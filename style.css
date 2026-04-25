@@ -142,6 +142,108 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
 #display-controls { background:rgba(10,10,20,0.62) !important; backdrop-filter:blur(10px) !important; padding:6px 10px !important; }
 #display-card-preview { padding:2px 0 4px 0 !important; margin-bottom:4px !important; min-height:64px !important; align-items:center !important; }
 
+/* ========== 主领视角专用样式 ========== */
+.leader-line-note-marker {
+    position: absolute;
+    right: -30px;
+    top: 50%;
+    transform: translateY(-50%);
+    cursor: pointer;
+    opacity: 0.15;
+    transition: all 0.2s ease;
+    font-size: 1.2rem;
+}
+
+.leader-line-note-marker:hover {
+    opacity: 0.6;
+    transform: translateY(-50%) scale(1.2);
+}
+
+.leader-line-note-marker.has-note {
+    opacity: 0.8;
+    color: #d4af37;
+}
+
+.leader-line-note-marker.has-note:hover {
+    opacity: 1;
+    transform: translateY(-50%) scale(1.3);
+}
+
+.note-icon-btn:hover {
+    background: rgba(212,175,55,0.2) !important;
+    border-color: #d4af37 !important;
+    transform: scale(1.1);
+}
+
+.note-icon-btn.selected {
+    background: rgba(212,175,55,0.3) !important;
+    border-color: #d4af37 !important;
+    box-shadow: 0 0 10px rgba(212,175,55,0.5);
+}
+
+#leader-toolbar-dot:hover {
+    transform: scale(1.1);
+}
+
+#leader-toolbar-panel {
+    animation: slideDown 0.2s ease;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.leader-bg-preset {
+    width: 100%;
+    height: 80px;
+    border-radius: 12px;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: all 0.2s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.leader-bg-preset:hover {
+    transform: scale(1.05);
+    border-color: rgba(212,175,55,0.5);
+    box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+}
+
+.leader-bg-preset.active {
+    border-color: #d4af37;
+    box-shadow: 0 0 15px rgba(212,175,55,0.5);
+}
+
+.leader-bg-preset-label {
+    position: absolute;
+    bottom: 5px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0,0,0,0.6);
+    padding: 2px 8px;
+    border-radius: 8px;
+    font-size: 0.75rem;
+    color: white;
+}
+
+#leader-prev-btn:hover, #leader-next-btn:hover {
+    background: rgba(212,175,55,0.3) !important;
+    border-color: #d4af37 !important;
+    transform: scale(1.05);
+}
+
+#leader-prev-btn:active, #leader-next-btn:active {
+    transform: scale(0.95);
+}
+
 /* ========== 移动端响应式布局 ========== */
 @media (max-width: 768px) {
     #app { flex-direction:column; }
@@ -151,4 +253,13 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
     .resize-handle { display:none; }
     #current-song-title input { width:100%; font-size:1.2rem; }
     #song-meta { flex-direction:column; align-items:flex-start; }
+    
+    /* 主领视图移动端优化 */
+    #leader-line-note-editor {
+        width: 90% !important;
+    }
+    
+    #leader-bg-presets {
+        grid-template-columns: repeat(2, 1fr) !important;
+    }
 }

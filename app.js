@@ -622,22 +622,19 @@
                 <span style="font-size:1.5rem; margin-top:20px;">按上键返回</span>
             </div>
             <!-- 底部控制区 -->
-            <div id="display-controls" style="position:fixed; bottom:0; left:0; width:100%; z-index:80; display:flex; flex-direction:column; background:rgba(0,0,0,0.7); backdrop-filter:blur(8px); border-top:1px solid rgba(255,255,255,0.15); padding:6px 10px; transition: transform 0.3s ease;">
+            <div id="display-controls" style="position:fixed; bottom:0; left:0; width:100%; z-index:80; display:flex; flex-direction:column; background:transparent; padding:8px 10px 12px 10px; transition: transform 0.3s ease;">
                 <!-- 卡片预览条 -->
-                <div id="display-card-preview" style="display:flex; flex-wrap:wrap; gap:6px; overflow-y:auto; padding:2px 0 4px 0; margin-bottom:4px; max-height:120px; align-items:center;"></div>
-                <!-- 按钮栏 -->
-                <div style="position:relative; display:flex; justify-content:center; align-items:center; min-height:40px;">
-                    <div style="display:flex; justify-content:center; align-items:center; gap:16px;">
-                        <button id="dc-prev-btn" class="display-control-btn">◀ 上一页</button>
-                        <span id="dc-page-indicator" style="color:#ccc; font-size:1rem;">1/1</span>
-                        <button id="dc-next-btn" class="display-control-btn">下一页 ▶</button>
-                    </div>
-                    <button id="dc-toggle-btn" style="position:absolute; right:6px; background:none; border:none; color:#aaa; font-size:1.2rem; cursor:pointer;">▲ 隐藏</button>
+                <div id="display-card-preview" style="display:flex; flex-wrap:wrap; gap:5px; overflow-y:auto; padding:4px 8px; margin-bottom:6px; max-height:110px; align-items:center; justify-content:center; background:rgba(0,0,0,0.4); backdrop-filter:blur(8px); border-radius:16px; border:1px solid rgba(255,255,255,0.1);"></div>
+                <!-- 按钮栏 - 居中显示 -->
+                <div style="display:flex; justify-content:center; align-items:center; gap:12px;">
+                    <button id="dc-prev-btn" class="display-control-btn" style="padding:8px 18px;border-radius:20px;background:rgba(255,255,255,0.12);backdrop-filter:blur(5px);border:1px solid rgba(255,255,255,0.2);color:#ddd;cursor:pointer;font-size:0.9rem;transition:all 0.2s;">◀ 上一页</button>
+                    <span id="dc-page-indicator" style="color:rgba(255,255,255,0.7); font-size:0.95rem;min-width:50px;text-align:center;">1/1</span>
+                    <button id="dc-next-btn" class="display-control-btn" style="padding:8px 18px;border-radius:20px;background:rgba(255,255,255,0.12);backdrop-filter:blur(5px);border:1px solid rgba(255,255,255,0.2);color:#ddd;cursor:pointer;font-size:0.9rem;transition:all 0.2s;">下一页 ▶</button>
                 </div>
             </div>
-            <!-- 恢复按钮（隐藏时显示） -->
-            <div id="dc-restore-dot" style="position:fixed; bottom:10px; right:10px; width:36px; height:36px; background:rgba(255,255,255,0.15); backdrop-filter:blur(5px); border-radius:50%; cursor:pointer; z-index:90; display:none; align-items:center; justify-content:center; border:1px solid rgba(255,255,255,0.25); transition: all 0.2s ease;" onmouseover="this.style.background='rgba(255,255,255,0.3)'" onmouseout="this.style.background='rgba(255,255,255,0.15)'">
-                <span style="color:#aaa; font-size:0.8rem;">⋮</span>
+            <!-- 恢复按钮（切换预览条显示/隐藏） -->
+            <div id="dc-restore-dot" style="position:fixed; bottom:12px; right:12px; width:32px; height:32px; background:rgba(255,255,255,0.12); backdrop-filter:blur(5px); border-radius:50%; cursor:pointer; z-index:90; display:flex; align-items:center; justify-content:center; border:1px solid rgba(255,255,255,0.2); transition: all 0.2s ease;" onmouseover="this.style.background='rgba(255,255,255,0.25)'" onmouseout="this.style.background='rgba(255,255,255,0.12)'">
+                <span style="color:#aaa; font-size:0.75rem;">⋮</span>
             </div>
         `;
 
@@ -674,8 +671,10 @@
             else if(bg==='solid-gray'){ctx.fillStyle='#555';ctx.fillRect(0,0,w,h);}
             else if(bg==='gradient'){const g=ctx.createRadialGradient(w*.3,h*.3,50,w*.5,h*.5,w);g.addColorStop(0,'#1a2a4a');g.addColorStop(1,'#000');ctx.fillStyle=g;ctx.fillRect(0,0,w,h);}
             else if (bg === 'image' && img) {
+                // 加载或更新图片（浏览器自动处理GIF动画）
                 if (cachedBgSrc !== img) {
                     cachedBgSrc = img;
+                    cachedBgImage = new Image();
                     cachedBgImage.src = img;
                 }
                 if (cachedBgImage.complete && cachedBgImage.naturalWidth > 0) {
@@ -685,8 +684,13 @@
                     ctx.fillRect(0, 0, w, h);
                 }
             }
-            else if(bg==='particles'){ctx.fillStyle='#000';ctx.fillRect(0,0,w,h);particles.forEach(p=>{p.update();p.draw();});}
-            else{ctx.fillStyle='rgba(0,0,0,0.2)';ctx.fillRect(0,0,w,h);}
+            else if(bg==='particles'){
+                // 粒子背景：先用纯黑色清除画布，再更新和绘制粒子
+                ctx.fillStyle='#000';
+                ctx.fillRect(0,0,w,h);
+                particles.forEach(p=>{p.update();p.draw();});
+            }
+            else{ctx.fillStyle='#000';ctx.fillRect(0,0,w,h);}
         }
 
         function render(state) {
@@ -705,7 +709,7 @@
             lyricsDiv.style.top = song.posY + '%';
             dcPageIndicator.textContent = `${currentPageIndex+1}/${totalPages}`;
 
-            // 更新底部卡片预览 - 显示所有页面，自动换行，显示完整歌词
+            // 更新底部卡片预览 - 显示所有页面，自动换行，显示完整歌词（最多5行）
             dcCardPreview.innerHTML = '';
             const pages = Array.isArray(state.pages) ? state.pages : [];
             
@@ -717,29 +721,34 @@
                 const pageLines = (i < pages.length && Array.isArray(pages[i].lines)) ? pages[i].lines : [];
                 const cleanLines = pageLines.map(line => line.replace(/\[([^\]]+)\]/g, '').trim()).filter(Boolean);
                 
-                // 根据行数自动调整卡片高度
+                // 根据行数自动调整卡片高度和字体
                 const lineCount = cleanLines.length || 1;
-                const baseHeight = 35;
-                const lineHeight = 18;
-                const cardHeight = Math.max(baseHeight, Math.min(100, baseHeight + (lineCount - 1) * lineHeight));
+                const displayLineCount = Math.min(lineCount, 5);
+                const baseHeight = 30;
+                const lineHeight = 16;
+                const cardHeight = baseHeight + (displayLineCount - 1) * lineHeight;
+                
+                // 字体大小自适应，确保所有行完整显示
+                const fontSize = Math.max(0.5, Math.min(0.75, 12 / displayLineCount));
                 
                 mini.style.height = cardHeight + 'px';
-                mini.style.minWidth = '70px';
-                mini.style.maxWidth = '120px';
-                mini.style.padding = '6px 8px';
+                mini.style.minWidth = '65px';
+                mini.style.maxWidth = '110px';
+                mini.style.padding = '5px 7px';
                 mini.style.display = 'flex';
                 mini.style.flexDirection = 'column';
                 mini.style.justifyContent = 'center';
                 mini.style.alignItems = 'center';
+                mini.style.overflow = 'hidden';
                 
-                // 显示完整歌词（限制最多4行）
-                const displayLines = cleanLines.slice(0, 4);
+                // 显示完整歌词（限制最多5行）
+                const displayLines = cleanLines.slice(0, 5);
                 mini.innerHTML = displayLines.map(line => 
-                    `<div style="font-size:0.6rem;line-height:1.4;color:${i === currentPageIndex ? '#fff' : '#aaa'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;">${line}</div>`
+                    `<div style="font-size:${fontSize}rem;line-height:1.3;color:${i === currentPageIndex ? '#fff' : '#aaa'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;text-align:center;">${line}</div>`
                 ).join('');
                 
-                if (cleanLines.length > 4) {
-                    mini.innerHTML += '<div style="font-size:0.55rem;color:#666;margin-top:2px;">...</div>';
+                if (cleanLines.length > 5) {
+                    mini.innerHTML += '<div style="font-size:0.5rem;color:#666;margin-top:1px;">...</div>';
                 }
                 
                 mini.title = cleanLines.join('\n');
@@ -798,6 +807,9 @@
 
     // ========== 主领提词视图 ==========
     function initLeaderView() {
+        // 设置页面标题
+        document.title = '主领视角';
+        
         document.body.innerHTML = `
             <div id="leader-view" style="position:fixed;top:0;left:0;width:100%;height:100%;background:linear-gradient(135deg,#0a0e27 0%,#1a1a2e 50%,#000 100%);overflow:hidden;z-index:1;">
                 <!-- 微光粒子画布 -->
@@ -820,6 +832,14 @@
                     <!-- 分页模式内容 -->
                     <div id="leader-page-mode" style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100%;">
                         <div id="leader-lyrics" style="text-align:center;color:white;font-weight:bold;width:90%;max-width:1200px;"></div>
+                        
+                        <!-- 分页导航按钮 -->
+                        <div id="leader-page-nav" style="margin-top:30px;display:flex;gap:20px;align-items:center;">
+                            <button id="leader-prev-btn" style="padding:10px 24px;border-radius:25px;border:1px solid rgba(255,255,255,0.3);background:rgba(255,255,255,0.1);color:#fff;cursor:pointer;font-size:1rem;transition:all 0.2s;">◀ 上一页</button>
+                            <span id="leader-page-indicator" style="color:#d4af37;font-size:1.1rem;font-weight:bold;">1/1</span>
+                            <button id="leader-next-btn" style="padding:10px 24px;border-radius:25px;border:1px solid rgba(255,255,255,0.3);background:rgba(255,255,255,0.1);color:#fff;cursor:pointer;font-size:1rem;transition:all 0.2s;">下一页 ▶</button>
+                        </div>
+                        
                         <div id="leader-next-preview" style="margin-top:40px;color:rgba(255,255,255,0.4);font-size:1.3rem;text-align:center;width:80%;max-width:800px;min-height:40px;"></div>
                     </div>
                     
@@ -829,14 +849,76 @@
                     </div>
                 </div>
                 
+                <!-- 工具栏收纳圆点 -->
+                <div id="leader-toolbar-dot" style="position:fixed;top:15px;right:15px;width:30px;height:30px;background:rgba(255,255,255,0.15);backdrop-filter:blur(5px);border-radius:50%;cursor:pointer;z-index:15;display:flex;align-items:center;justify-content:center;border:1px solid rgba(255,255,255,0.2);transition:all 0.2s ease;" onmouseover="this.style.background='rgba(255,255,255,0.3)'" onmouseout="this.style.background='rgba(255,255,255,0.15)'">
+                    <span style="color:#ccc;font-size:0.9rem;">⋮</span>
+                </div>
+                
+                <!-- 工具栏面板 -->
+                <div id="leader-toolbar-panel" style="position:fixed;top:55px;right:15px;background:rgba(15,15,30,0.95);backdrop-filter:blur(15px);border-radius:15px;border:1px solid rgba(255,255,255,0.1);z-index:20;display:none;padding:15px;min-width:200px;box-shadow:0 10px 40px rgba(0,0,0,0.5);">
+                    <div style="color:#d4af37;font-weight:bold;margin-bottom:10px;font-size:0.9rem;">工具栏</div>
+                    <div style="display:flex;flex-direction:column;gap:8px;">
+                        <button id="leader-bg-btn" style="padding:8px 12px;border-radius:10px;border:1px solid rgba(255,255,255,0.2);background:transparent;color:#ddd;cursor:pointer;font-size:0.85rem;text-align:left;">🎨 背景设置</button>
+                        <button id="leader-notes-toggle" style="padding:8px 12px;border-radius:10px;border:1px solid rgba(255,255,255,0.2);background:transparent;color:#ddd;cursor:pointer;font-size:0.85rem;text-align:left;">📝 备注</button>
+                        <button id="leader-draw-btn" style="padding:8px 12px;border-radius:10px;border:1px solid rgba(255,255,255,0.2);background:transparent;color:#ddd;cursor:pointer;font-size:0.85rem;text-align:left;">✏️ 标注</button>
+                        <button id="leader-mode-toggle" style="padding:8px 12px;border-radius:10px;border:1px solid rgba(255,255,255,0.2);background:transparent;color:#ddd;cursor:pointer;font-size:0.85rem;text-align:left;">🔄 切换模式</button>
+                    </div>
+                </div>
+                
+                <!-- 标注Canvas层 -->
+                <canvas id="leader-draw-canvas" style="position:absolute;top:70px;left:0;width:100%;height:calc(100% - 110px);z-index:6;pointer-events:none;"></canvas>
+                
+                <!-- 标注控制栏 -->
+                <div id="leader-draw-controls" style="position:fixed;bottom:50px;left:50%;transform:translateX(-50%);z-index:12;display:none;gap:10px;background:rgba(15,15,30,0.9);backdrop-filter:blur(10px);padding:10px 20px;border-radius:15px;border:1px solid rgba(255,255,255,0.1);">
+                    <button id="leader-clear-draw" style="padding:8px 16px;border-radius:10px;border:1px solid rgba(255,100,100,0.5);background:rgba(255,100,100,0.2);color:#ff6b6b;cursor:pointer;font-size:0.85rem;">🗑️ 清除标注</button>
+                    <span style="color:#aaa;font-size:0.85rem;line-height:32px;">黄色画笔 | 线宽3px</span>
+                </div>
+                
+                <!-- 背景选择面板 -->
+                <div id="leader-bg-panel" style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:90%;max-width:600px;background:rgba(15,15,30,0.98);backdrop-filter:blur(20px);border-radius:20px;border:1px solid rgba(255,255,255,0.1);z-index:25;display:none;padding:20px;box-shadow:0 15px 50px rgba(0,0,0,0.7);">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;">
+                        <span style="color:#d4af37;font-weight:bold;font-size:1.1rem;">🎨 背景设置</span>
+                        <button id="leader-bg-close" style="padding:5px 12px;border-radius:10px;border:1px solid rgba(255,255,255,0.2);background:transparent;color:#aaa;cursor:pointer;font-size:0.85rem;">✕</button>
+                    </div>
+                    <div id="leader-bg-presets" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:15px;">
+                        <!-- 预设背景将通过JS动态生成 -->
+                    </div>
+                    <div style="border-top:1px solid rgba(255,255,255,0.1);padding-top:15px;">
+                        <button id="leader-bg-upload" style="width:100%;padding:10px;border-radius:12px;border:1px dashed rgba(255,255,255,0.3);background:rgba(255,255,255,0.05);color:#ddd;cursor:pointer;font-size:0.9rem;">📤 上传自定义背景</button>
+                        <input type="file" id="leader-bg-file-input" accept="image/*" style="display:none;">
+                    </div>
+                </div>
+                
+                <!-- 行备注编辑框 -->
+                <div id="leader-line-note-editor" style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:400px;background:rgba(15,15,30,0.98);backdrop-filter:blur(20px);border-radius:20px;border:1px solid rgba(255,255,255,0.1);z-index:30;display:none;padding:20px;box-shadow:0 15px 50px rgba(0,0,0,0.7);">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;">
+                        <span style="color:#d4af37;font-weight:bold;font-size:1rem;">✏️ 编辑备注</span>
+                        <button id="leader-note-close" style="padding:5px 12px;border-radius:10px;border:1px solid rgba(255,255,255,0.2);background:transparent;color:#aaa;cursor:pointer;font-size:0.85rem;">✕</button>
+                    </div>
+                    <div style="margin-bottom:12px;">
+                        <div style="color:#aaa;font-size:0.85rem;margin-bottom:8px;">选择标记图标:</div>
+                        <div id="leader-note-icons" style="display:flex;gap:10px;">
+                            <button class="note-icon-btn" data-icon="💬" style="padding:8px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.2);background:transparent;color:#ddd;cursor:pointer;font-size:1.2rem;transition:all 0.2s;">💬</button>
+                            <button class="note-icon-btn" data-icon="📌" style="padding:8px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.2);background:transparent;color:#ddd;cursor:pointer;font-size:1.2rem;transition:all 0.2s;">📌</button>
+                            <button class="note-icon-btn" data-icon="🎵" style="padding:8px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.2);background:transparent;color:#ddd;cursor:pointer;font-size:1.2rem;transition:all 0.2s;">🎵</button>
+                            <button class="note-icon-btn" data-icon="✝️" style="padding:8px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.2);background:transparent;color:#ddd;cursor:pointer;font-size:1.2rem;transition:all 0.2s;">✝️</button>
+                            <button class="note-icon-btn" data-icon="⭐" style="padding:8px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.2);background:transparent;color:#ddd;cursor:pointer;font-size:1.2rem;transition:all 0.2s;">⭐</button>
+                        </div>
+                    </div>
+                    <textarea id="leader-line-note-text" placeholder="输入备注内容..." style="width:100%;min-height:100px;padding:12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.2);border-radius:10px;color:#ddd;font-size:0.95rem;line-height:1.6;resize:vertical;outline:none;font-family:'Microsoft YaHei',sans-serif;"></textarea>
+                    <div style="display:flex;gap:10px;margin-top:15px;justify-content:flex-end;">
+                        <button id="leader-note-cancel" style="padding:8px 20px;border-radius:12px;border:1px solid rgba(255,255,255,0.2);background:transparent;color:#aaa;cursor:pointer;font-size:0.9rem;">取消</button>
+                        <button id="leader-note-save" style="padding:8px 20px;border-radius:12px;border:none;background:linear-gradient(135deg,#d4af37,#b8960c);color:#000;font-weight:bold;cursor:pointer;font-size:0.9rem;">保存</button>
+                    </div>
+                </div>
+                
                 <!-- 底部信息栏 -->
                 <div style="position:fixed;bottom:0;left:0;width:100%;z-index:10;background:rgba(0,0,0,0.4);backdrop-filter:blur(10px);padding:10px 20px;">
                     <div style="display:flex;justify-content:space-between;align-items:center;">
                         <div style="display:flex;gap:20px;align-items:center;">
                             <span id="leader-meta" style="color:rgba(255,255,255,0.5);font-size:0.85rem;"></span>
-                            <button id="leader-notes-toggle" style="padding:5px 12px;border-radius:15px;border:1px solid rgba(255,255,255,0.2);background:transparent;color:#aaa;cursor:pointer;font-size:0.8rem;">📝 备注</button>
                         </div>
-                        <div style="color:rgba(255,255,255,0.3);font-size:0.75rem;">敬拜主领视图</div>
+                        <div style="color:rgba(255,255,255,0.3);font-size:0.75rem;">主领视角</div>
                     </div>
                 </div>
                 
@@ -873,12 +955,25 @@
         const leaderNotesRefresh = document.getElementById('leader-notes-refresh');
         const modeScrollBtn = document.getElementById('leader-mode-scroll');
         const modePageBtn = document.getElementById('leader-mode-page');
+        
+        // 标注功能元素
+        const leaderDrawCanvas = document.getElementById('leader-draw-canvas');
+        const leaderDrawControls = document.getElementById('leader-draw-controls');
+        const leaderDrawBtn = document.getElementById('leader-draw-btn');
+        const leaderClearDraw = document.getElementById('leader-clear-draw');
 
         let currentState = null;
         let currentMode = 'page'; // 'page' or 'scroll'
         let currentSongId = '';
         let particles = [];
         let particleCtx = null;
+        
+        // 标注功能变量
+        let isDrawingMode = false;
+        let isDrawing = false;
+        let drawCtx = null;
+        let lastX = 0;
+        let lastY = 0;
 
         // 初始化粒子背景
         function initParticles() {
@@ -1068,6 +1163,7 @@
             if (song.id !== currentSongId) {
                 currentSongId = song.id;
                 loadNotes(currentSongId);
+                loadLineNotes(currentSongId);
             }
             
             // 根据模式渲染
@@ -1077,6 +1173,366 @@
                 renderScrollMode();
             }
         }
+        
+        // ========== 新增功能函数 ==========
+        
+        // 加载行备注
+        function loadLineNotes(songId) {
+            const saved = localStorage.getItem(`leader_line_notes_${songId}`);
+            lineNotes = saved ? JSON.parse(saved) : {};
+        }
+        
+        // 保存行备注
+        function saveLineNote(lineIndex, note, icon) {
+            if (!currentSongId) return;
+            lineNotes[lineIndex] = { note, icon };
+            localStorage.setItem(`leader_line_notes_${currentSongId}`, JSON.stringify(lineNotes));
+            // 同步到云端
+            saveLeaderLineNote(currentSongId, lineIndex, note, icon);
+        }
+        
+        // 删除行备注
+        function deleteLineNote(lineIndex) {
+            if (!currentSongId) return;
+            delete lineNotes[lineIndex];
+            localStorage.setItem(`leader_line_notes_${currentSongId}`, JSON.stringify(lineNotes));
+        }
+        
+        // 打开行备注编辑器
+        function openLineNoteEditor(lineIndex) {
+            editingLineIndex = lineIndex;
+            const existing = lineNotes[lineIndex];
+            selectedIcon = existing ? existing.icon : '💬';
+            leaderLineNoteText.value = existing ? existing.note : '';
+            
+            // 更新图标选择状态
+            leaderNoteIcons.forEach(btn => {
+                btn.classList.toggle('selected', btn.dataset.icon === selectedIcon);
+            });
+            
+            leaderLineNoteEditor.style.display = 'block';
+            leaderLineNoteText.focus();
+        }
+        
+        // 关闭行备注编辑器
+        function closeLineNoteEditor() {
+            leaderLineNoteEditor.style.display = 'none';
+            editingLineIndex = -1;
+        }
+        
+        // 保存行备注并关闭
+        function confirmSaveLineNote() {
+            if (editingLineIndex < 0) return;
+            const note = leaderLineNoteText.value.trim();
+            if (note || selectedIcon !== '💬') {
+                saveLineNote(editingLineIndex, note, selectedIcon);
+            } else {
+                deleteLineNote(editingLineIndex);
+            }
+            closeLineNoteEditor();
+            // 重新渲染以显示标记
+            if (currentMode === 'scroll') {
+                renderScrollMode();
+            } else {
+                renderPageMode(currentState);
+            }
+            showToast('备注已保存');
+        }
+        
+        // 初始化背景预设
+        function initBgPresets() {
+            const presets = [
+                { id: 'gradient-dark', name: '深蓝星空', bg: 'linear-gradient(135deg,#0a0e27 0%,#1a1a2e 50%,#000 100%)' },
+                { id: 'warm-candle', name: '暖黄烛光', bg: 'linear-gradient(135deg,#2a1810 0%,#4a2820 50%,#1a0f0a 100%)' },
+                { id: 'deep-purple', name: '深邃紫色', bg: 'linear-gradient(135deg,#1a0a2e 0%,#2d1b4e 50%,#0f0520 100%)' },
+                { id: 'soft-green', name: '柔和绿色', bg: 'linear-gradient(135deg,#0a1f15 0%,#1b3a2d 50%,#05100a 100%)' },
+                { id: 'classic-bw', name: '经典黑白', bg: 'linear-gradient(135deg,#1a1a1a 0%,#333 50%,#000 100%)' },
+                { id: 'golden-glow', name: '金色光芒', bg: 'linear-gradient(135deg,#1a1510 0%,#3a2a1a 50%,#0f0a05 100%)' }
+            ];
+            
+            leaderBgPresets.innerHTML = '';
+            presets.forEach(preset => {
+                const div = document.createElement('div');
+                div.className = 'leader-bg-preset';
+                div.style.background = preset.bg;
+                div.dataset.bgId = preset.id;
+                if (preset.id === currentBgType) div.classList.add('active');
+                
+                const label = document.createElement('div');
+                label.className = 'leader-bg-preset-label';
+                label.textContent = preset.name;
+                
+                div.appendChild(label);
+                div.addEventListener('click', () => applyLeaderBg(preset.id));
+                leaderBgPresets.appendChild(div);
+            });
+        }
+        
+        // 应用背景
+        function applyLeaderBg(bgId) {
+            currentBgType = bgId;
+            const leaderView = document.getElementById('leader-view');
+            
+            const bgMap = {
+                'gradient-dark': 'linear-gradient(135deg,#0a0e27 0%,#1a1a2e 50%,#000 100%)',
+                'warm-candle': 'linear-gradient(135deg,#2a1810 0%,#4a2820 50%,#1a0f0a 100%)',
+                'deep-purple': 'linear-gradient(135deg,#1a0a2e 0%,#2d1b4e 50%,#0f0520 100%)',
+                'soft-green': 'linear-gradient(135deg,#0a1f15 0%,#1b3a2d 50%,#05100a 100%)',
+                'classic-bw': 'linear-gradient(135deg,#1a1a1a 0%,#333 50%,#000 100%)',
+                'golden-glow': 'linear-gradient(135deg,#1a1510 0%,#3a2a1a 50%,#0f0a05 100%)'
+            };
+            
+            leaderView.style.background = bgMap[bgId] || bgMap['gradient-dark'];
+            
+            // 更新选中状态
+            document.querySelectorAll('.leader-bg-preset').forEach(el => {
+                el.classList.toggle('active', el.dataset.bgId === bgId);
+            });
+            
+            // 保存到localStorage
+            localStorage.setItem('leader_bg_type', bgId);
+            showToast('背景已切换');
+        }
+        
+        // 上传自定义背景
+        function handleLeaderBgUpload(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const imageData = e.target.result;
+                const leaderView = document.getElementById('leader-view');
+                leaderView.style.background = `url(${imageData}) center/cover`;
+                localStorage.setItem('leader_custom_bg', imageData);
+                showToast('自定义背景已应用');
+            };
+            reader.readAsDataURL(file);
+        }
+        
+        // 工具栏开关
+        function toggleToolbar() {
+            const isVisible = leaderToolbarPanel.style.display === 'block';
+            leaderToolbarPanel.style.display = isVisible ? 'none' : 'block';
+        }
+        
+        // ========== 标注功能 ==========
+        
+        // 初始化画布
+        function initDrawCanvas() {
+            if (!leaderDrawCanvas) return;
+            const rect = leaderDrawCanvas.getBoundingClientRect();
+            leaderDrawCanvas.width = rect.width;
+            leaderDrawCanvas.height = rect.height;
+            drawCtx = leaderDrawCanvas.getContext('2d');
+            drawCtx.strokeStyle = '#FFD700'; // 黄色
+            drawCtx.lineWidth = 3;
+            drawCtx.lineCap = 'round';
+            drawCtx.lineJoin = 'round';
+        }
+        
+        // 切换标注模式
+        function toggleDrawMode() {
+            isDrawingMode = !isDrawingMode;
+            
+            if (isDrawingMode) {
+                // 进入标注模式
+                leaderDrawCanvas.style.pointerEvents = 'auto';
+                leaderDrawControls.style.display = 'flex';
+                leaderDrawBtn.style.background = 'rgba(212,175,55,0.3)';
+                leaderDrawBtn.style.borderColor = '#d4af37';
+                initDrawCanvas();
+                showToast('已进入标注模式');
+            } else {
+                // 退出标注模式
+                leaderDrawCanvas.style.pointerEvents = 'none';
+                leaderDrawControls.style.display = 'none';
+                leaderDrawBtn.style.background = 'transparent';
+                leaderDrawBtn.style.borderColor = 'rgba(255,255,255,0.2)';
+                showToast('已退出标注模式');
+            }
+        }
+        
+        // 清除标注
+        function clearDrawings() {
+            if (!drawCtx || !leaderDrawCanvas) return;
+            drawCtx.clearRect(0, 0, leaderDrawCanvas.width, leaderDrawCanvas.height);
+            showToast('标注已清除');
+        }
+        
+        // 获取坐标（兼容鼠标和触摸）
+        function getCoords(e) {
+            const rect = leaderDrawCanvas.getBoundingClientRect();
+            let clientX, clientY;
+            
+            if (e.touches && e.touches.length > 0) {
+                clientX = e.touches[0].clientX;
+                clientY = e.touches[0].clientY;
+            } else {
+                clientX = e.clientX;
+                clientY = e.clientY;
+            }
+            
+            return {
+                x: clientX - rect.left,
+                y: clientY - rect.top
+            };
+        }
+        
+        // 开始绘制
+        function startDrawing(e) {
+            if (!isDrawingMode) return;
+            e.preventDefault();
+            isDrawing = true;
+            const coords = getCoords(e);
+            lastX = coords.x;
+            lastY = coords.y;
+        }
+        
+        // 绘制中
+        function draw(e) {
+            if (!isDrawing || !isDrawingMode) return;
+            e.preventDefault();
+            
+            const coords = getCoords(e);
+            drawCtx.beginPath();
+            drawCtx.moveTo(lastX, lastY);
+            drawCtx.lineTo(coords.x, coords.y);
+            drawCtx.stroke();
+            
+            lastX = coords.x;
+            lastY = coords.y;
+        }
+        
+        // 停止绘制
+        function stopDrawing(e) {
+            if (e) e.preventDefault();
+            isDrawing = false;
+        }
+        
+        // 绑定画布事件
+        function bindDrawEvents() {
+            if (!leaderDrawCanvas) return;
+            
+            // 鼠标事件
+            leaderDrawCanvas.addEventListener('mousedown', startDrawing);
+            leaderDrawCanvas.addEventListener('mousemove', draw);
+            leaderDrawCanvas.addEventListener('mouseup', stopDrawing);
+            leaderDrawCanvas.addEventListener('mouseout', stopDrawing);
+            
+            // 触摸事件
+            leaderDrawCanvas.addEventListener('touchstart', startDrawing, { passive: false });
+            leaderDrawCanvas.addEventListener('touchmove', draw, { passive: false });
+            leaderDrawCanvas.addEventListener('touchend', stopDrawing, { passive: false });
+        }
+        
+        // 上一页/下一页
+        function leaderPrevPage() {
+            if (!currentState) return;
+            channel.postMessage({ type: 'prev' });
+        }
+        
+        function leaderNextPage() {
+            if (!currentState) return;
+            channel.postMessage({ type: 'next' });
+        }
+        
+        // ========== 渲染分页模式（增强版） ==========
+        function renderPageMode(state) {
+            const { song, currentPageIndex, totalPages, pages } = state;
+            const lyrics = song.lyrics || [];
+            const fontSize = (song.fontSize || 56) * 1.3;
+            
+            let html = '<div style="position:relative;">';
+            lyrics.forEach((line, idx) => {
+                const hasNote = lineNotes[idx];
+                const markerIcon = hasNote ? hasNote.icon : '💬';
+                html += `<div style="position:relative;font-size:${fontSize}px;line-height:1.8;white-space:normal;word-break:break-word;font-family:${song.fontFamily || DEFAULT_FONT_FAMILY};margin-bottom:10px;">`;
+                html += `<span>${line}</span>`;
+                html += `<span class="leader-line-note-marker ${hasNote ? 'has-note' : ''}" data-line-index="${idx}" title="点击添加备注">${markerIcon}</span>`;
+                html += `</div>`;
+            });
+            html += '</div>';
+            leaderLyrics.innerHTML = html;
+            
+            // 绑定标记点击事件
+            leaderLyrics.querySelectorAll('.leader-line-note-marker').forEach(marker => {
+                marker.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const lineIdx = parseInt(marker.dataset.lineIndex);
+                    openLineNoteEditor(lineIdx);
+                });
+            });
+
+            // 下一句预览
+            if (pages && currentPageIndex < pages.length - 1) {
+                const nextPage = pages[currentPageIndex + 1];
+                const nextLines = (nextPage.lines || []).slice(0, 2).join(' ');
+                leaderNextPreview.textContent = nextLines || '';
+            } else {
+                leaderNextPreview.textContent = '';
+            }
+
+            leaderPageNum.textContent = `${currentPageIndex + 1}/${totalPages}`;
+            if (leaderPageIndicator) {
+                leaderPageIndicator.textContent = `${currentPageIndex + 1}/${totalPages}`;
+            }
+        }
+
+        // ========== 渲染滚动模式（增强版） ==========
+        function renderScrollMode() {
+            if (!currentState) return;
+            const { pages, currentPageIndex } = currentState;
+            if (!pages || !pages.length) return;
+
+            const fontSize = (currentState.song.fontSize || 56) * 1.1;
+            let html = '';
+            
+            pages.forEach((page, idx) => {
+                const isCurrentPage = idx === currentPageIndex;
+                const pageLines = page.lines || [];
+                
+                html += `<div style="margin-bottom:30px;padding:20px;border-radius:15px;position:relative;${isCurrentPage ? 'background:rgba(212,175,55,0.15);border:1px solid rgba(212,175,55,0.3);' : 'background:transparent;border:1px solid rgba(255,255,255,0.05);'}">`;
+                
+                if (page.isTitle && pageLines.length > 0) {
+                    html += `<div style="font-size:${fontSize * 1.3}px;color:#d4af37;font-weight:bold;text-align:center;margin-bottom:15px;font-family:${currentState.song.fontFamily || DEFAULT_FONT_FAMILY};">${pageLines[0]}</div>`;
+                }
+                
+                pageLines.forEach((line, lineIdx) => {
+                    if (page.isTitle && lineIdx === 0) return;
+                    const cleanLine = line.replace(/\[([^\]]+)\]/g, '').trim();
+                    if (!cleanLine) return;
+                    
+                    // 计算全局行索引
+                    const globalLineIdx = pageLines.indexOf(line);
+                    const hasNote = lineNotes[globalLineIdx];
+                    const markerIcon = hasNote ? hasNote.icon : '💬';
+                    
+                    html += `<div style="position:relative;font-size:${fontSize}px;line-height:2;color:${isCurrentPage ? '#fff' : 'rgba(255,255,255,0.6)'};font-weight:${isCurrentPage ? 'bold' : 'normal'};font-family:${currentState.song.fontFamily || DEFAULT_FONT_FAMILY};padding:5px 10px;${isCurrentPage ? 'background:rgba(212,175,55,0.1);border-radius:8px;' : ''}">`;
+                    html += `<span>${cleanLine}</span>`;
+                    html += `<span class="leader-line-note-marker ${hasNote ? 'has-note' : ''}" data-line-index="${globalLineIdx}" style="right:-25px;" title="点击添加备注">${markerIcon}</span>`;
+                    html += `</div>`;
+                });
+                
+                html += `</div>`;
+            });
+            
+            leaderAllLyrics.innerHTML = html;
+            
+            // 绑定标记点击事件
+            leaderAllLyrics.querySelectorAll('.leader-line-note-marker').forEach(marker => {
+                marker.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const lineIdx = parseInt(marker.dataset.lineIndex);
+                    openLineNoteEditor(lineIdx);
+                });
+            });
+            
+            // 自动滚动到当前页
+            if (currentPageIndex >= 0) {
+                const currentEl = leaderAllLyrics.children[currentPageIndex];
+                if (currentEl) {
+                    currentEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            }
+        }
 
         // 事件绑定
         modeScrollBtn.addEventListener('click', () => switchMode('scroll'));
@@ -1084,6 +1540,7 @@
         
         leaderNotesToggle.addEventListener('click', () => {
             leaderNotesPanel.style.display = leaderNotesPanel.style.display === 'flex' ? 'none' : 'flex';
+            if (leaderToolbarPanel) leaderToolbarPanel.style.display = 'none';
         });
         
         leaderNotesClose.addEventListener('click', () => {
@@ -1092,6 +1549,87 @@
         
         leaderNotesSave.addEventListener('click', saveNotes);
         leaderNotesRefresh.addEventListener('click', refreshNotesFromSheet);
+        
+        // 新增事件绑定
+        
+        // 分页导航按钮
+        if (leaderPrevBtn) leaderPrevBtn.addEventListener('click', leaderPrevPage);
+        if (leaderNextBtn) leaderNextBtn.addEventListener('click', leaderNextPage);
+        
+        // 工具栏
+        if (leaderToolbarDot) leaderToolbarDot.addEventListener('click', toggleToolbar);
+        if (leaderModeToggle) {
+            leaderModeToggle.addEventListener('click', () => {
+                switchMode(currentMode === 'page' ? 'scroll' : 'page');
+                if (leaderToolbarPanel) leaderToolbarPanel.style.display = 'none';
+            });
+        }
+        
+        // 点击面板外关闭工具栏
+        document.addEventListener('click', (e) => {
+            if (leaderToolbarPanel && !leaderToolbarPanel.contains(e.target) && 
+                leaderToolbarDot && !leaderToolbarDot.contains(e.target)) {
+                leaderToolbarPanel.style.display = 'none';
+            }
+        });
+        
+        // 背景设置
+        if (leaderBgBtn) {
+            leaderBgBtn.addEventListener('click', () => {
+                leaderBgPanel.style.display = 'block';
+                if (leaderToolbarPanel) leaderToolbarPanel.style.display = 'none';
+                initBgPresets();
+            });
+        }
+        if (leaderBgClose) leaderBgClose.addEventListener('click', () => leaderBgPanel.style.display = 'none');
+        if (leaderBgUpload) leaderBgUpload.addEventListener('click', () => leaderBgFileInput.click());
+        if (leaderBgFileInput) {
+            leaderBgFileInput.addEventListener('change', (e) => {
+                if (e.target.files[0]) handleLeaderBgUpload(e.target.files[0]);
+            });
+        }
+        
+        // 标注功能
+        if (leaderDrawBtn) leaderDrawBtn.addEventListener('click', () => {
+            toggleDrawMode();
+            if (leaderToolbarPanel) leaderToolbarPanel.style.display = 'none';
+        });
+        if (leaderClearDraw) leaderClearDraw.addEventListener('click', clearDrawings);
+        
+        // 绑定画布事件
+        bindDrawEvents();
+        
+        // 窗口resize时重置画布
+        window.addEventListener('resize', () => {
+            if (isDrawingMode) {
+                setTimeout(initDrawCanvas, 100);
+            }
+        });
+        
+        // 行备注编辑器
+        if (leaderNoteClose) leaderNoteClose.addEventListener('click', closeLineNoteEditor);
+        if (leaderNoteCancel) leaderNoteCancel.addEventListener('click', closeLineNoteEditor);
+        if (leaderNoteSave) leaderNoteSave.addEventListener('click', confirmSaveLineNote);
+        
+        // 图标选择
+        leaderNoteIcons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                selectedIcon = btn.dataset.icon;
+                leaderNoteIcons.forEach(b => b.classList.remove('selected'));
+                btn.classList.add('selected');
+            });
+        });
+        
+        // 键盘快捷键 - 左右箭头翻页
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                leaderPrevPage();
+            } else if (e.key === 'ArrowRight') {
+                e.preventDefault();
+                leaderNextPage();
+            }
+        });
 
         // 监听 BroadcastChannel
         const dc = new BroadcastChannel('worship_channel');
@@ -1104,6 +1642,13 @@
 
         // 初始化粒子
         initParticles();
+        
+        // 加载保存的背景
+        const savedBg = localStorage.getItem('leader_bg_type');
+        if (savedBg) {
+            currentBgType = savedBg;
+            applyLeaderBg(savedBg);
+        }
         
         // 默认分页模式
         switchMode('page');
@@ -1243,6 +1788,45 @@
             console.error('加载备注失败:', e);
             return null;
         }
+    }
+    
+    // 保存行备注到 Google Sheets
+    async function saveLeaderLineNote(songId, lineIndex, note, icon) {
+        if (!songId) return false;
+        try {
+            const response = await fetch(GOOGLE_SCRIPT_URL, {
+                method: 'POST',
+                body: JSON.stringify({
+                    action: 'saveLineNote',
+                    songId: songId,
+                    lineIndex: lineIndex,
+                    note: note,
+                    icon: icon
+                })
+            });
+            if (response.ok) {
+                console.log('行备注已同步到云端');
+                return true;
+            }
+        } catch(e) {
+            console.error('保存行备注失败:', e);
+            return false;
+        }
+    }
+    
+    // 从 Google Sheets 加载行备注
+    async function loadLeaderLineNotes(songId) {
+        if (!songId) return {};
+        try {
+            const response = await fetch(`${GOOGLE_SCRIPT_URL}?action=getLineNotes&songId=${encodeURIComponent(songId)}`);
+            if (response.ok) {
+                const data = await response.json();
+                return data.notes || {};
+            }
+        } catch(e) {
+            console.error('加载行备注失败:', e);
+        }
+        return {};
     }
 
     // ========== 在线诗歌搜索 ==========

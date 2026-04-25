@@ -670,18 +670,29 @@
             else if(bg==='solid-white'){ctx.fillStyle='#fff';ctx.fillRect(0,0,w,h);}
             else if(bg==='solid-gray'){ctx.fillStyle='#555';ctx.fillRect(0,0,w,h);}
             else if(bg==='gradient'){const g=ctx.createRadialGradient(w*.3,h*.3,50,w*.5,h*.5,w);g.addColorStop(0,'#1a2a4a');g.addColorStop(1,'#000');ctx.fillStyle=g;ctx.fillRect(0,0,w,h);}
-            else if (bg === 'image' && img) {
-                // 加载或更新图片（浏览器自动处理GIF动画）
-                if (cachedBgSrc !== img) {
-                    cachedBgSrc = img;
-                    cachedBgImage = new Image();
-                    cachedBgImage.src = img;
-                }
-                if (cachedBgImage.complete && cachedBgImage.naturalWidth > 0) {
-                    ctx.drawImage(cachedBgImage, 0, 0, w, h);
+            else if (bg === 'image') {
+                // 后备机制：如果img为空，尝试从currentState获取
+                const imageUrl = img || (currentState && currentState.song && currentState.song.bgImage);
+                
+                if (imageUrl) {
+                    // 加载或更新图片（浏览器自动处理GIF动画）
+                    if (cachedBgSrc !== imageUrl) {
+                        cachedBgSrc = imageUrl;
+                        cachedBgImage.src = imageUrl;
+                    }
+                    if (cachedBgImage.complete && cachedBgImage.naturalWidth > 0) {
+                        ctx.drawImage(cachedBgImage, 0, 0, w, h);
+                    } else {
+                        // 图片加载中，先显示粒子背景
+                        ctx.fillStyle='#000';
+                        ctx.fillRect(0,0,w,h);
+                        particles.forEach(p=>{p.update();p.draw();});
+                    }
                 } else {
-                    ctx.fillStyle = '#000';
-                    ctx.fillRect(0, 0, w, h);
+                    // 没有图片数据，显示粒子背景作为后备
+                    ctx.fillStyle='#000';
+                    ctx.fillRect(0,0,w,h);
+                    particles.forEach(p=>{p.update();p.draw();});
                 }
             }
             else if(bg==='particles'){
@@ -802,6 +813,8 @@
             else if (e.key === 'f' || e.key === 'F') { e.preventDefault(); document.documentElement.requestFullscreen(); }
             else if (e.key === 'Escape') { blackout.style.display = 'none'; whiteout.style.display = 'none'; }
             else if (e.key === 'ArrowUp' && ended) { ended = false; endedOverlay.style.display = 'none'; lyricsDiv.style.display = 'block'; dc.postMessage({ type: 'prev' }); }
+            else if (e.key === 'ArrowLeft') { e.preventDefault(); dc.postMessage({ type: 'prev' }); }
+            else if (e.key === 'ArrowRight') { e.preventDefault(); dc.postMessage({ type: 'next' }); }
         });
     }
 
@@ -955,6 +968,30 @@
         const leaderNotesRefresh = document.getElementById('leader-notes-refresh');
         const modeScrollBtn = document.getElementById('leader-mode-scroll');
         const modePageBtn = document.getElementById('leader-mode-page');
+        
+        // 工具栏元素
+        const leaderToolbarDot = document.getElementById('leader-toolbar-dot');
+        const leaderToolbarPanel = document.getElementById('leader-toolbar-panel');
+        const leaderBgBtn = document.getElementById('leader-bg-btn');
+        const leaderBgPanel = document.getElementById('leader-bg-panel');
+        const leaderBgClose = document.getElementById('leader-bg-close');
+        const leaderBgPresets = document.getElementById('leader-bg-presets');
+        const leaderBgUpload = document.getElementById('leader-bg-upload');
+        const leaderBgFileInput = document.getElementById('leader-bg-file-input');
+        const leaderModeToggle = document.getElementById('leader-mode-toggle');
+        
+        // 分页导航元素
+        const leaderPrevBtn = document.getElementById('leader-prev-btn');
+        const leaderNextBtn = document.getElementById('leader-next-btn');
+        const leaderPageIndicator = document.getElementById('leader-page-indicator');
+        
+        // 行备注编辑器元素
+        const leaderLineNoteEditor = document.getElementById('leader-line-note-editor');
+        const leaderLineNoteText = document.getElementById('leader-line-note-text');
+        const leaderNoteIcons = document.querySelectorAll('.note-icon-btn');
+        const leaderNoteClose = document.getElementById('leader-note-close');
+        const leaderNoteCancel = document.getElementById('leader-note-cancel');
+        const leaderNoteSave = document.getElementById('leader-note-save');
         
         // 标注功能元素
         const leaderDrawCanvas = document.getElementById('leader-draw-canvas');
@@ -1636,9 +1673,26 @@
         dc.addEventListener('message', e => {
             if (e.data.type === 'update') {
                 render(e.data);
+            } else if (e.data.type === 'prev') {
+                // 处理上一页命令（从演示窗口同步）
+                if (currentState && currentState.currentPageIndex > 0) {
+                    dc.postMessage({ type: 'jump', pageIndex: currentState.currentPageIndex - 1 });
+                }
+            } else if (e.data.type === 'next') {
+                // 处理下一页命令（从演示窗口同步）
+                if (currentState && currentState.currentPageIndex < currentState.totalPages - 1) {
+                    dc.postMessage({ type: 'jump', pageIndex: currentState.currentPageIndex + 1 });
+                }
+            } else if (e.data.type === 'jump') {
+                // 处理跳转命令
+                render({ ...currentState, currentPageIndex: e.data.pageIndex });
             }
         });
-        dc.postMessage({ type: 'request_state' });
+        
+        // 延迟发送请求，确保主窗口已准备好
+        setTimeout(() => {
+            dc.postMessage({ type: 'request_state' });
+        }, 100);
 
         // 初始化粒子
         initParticles();

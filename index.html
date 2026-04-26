@@ -27,6 +27,19 @@
         <div id="online-results" style="max-height:150px; overflow-y:auto; margin-bottom:10px;"></div>
         <div id="tag-filter" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px;"></div>
         <ul id="song-list"></ul>
+        <details id="playlist-panel" style="margin-top:8px;">
+            <summary style="cursor:pointer;padding:8px 10px;background:rgba(255,255,255,0.05);border-radius:10px;color:var(--text-secondary);font-size:0.9rem;list-style:none;user-select:none;">📋 播放列表</summary>
+            <div style="padding-top:8px;">
+                <ul id="playlist-list"></ul>
+                <div style="display:flex; align-items:center; gap:8px; margin-top:8px;">
+                    <button id="playlist-start-btn" class="small-btn" style="margin-top:0; flex:1;">▶ 开始播放</button>
+                    <label style="font-size:0.78rem; color:var(--text-secondary); display:flex; align-items:center; gap:4px; white-space:nowrap;">
+                        <input type="checkbox" id="playlist-auto-switch">
+                        🔄 自动切换
+                    </label>
+                </div>
+            </div>
+        </details>
         <button id="add-song-btn" class="add-song-btn">➕ 新建诗歌</button>
         <div class="file-import-export">
             <button id="export-data-btn" class="small-btn">📤 导出</button>
@@ -42,6 +55,7 @@
     <div id="editor-area">
         <div id="current-song-title">
             <input type="text" id="song-title-input" placeholder="诗歌标题" value="奇异恩典">
+            <div class="editor-area-title" style="font-size:0.8rem; color:var(--text-secondary); margin-right:12px; vertical-align:middle; background:transparent; font-weight:normal;">✍️ 诗歌编辑区</div>
             <button id="save-song-btn" class="btn">保存歌词</button>
             <button id="publish-song-btn" class="btn btn-outline">☁️ 发布到云端</button>
         </div>

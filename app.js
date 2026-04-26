@@ -120,6 +120,109 @@
         }, 1500);
     }
 
+    function openHelpModal() {
+        let modal = $("help-modal");
+        if (!modal) {
+            modal = document.createElement("div");
+            modal.id = "help-modal";
+            modal.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:2500;display:flex;align-items:center;justify-content:center;";
+            const panel = document.createElement("div");
+            panel.style.cssText = "width:min(700px,92vw);max-height:80vh;overflow-y:auto;background:var(--bg-secondary);border-radius:20px;padding:30px;position:relative;color:var(--text-primary);";
+            const closeBtn = document.createElement("button");
+            closeBtn.type = "button";
+            closeBtn.id = "help-modal-close";
+            closeBtn.textContent = "✕";
+            closeBtn.style.cssText = "position:absolute;right:14px;top:10px;border:none;background:transparent;color:var(--text-secondary);font-size:18px;cursor:pointer;";
+            closeBtn.addEventListener("click", () => {
+                modal.style.display = "none";
+            });
+            panel.appendChild(closeBtn);
+            const content = document.createElement("div");
+            content.innerHTML = `
+<h2>📖 使用帮助</h2>
+<h3>一、界面概览</h3>
+<table>
+<tr><td><b>诗歌库</b></td><td>左侧</td><td>管理所有诗歌：新建、搜索、标签筛选、播放列表</td></tr>
+<tr><td><b>编辑区</b></td><td>中间</td><td>编辑当前诗歌歌词、调性、速度、备注</td></tr>
+<tr><td><b>设置面板</b></td><td>右侧</td><td>调整背景、字体、行数、位置、自动播放</td></tr>
+<tr><td><b>快速预览</b></td><td>右侧上部</td><td>实时预览当前页歌词</td></tr>
+</table>
+<h3>二、核心功能</h3>
+<h4>1. 编辑诗歌</h4>
+<ul>
+<li><b>新建</b>：点击左侧「+」或「新建诗歌」</li>
+<li><b>编辑歌词</b>：在中间编辑区输入，一行一句</li>
+<li><b>分页</b>：用空行或 [page] 标记分页位置</li>
+<li><b>歌名页</b>：第一段只有一行时，自动识别为歌名页（投屏时大字显示）</li>
+<li><b>保存</b>：点击「保存歌词」</li>
+<li><b>应用到演示屏</b>：编辑完成后必须点击，投屏和主领视图才会更新</li>
+</ul>
+<h4>2. 投屏演示</h4>
+<ul>
+<li><b>打开投屏</b>：点击「开启投屏」，弹出新窗口</li>
+<li><b>全屏</b>：在投屏窗口按 F 键</li>
+<li><b>翻页</b>：键盘左右方向键 / 空格键 / 底部按钮</li>
+<li><b>黑屏/白屏</b>：按 B 键黑屏，按 W 键白屏</li>
+</ul>
+<h4>3. 主领视角</h4>
+<ul>
+<li><b>打开</b>：点击「主领视图」按钮，可用手机扫码</li>
+<li><b>显示模式</b>：底部工具栏 🔍单句 / 📋多句 / 📜滚动</li>
+<li><b>翻页</b>：左右滑动屏幕 / 键盘方向键</li>
+<li><b>备注</b>：点击 ✏️ 进入编辑模式 → 点击歌词行末尾 ⊕ 添加 → 再次点击 ✏️ 退出</li>
+<li><b>查看备注</b>：有备注的行末尾有金色标记点，点击查看</li>
+<li><b>背景</b>：🌙纯黑 / ✨粒子</li>
+<li><b>工具栏</b>：3秒无操作自动隐藏，移动鼠标重新出现</li>
+</ul>
+<h4>4. 播放列表</h4>
+<ul>
+<li><b>添加</b>：在诗歌库中点击诗歌右侧的「+」</li>
+<li><b>排序</b>：拖拽播放列表中的诗歌上下移动</li>
+<li><b>删除</b>：点击诗歌旁的「✕」</li>
+<li><b>开始播放</b>：点击「▶ 开始播放」</li>
+<li><b>自动切换</b>：勾选「🔄 自动切换」后，当前歌唱完自动播下一首</li>
+</ul>
+<h4>5. 云端发布与在线搜索</h4>
+<ul>
+<li><b>发布诗歌</b>：编辑完成后点击「☁️ 发布到云端」</li>
+<li><b>搜索诗歌</b>：在「在线搜索诗歌」框输入关键词</li>
+<li><b>导入诗歌</b>：搜索结果中点击「导入」，自动加入本地诗歌库</li>
+</ul>
+<h4>6. 导入/导出</h4>
+<ul>
+<li><b>导出</b>：点击「📤 导出」，下载 .worship 备份文件</li>
+<li><b>导入</b>：点击「📥 导入」，选择之前导出的文件恢复数据</li>
+</ul>
+<h3>三、快捷键</h3>
+<table>
+<tr><td>空格 / → / ↓</td><td>下一页</td></tr>
+<tr><td>← / ↑</td><td>上一页</td></tr>
+<tr><td>F</td><td>全屏（投屏窗口）</td></tr>
+<tr><td>B</td><td>黑屏（投屏窗口）</td></tr>
+<tr><td>W</td><td>白屏（投屏窗口）</td></tr>
+<tr><td>ESC</td><td>退出全屏 / 关闭弹窗</td></tr>
+</table>
+<h3>四、常见问题</h3>
+<ul>
+<li><b>投屏窗口空白？</b> → 回到主页面，点击「应用到演示屏」</li>
+<li><b>主领视图无歌词？</b> → 同样需要点击「应用到演示屏」</li>
+<li><b>云端发布失败？</b> → 检查网络，或稍后重试</li>
+<li><b>页面布局乱了？</b> → 按 Ctrl+Shift+R 强制刷新</li>
+<li><b>数据会丢失吗？</b> → 数据保存在浏览器本地，建议定期导出备份</li>
+<li><b>手机能用吗？</b> → 可以，浏览器打开网址即可，推荐横屏使用</li>
+</ul>
+<p style="text-align:center; color:var(--text-secondary); margin-top:20px;">© 2026 敬拜投屏工具 · 基于 MIT 许可证开源</p>
+            `;
+            panel.appendChild(content);
+            modal.appendChild(panel);
+            modal.addEventListener("click", (e) => {
+                if (e.target === modal) modal.style.display = "none";
+            });
+            document.body.appendChild(modal);
+        }
+        modal.style.display = "flex";
+    }
+
     function escapeHtml(text) {
         return String(text)
             .replace(/&/g, "&amp;")
@@ -692,7 +795,7 @@
             showToast("无歌词可发布", btn);
             return;
         }
-        const url = "https://script.google.com/macros/s/AKfycbzUW1yB8gObRnSjUyWpRivWWI4KuD-ba9m5eYZU4TbdKUvuajcpaSaMxZ61JjBFyjkUXQ/exec";
+        const url = "https://script.google.com/macros/s/AKfycbxfgpo09kVSdC_1Tm7QOyDVGB2nRYv0sxk7_LCzcLdycPMSmtNFeKmxeTRYJ9d42_ODXA/exec";
         publishInFlight = true;
         if (btn) btn.disabled = true;
         if (btn) btn.textContent = "发布中...";
@@ -941,6 +1044,7 @@
             saveCurrentLyrics();
         });
         on("ocr-btn", "click", () => $("ocr-file-input")?.click());
+        on("help-btn", "click", openHelpModal);
         on("ocr-file-input", "change", async (e) => {
             const file = e.target.files?.[0];
             if (!file) return;

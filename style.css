@@ -60,6 +60,7 @@ body { font-family: 'Microsoft YaHei','PingFang SC',sans-serif; background: var(
 .meta-field label { color:var(--text-secondary); font-size:0.85rem; }
 .meta-field input { background:var(--editor-bg); border:1px solid var(--editor-border); color:var(--text-primary); padding:5px 8px; border-radius:16px; width:70px; font-size:0.85rem; }
 .editor-toolbar { display:flex; gap:12px; align-items:center; margin-bottom:8px; flex-wrap:wrap; }
+#help-btn { display:inline-flex; align-items:center; justify-content:center; }
 #song-meta-details { background:rgba(255,255,255,0.03); border-radius:12px; margin-bottom:10px; }
 #song-meta-details summary { cursor:pointer; padding:8px 12px; background:rgba(255,255,255,0.05); border-radius:10px; color:var(--text-secondary); font-size:0.9rem; list-style:none; user-select:none; transition:all 0.2s ease; }
 #song-meta-details summary:hover { background:rgba(255,255,255,0.08); color:var(--text-primary); }

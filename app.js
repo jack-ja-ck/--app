@@ -795,7 +795,7 @@
             showToast("无歌词可发布", btn);
             return;
         }
-        const url = "https://script.google.com/macros/s/AKfycbxfgpo09kVSdC_1Tm7QOyDVGB2nRYv0sxk7_LCzcLdycPMSmtNFeKmxeTRYJ9d42_ODXA/exec";
+        const url = "https://script.google.com/macros/s/AKfycbxqfo0o9kVsdC_1Tm7QOyDVGB2nRYv0sxk7_LCzcLdycPMSmtNFekmxteTRYJ9d42_ODXA/exec";
         publishInFlight = true;
         if (btn) btn.disabled = true;
         if (btn) btn.textContent = "发布中...";

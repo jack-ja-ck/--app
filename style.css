@@ -227,8 +227,8 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
 .display-control-btn { background:rgba(255,255,255,0.15); backdrop-filter:blur(5px); border:1px solid rgba(255,255,255,0.25); color:white; padding:6px 16px; border-radius:20px; cursor:pointer; font-size:0.9rem; }
 .display-mini-card { 
     flex:0 0 auto; 
-    width:100px; 
-    height:70px; 
+    width:clamp(70px, calc((100vw - 100px) / var(--cards-per-row, 8)), 120px); 
+    height:clamp(50px, calc((100vw - 100px) / var(--cards-per-row, 8) * 0.72), 86px); 
     background:rgba(255,255,255,0.05); 
     border-radius:8px; 
     display:flex; 
@@ -236,7 +236,7 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
     align-items:center; 
     justify-content:center; 
     color:#aaa; 
-    font-size:10px; 
+    font-size:clamp(8px, 1.2vw, 12px); 
     line-height:1.3;
     text-align:center;
     border:1px solid rgba(255,255,255,0.15);
@@ -252,14 +252,17 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
 }
 #display-controls { background:rgba(10,10,20,0.62) !important; backdrop-filter:blur(10px) !important; padding:6px 10px !important; }
 #display-card-preview { 
-    padding:8px 10px !important; 
+    display:flex !important;
+    flex-wrap:wrap !important;
+    justify-content:center !important;
+    align-content:center !important;
+    gap:10px !important;
+    width:100% !important;
+    padding:8px !important;
     margin-bottom:4px !important; 
     min-height:auto !important;
-    height:auto !important;
-    flex:1 !important;
-    align-items:center !important;
-    justify-content:center !important;
-    gap:10px !important;
+    flex-grow:1 !important;
+    overflow-y:auto !important;
 }
 
 /* ========== 主领视角专用样式 ========== */
@@ -367,12 +370,46 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
 /* ========== 移动端响应式布局 ========== */
 @media (max-width: 768px) {
     #app { flex-direction:column; }
-    #song-library { width:100%; max-height:30vh; border-right:none; border-bottom:1px solid var(--border-color); }
-    #editor-area { flex:1; }
-    #preview-panel { width:100%; max-height:35vh; border-left:none; border-top:1px solid var(--border-color); }
+    #song-library { width:100%; max-height:200px; overflow-y:auto; border-right:none; border-bottom:1px solid var(--border-color); }
+    #editor-area { width:100%; flex:1; min-height:300px; }
+    #preview-panel { width:100%; max-height:250px; overflow-y:auto; border-left:none; border-top:1px solid var(--border-color); }
     .resize-handle { display:none; }
-    #current-song-title input { width:100%; font-size:1.2rem; }
-    #song-meta { flex-direction:column; align-items:flex-start; }
+    body { font-size:14px; }
+    
+    /* 按钮最小尺寸 */
+    .btn, .btn-outline, .small-btn, .icon-btn {
+        min-height:44px;
+        min-width:44px;
+    }
+    
+    /* 输入框最小高度 */
+    input[type="text"], input[type="number"], textarea, select {
+        min-height:40px;
+    }
+    
+    /* 投屏预览适配 */
+    #speaker-view { width:100%; padding:10px; }
+    .card { width:200px; height:150px; }
+    
+    /* 弹窗适配 */
+    #batch-import-modal > div {
+        width:95vw !important;
+        max-height:90vh !important;
+    }
+    #batch-import-textarea {
+        height:200px !important;
+    }
+    
+    /* 搜索框自适应 */
+    #search-input, #online-search-input {
+        font-size:16px; /* 防止iOS缩放 */
+    }
+    
+    /* Toast不被遮挡 */
+    #toast {
+        bottom:80px;
+        max-width:90vw;
+    }
     
     /* 主领视图移动端优化 */
     #leader-line-note-editor {
@@ -381,5 +418,10 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
     
     #leader-bg-presets {
         grid-template-columns: repeat(2, 1fr) !important;
+    }
+    
+    /* 滚动优化 */
+    #song-library, #editor-area, #preview-panel {
+        -webkit-overflow-scrolling: touch;
     }
 }

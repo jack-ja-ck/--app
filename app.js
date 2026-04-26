@@ -788,7 +788,8 @@
         function render(state) {
             if (!state || ended) return;
             const {song, currentPageIndex, totalPages, isTitlePage} = state;
-            const lyrics = song.lyrics;
+            // 使用Array.isArray检查lyrics
+            const lyrics = Array.isArray(song.lyrics) ? song.lyrics : [];
             let html = '';
             if (isTitlePage && lyrics.length > 0) {
                 html = `<div style="color:white; font-weight:bold; text-shadow:3px 3px 8px black; font-size:${song.fontSize*1.8}px; line-height:1.8; white-space:normal; word-break:break-word; font-family:${song.fontFamily || DEFAULT_FONT_FAMILY};">${lyrics[0]}</div>`;
@@ -802,8 +803,23 @@
             dcPageIndicator.textContent = `${currentPageIndex+1}/${totalPages}`;
 
             // 更新底部卡片预览 - 显示所有页面，自动换行，显示完整歌词（最多4行）
+            updateDisplayCardPreview(state, currentPageIndex, totalPages);
+        }
+        
+        // 动态计算并渲染底部卡片预览
+        function updateDisplayCardPreview(state, currentPageIndex, totalPages) {
             dcCardPreview.innerHTML = '';
             const pages = Array.isArray(state.pages) ? state.pages : [];
+            
+            // 计算每行可显示的卡片数量（基于窗口宽度）
+            const cardMinWidth = 80; // 最小卡片宽度
+            const gap = 10;
+            const containerPadding = 20;
+            const availableWidth = window.innerWidth - containerPadding;
+            const cardsPerRow = Math.max(3, Math.floor(availableWidth / (cardMinWidth + gap)));
+            
+            // 设置CSS变量供clamp使用
+            dcCardPreview.style.setProperty('--cards-per-row', cardsPerRow);
             
             for (let i = 0; i < totalPages; i++) {
                 const mini = document.createElement('div');
@@ -816,11 +832,11 @@
                 // 显示完整歌词（限制最多4行）
                 const displayLines = cleanLines.slice(0, 4);
                 mini.innerHTML = displayLines.map(line => 
-                    `<div style="font-size:10px;line-height:1.3;color:${i === currentPageIndex ? '#fff' : '#aaa'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;text-align:center;">${line}</div>`
+                    `<div style="line-height:1.3;color:${i === currentPageIndex ? '#fff' : '#aaa'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;text-align:center;">${line}</div>`
                 ).join('');
                 
                 if (cleanLines.length > 4) {
-                    mini.innerHTML += '<div style="font-size:8px;color:#666;margin-top:2px;">...</div>';
+                    mini.innerHTML += '<div style="opacity:0.5;margin-top:2px;font-size:0.8em;">...</div>';
                 }
                 
                 mini.title = cleanLines.join('\n');
@@ -829,6 +845,13 @@
                     dc.postMessage({ type: 'jump', pageIndex: i });
                 });
                 dcCardPreview.appendChild(mini);
+            }
+        }
+        
+        // 窗口大小改变时重新计算卡片布局
+        window.addEventListener('resize', () => {
+            if (currentState) {
+                updateDisplayCardPreview(currentState, currentState.currentPageIndex, currentState.totalPages);
             }
 
             // 移除自动结束逻辑，让投屏停留在最后一页
@@ -844,17 +867,29 @@
         const dc = new BroadcastChannel('worship_channel');
         dc.addEventListener('message', e => {
             if (e.data.type === 'update') {
-                currentState = e.data;
-                ended = false;
-                endedOverlay.style.display = 'none';
-                lyricsDiv.style.display = 'block';
-                render(currentState);
+                // 无条件调用render，用Array.isArray检查lyrics
+                if (e.data.song && Array.isArray(e.data.song.lyrics)) {
+                    currentState = e.data;
+                    ended = false;
+                    endedOverlay.style.display = 'none';
+                    lyricsDiv.style.display = 'block';
+                    render(currentState);
+                }
             } else if (e.data.type === 'jump') {
                 // 跳转到指定页面
                 dc.postMessage({ type: 'jump', pageIndex: e.data.pageIndex });
             }
         });
-        dc.postMessage({ type: 'request_state' });
+        
+        // 状态请求重试机制
+        let retryCount = 0;
+        const requestState = () => {
+            if (retryCount >= 3) return;
+            dc.postMessage({ type: 'request_state' });
+            retryCount++;
+            setTimeout(requestState, 500);
+        };
+        requestState();
 
         dcPrev.addEventListener('click', () => dc.postMessage({ type: 'prev' }));
         dcNext.addEventListener('click', () => dc.postMessage({ type: 'next' }));
@@ -1184,7 +1219,8 @@
         // 渲染分页模式
         function renderPageMode(state) {
             const { song, currentPageIndex, totalPages, pages } = state;
-            const lyrics = song.lyrics || [];
+            // 使用Array.isArray严格检查lyrics
+            const lyrics = Array.isArray(song.lyrics) ? song.lyrics : [];
             const fontSize = (song.fontSize || 56) * 1.3;
             
             let html = '';
@@ -1575,7 +1611,8 @@
         // ========== 渲染分页模式（增强版） ==========
         function renderPageMode(state) {
             const { song, currentPageIndex, totalPages, pages } = state;
-            const lyrics = song.lyrics || [];
+            // 使用Array.isArray严格检查lyrics
+            const lyrics = Array.isArray(song.lyrics) ? song.lyrics : [];
             const fontSize = (song.fontSize || 56) * 1.3;
             
             let html = '<div style="position:relative;">';
@@ -1777,7 +1814,7 @@
                 console.log('[LeaderView] Updating state with song:', e.data.song?.title);
                 console.log('[LeaderView] Lyrics:', e.data.song?.lyrics);
                 console.log('[LeaderView] Pages:', e.data.pages);
-                // 确保数据完整性 - 检查song存在且lyrics是数组
+                // 无条件调用render，用Array.isArray检查lyrics
                 if (e.data.song && Array.isArray(e.data.song.lyrics)) {
                     render(e.data);
                 } else {
@@ -1801,14 +1838,15 @@
             }
         });
         
-        // 立即发送请求，然后延迟再次请求以确保主窗口已准备好
-        dc.postMessage({ type: 'request_state' });
-        setTimeout(() => {
+        // 状态请求重试机制
+        let retryCount = 0;
+        const requestState = () => {
+            if (retryCount >= 3) return;
             dc.postMessage({ type: 'request_state' });
-        }, 100);
-        setTimeout(() => {
-            dc.postMessage({ type: 'request_state' });
-        }, 500);
+            retryCount++;
+            setTimeout(requestState, 500);
+        };
+        requestState();
 
         // 初始化粒子
         initParticles();
@@ -2084,9 +2122,20 @@
     }
 
     function handleBgImageUpload(file) {
-        const reader = new FileReader();
-        reader.onload = (e) => { setBackground('image', e.target.result); showToast('背景已上传'); };
-        reader.readAsDataURL(file);
+        try {
+            const reader = new FileReader();
+            reader.onload = (e) => { 
+                setBackground('image', e.target.result); 
+                showToast('背景已上传'); 
+            };
+            reader.onerror = () => {
+                showToast('上传失败，请检查图片格式');
+            };
+            reader.readAsDataURL(file);
+        } catch (err) {
+            showToast('上传失败，请检查图片格式');
+            console.error('Background upload error:', err);
+        }
     }
 
     // ========== OCR 等辅助功能 ==========

@@ -64,6 +64,8 @@
     let projectionBgImage = null;
     let projectionRaf = 0;
     let projectionLastTs = 0;
+    let publishInFlight = false;
+    let publishBlockedBy405 = false;
 
     function $(id) {
         return document.getElementById(id);
@@ -674,15 +676,24 @@
         showToast("已新建诗歌", $("new-song-btn"));
     }
 
-    async function publishSong() {
+    function publishSong() {
         syncEditorToSong();
         const s = currentSong() || { title: "", lyrics: "", tags: "" };
+        const btn = $("publish-song-btn");
+        if (publishBlockedBy405) {
+            showToast("发布通道已暂停（405）", btn);
+            return;
+        }
+        if (publishInFlight) {
+            showToast("发布进行中，请稍候", btn);
+            return;
+        }
         if (!String(s.lyrics || "").trim().length) {
-            showToast("无歌词可发布", $("publish-song-btn"));
+            showToast("无歌词可发布", btn);
             return;
         }
         const url = "https://script.google.com/macros/s/AKfycbzUW1yB8gObRnSjUyWpRivWWI4KuD-ba9m5eYZU4TbdKUvuajcpaSaMxZ61JjBFyjkUXQ/exec";
-        const btn = $("publish-song-btn");
+        publishInFlight = true;
         if (btn) btn.disabled = true;
         if (btn) btn.textContent = "发布中...";
 
@@ -692,40 +703,63 @@
             tags: Array.isArray(s.tags) ? s.tags : String(s.tags || "").split(/[,\s]+/).filter(Boolean)
         };
 
-        try {
-            const response = await fetch(url, {
-                method: "POST",
-                mode: "no-cors",
-                cache: "no-cache",
-                headers: { "Content-Type": "application/json" },
-                redirect: "follow",
-                referrerPolicy: "no-referrer",
-                body: JSON.stringify(payload)
-            });
+        const exportTempPublishFile = () => {
+            const content = [
+                "Publish fallback snapshot",
+                `time: ${new Date().toISOString()}`,
+                `title: ${payload.title}`,
+                "lyrics:",
+                payload.lyrics,
+                `tags: ${(payload.tags || []).join(", ")}`
+            ].join("\n");
+            const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+            const tempUrl = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = tempUrl;
+            a.download = `publish-fallback-${Date.now()}.txt`;
+            a.click();
+            URL.revokeObjectURL(tempUrl);
+        };
 
-            if (response.ok || response.type === "opaque") {
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", url, true);
+        xhr.setRequestHeader("Content-Type", "application/json");
+        xhr.onreadystatechange = () => {
+            if (xhr.readyState !== 4) return;
+            publishInFlight = false;
+            if (xhr.status >= 200 && xhr.status < 300) {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = "发布到云端";
+                }
                 showToast("已发布到云端", btn);
-            } else {
-                const text = await response.text();
-                if (btn) btn.textContent = "重新发布";
-                showToast(`发布失败：${text.slice(0, 30)}`, btn);
                 return;
             }
-        } catch (e) {
-            console.error("发布失败:", e);
+            if (xhr.status === 405) {
+                publishBlockedBy405 = true;
+                exportTempPublishFile();
+                if (btn) {
+                    btn.disabled = true;
+                    btn.textContent = "发布已暂停";
+                }
+                showToast("405：已改为临时文本发布", btn);
+                return;
+            }
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = "发布到云端";
+            }
+            showToast(`发布失败：${String(xhr.status || "未知错误")}`, btn);
+        };
+        xhr.onerror = () => {
+            publishInFlight = false;
             if (btn) {
                 btn.disabled = false;
                 btn.textContent = "发布到云端";
             }
             showToast("发布失败，请稍后再试", btn);
-            return;
-        }
-
-        if (btn) {
-            btn.disabled = false;
-            btn.textContent = "发布到云端";
-        }
-        showToast("已发布到云端", btn);
+        };
+        xhr.send(JSON.stringify(payload));
     }
 
     function exportData() {

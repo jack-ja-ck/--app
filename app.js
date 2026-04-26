@@ -1777,8 +1777,8 @@
                 console.log('[LeaderView] Updating state with song:', e.data.song?.title);
                 console.log('[LeaderView] Lyrics:', e.data.song?.lyrics);
                 console.log('[LeaderView] Pages:', e.data.pages);
-                // 确保数据完整性
-                if (e.data.song && e.data.song.lyrics) {
+                // 确保数据完整性 - 检查song存在且lyrics是数组
+                if (e.data.song && Array.isArray(e.data.song.lyrics)) {
                     render(e.data);
                 } else {
                     console.warn('[LeaderView] Incomplete data received');

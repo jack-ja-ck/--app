@@ -674,53 +674,58 @@
         showToast("已新建诗歌", $("new-song-btn"));
     }
 
-    function publishSong() {
+    async function publishSong() {
         syncEditorToSong();
-        const song = currentSong();
-        if (!song) {
-            showToast("无可发布内容", $("publish-song-btn"));
+        const s = currentSong() || { title: "", lyrics: "", tags: "" };
+        if (!String(s.lyrics || "").trim().length) {
+            showToast("无歌词可发布", $("publish-song-btn"));
             return;
         }
         const url = "https://script.google.com/macros/s/AKfycbzUW1yB8gObRnSjUyWpRivWWI4KuD-ba9m5eYZU4TbdKUvuajcpaSaMxZ61JjBFyjkUXQ/exec";
+        const btn = $("publish-song-btn");
+        if (btn) btn.disabled = true;
+        if (btn) btn.textContent = "发布中...";
+
         const payload = {
-            title: song.title || "",
-            lyrics: song.lyrics || "",
-            key: song.key || "",
-            tempo: song.tempo || "",
-            notes: song.notes || "",
-            tags: song.tags || "",
-            updatedAt: new Date().toISOString()
+            title: s.title || "",
+            lyrics: s.lyrics || "",
+            tags: Array.isArray(s.tags) ? s.tags : String(s.tags || "").split(/[,\s]+/).filter(Boolean)
         };
-        showToast("发布中...", $("publish-song-btn"));
-        fetch(url, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload)
-        }).then(async (res) => {
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            let ok = true;
-            try {
-                const data = await res.clone().json();
-                if (data && data.ok === false) ok = false;
-            } catch (_e) {
-                // Some apps return plain text; treat HTTP 2xx as success.
-            }
-            if (ok) {
-                const praises = [
-                    "✨ 已发布！感谢你的分享！",
-                    "🎵 诗歌已上传，祝福更多人！",
-                    "🙌 发布成功，愿敬拜被点燃！",
-                    "🌟 云端同步完成，辛苦了！",
-                    "💒 发布成功，愿主同在！"
-                ];
-                const msg = praises[Math.floor(Math.random() * praises.length)];
-                showToast(msg, $("publish-song-btn"));
+
+        try {
+            const response = await fetch(url, {
+                method: "POST",
+                mode: "no-cors",
+                cache: "no-cache",
+                headers: { "Content-Type": "application/json" },
+                redirect: "follow",
+                referrerPolicy: "no-referrer",
+                body: JSON.stringify(payload)
+            });
+
+            if (response.ok || response.type === "opaque") {
+                showToast("已发布到云端", btn);
             } else {
-                showToast("发布失败，请检查网络", $("publish-song-btn"));
+                const text = await response.text();
+                if (btn) btn.textContent = "重新发布";
+                showToast(`发布失败：${text.slice(0, 30)}`, btn);
+                return;
             }
-        }).catch(() => {
-            showToast("发布失败，请检查网络", $("publish-song-btn"));
-        });
+        } catch (e) {
+            console.error("发布失败:", e);
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = "发布到云端";
+            }
+            showToast("发布失败，请稍后再试", btn);
+            return;
+        }
+
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = "发布到云端";
+        }
+        showToast("已发布到云端", btn);
     }
 
     function exportData() {

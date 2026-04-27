@@ -1021,10 +1021,13 @@
             btn.style.cssText = "width:auto;margin-top:0;padding:4px 8px;white-space:nowrap;";
             btn.textContent = "导入";
             btn.addEventListener("click", () => {
+                const lyrics = Array.isArray(row.lyrics)
+                    ? row.lyrics.map((line) => String(line || "")).join("\n")
+                    : String(row.lyrics || "");
                 const imported = {
                     id: uid(),
                     title: String(row.title || "未命名"),
-                    lyrics: String(row.lyrics || ""),
+                    lyrics,
                     key: "",
                     tempo: "",
                     notes: "",
@@ -1216,29 +1219,50 @@
 
     async function publishSong() {
         const s = getCurrentSong();
-        if (!String(s.lyrics || "").trim()) {
+        const lyricLines = String(s.lyrics || "")
+            .replace(/\r/g, "")
+            .split("\n")
+            .map((line) => line.trim())
+            .filter(Boolean);
+        if (!lyricLines.length) {
             showToast("无歌词可发布");
             return;
         }
-        const HYMN_PUBLISH_URL =
-            "https://script.google.com/macros/s/AKfycbx95LNWRhLyQZRPXZeMTGfezM7M5FCEMNXiSEhSA9uYYvpLN71Qij3w-DGsZ1_8XSvK1Q/exec";
+        if (!supabase) {
+            showToast("Supabase 未初始化");
+            return;
+        }
+        if (publishInFlight) return;
+        publishInFlight = true;
+        const title = String(s.title || "未命名").trim() || "未命名";
+        const tags = Array.isArray(s.tags)
+            ? s.tags.map((t) => String(t || "").trim()).filter(Boolean)
+            : String(s.tags || "").split(/[,，\s]+/).map((t) => t.trim()).filter(Boolean);
         try {
-            const response = await fetch(HYMN_PUBLISH_URL, {
-                method: "POST",
-                mode: "cors",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ title: s.title, lyrics: s.lyrics, tags: s.tags || [] })
-            });
-            if (response.ok) {
-                showToast("✅ 已发布到云端");
-            } else {
-                const errText = await response.text().catch(() => "");
-                console.error("publishSong:", response.status, errText);
-                showToast("❌ 发布失败，请重试");
+            const { data: existing, error: lookupError } = await supabase
+                .from("hymns")
+                .select("title")
+                .eq("title", title)
+                .limit(1);
+            if (lookupError) {
+                console.warn("publishSong duplicate check failed:", lookupError);
+            } else if (Array.isArray(existing) && existing.length) {
+                showToast("⚠️ 该诗歌已发布过");
+                return;
             }
+
+            const { error } = await supabase.from("hymns").insert([{ title, lyrics: lyricLines, tags }]);
+            if (error) {
+                console.error("publishSong Supabase error:", error);
+                showToast("❌ 发布失败，请重试");
+                return;
+            }
+            showToast("✅ 已发布到云端");
         } catch (e) {
             console.error("publishSong:", e);
             showToast("❌ 发布失败，请重试");
+        } finally {
+            publishInFlight = false;
         }
     }
 

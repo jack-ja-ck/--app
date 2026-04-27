@@ -1503,8 +1503,8 @@
                 end();
             });
         };
-        bind(r1, left, 180, 520, false);
-        bind(r2, right, 80, 900, true);
+        bind(r1, left, 200, 520, false);
+        bind(r2, right, 240, 900, true);
     }
 
     function initPreviewResize() {
@@ -2110,6 +2110,9 @@
             let touchStartY = 0;
             let swipeFromBottomY = null;
             let mouseBottomStartY = null;
+            const leaderTabletRange = window.matchMedia("(min-width: 768px) and (max-width: 1024px)");
+            const leaderBottomSwipeBand = () => (leaderTabletRange.matches ? 140 : 100);
+            const leaderBottomSwipeMinDy = () => (leaderTabletRange.matches ? 36 : 20);
 
             host.classList.add("leader-host");
             lyricLayer.classList.add("leader-lyric-shell");
@@ -2409,7 +2412,11 @@
                     brushCanvas.addEventListener("mousemove", moveBrush);
                     window.addEventListener("mouseup", endBrush);
                     brushCanvas.addEventListener("touchstart", beginBrush, { passive: false });
-                    brushCanvas.addEventListener("touchmove", moveBrush, { passive: false });
+                    const brushWindowTouchMove = (ev) => {
+                        if (!brushMode || !brushDrawing || !brushCtx) return;
+                        moveBrush(ev);
+                    };
+                    window.addEventListener("touchmove", brushWindowTouchMove, { passive: false });
                     window.addEventListener("touchend", endBrush, { passive: true });
                     window.addEventListener("touchcancel", endBrush, { passive: true });
                     mount.appendChild(brushCanvas);
@@ -2657,7 +2664,7 @@
                 if (toolbarCollapsed && !brushMode) setToolbarCollapsed(false);
                 touchStartX = e.changedTouches?.[0]?.clientX || 0;
                 touchStartY = e.changedTouches?.[0]?.clientY || 0;
-                if (toolbarCollapsed && touchStartY > window.innerHeight - 100) swipeFromBottomY = touchStartY;
+                if (toolbarCollapsed && touchStartY > window.innerHeight - leaderBottomSwipeBand()) swipeFromBottomY = touchStartY;
                 else swipeFromBottomY = null;
                 showToolbar();
             }, { passive: true });
@@ -2668,7 +2675,7 @@
                 const dx = x - touchStartX;
                 const dy = y - touchStartY;
                 if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) flip(dx < 0 ? 1 : -1);
-                if (toolbarCollapsed && swipeFromBottomY != null && y < swipeFromBottomY - 20) setToolbarCollapsed(false);
+                if (toolbarCollapsed && swipeFromBottomY != null && y < swipeFromBottomY - leaderBottomSwipeMinDy()) setToolbarCollapsed(false);
                 swipeFromBottomY = null;
                 showToolbar();
             }, { passive: true });
@@ -2693,11 +2700,11 @@
             });
             host.addEventListener("mousedown", (e) => {
                 if (brushMode || e.button !== 0) return;
-                mouseBottomStartY = e.clientY > window.innerHeight - 100 ? e.clientY : null;
+                mouseBottomStartY = e.clientY > window.innerHeight - leaderBottomSwipeBand() ? e.clientY : null;
             });
             window.addEventListener("mouseup", (e) => {
                 if (brushMode || mouseBottomStartY == null) return;
-                if (toolbarCollapsed && e.clientY < mouseBottomStartY - 20) setToolbarCollapsed(false);
+                if (toolbarCollapsed && e.clientY < mouseBottomStartY - leaderBottomSwipeMinDy()) setToolbarCollapsed(false);
                 mouseBottomStartY = null;
             });
             document.addEventListener("click", (e) => {

@@ -7,6 +7,33 @@
         LIVE: "worship.live.v5",
         PLAYLIST: "playlist"
     };
+    const THEME_BG_STORAGE = "worship.theme_bg.v1";
+    const THEME_BG_OPACITY_STORAGE = "theme_bg_opacity";
+    const UPLOADED_BACKGROUNDS_STORAGE = "uploaded_backgrounds";
+    const LEGACY_LYRIC_BGS_STORAGE = "worship.lyric_bgs.v1";
+    const CSS_DYNAMIC_BG_TYPES = new Set(["gentle-light", "starry-night", "cross-glow"]);
+
+    function clearCssDynamicBgClass(el) {
+        if (!el) return;
+        CSS_DYNAMIC_BG_TYPES.forEach((t) => el.classList.remove(`css-bg-${t}`));
+    }
+
+    function removeProjectionCssBg() {
+        $("projection-css-bg")?.remove();
+    }
+
+    function ensureProjectionCssBg(type) {
+        const host = $("projection-host");
+        if (!host || !CSS_DYNAMIC_BG_TYPES.has(type)) return;
+        let el = $("projection-css-bg");
+        if (!el) {
+            el = document.createElement("div");
+            el.id = "projection-css-bg";
+            el.style.cssText = "position:absolute;inset:0;z-index:0;pointer-events:none;";
+            host.insertBefore(el, host.firstChild);
+        }
+        el.className = `projection-css-bg-fill css-bg-${type}`;
+    }
     const CHANNEL_NAME = "worship_channel";
     const DEFAULT_LYRICS = "奇异恩典\n何等甘甜\n我罪已得赦免\n\n前我失丧\n今被寻回\n瞎眼得看见";
     const DEFAULT_SONG = {
@@ -38,6 +65,7 @@
             posY: 45,
             bgType: "solid-black",
             bgImage: "",
+            lyricsBgShareToCloud: false,
             fontColor: "#ffffff"
         },
         sizePreset: "M",
@@ -66,6 +94,7 @@
     let projectionLastTs = 0;
     let publishInFlight = false;
     let publishBlockedBy405 = false;
+    let defaultSongPosY = 45;
     const SUPABASE_URL = "https://yetcpiorfvtysqmfsdso.supabase.co";
     const SUPABASE_ANON_KEY = "sb_publishable__jbNKXA82g1YoNcOOVDUFg_eO618zti";
     const supabase = (window.supabase && typeof window.supabase.createClient === "function")
@@ -78,6 +107,20 @@
 
     function clamp(v, min, max) {
         return Math.max(min, Math.min(max, v));
+    }
+
+    function lyricBlockTopPadPx(boxHeight, posY) {
+        const h = Number(boxHeight) || 0;
+        const py = clamp(Number(posY) || 45, 20, 70);
+        if (h <= 0) return 12;
+        return Math.round(8 + ((py - 18) / 100) * h);
+    }
+
+    function syncPosYFromCurrentSong() {
+        const song = currentSong();
+        state.ui.posY = song && Number.isFinite(Number(song.posY))
+            ? clamp(Number(song.posY), 20, 70)
+            : defaultSongPosY;
     }
 
     function uid() {
@@ -125,8 +168,14 @@
         }, 1500);
     }
 
+    function getHelpModalInnerHtml() {
+        const tpl = $("help-modal-content-template");
+        return tpl ? tpl.innerHTML.trim() : "";
+    }
+
     function openHelpModal() {
         let modal = $("help-modal");
+        const html = getHelpModalInnerHtml();
         if (!modal) {
             modal = document.createElement("div");
             modal.id = "help-modal";
@@ -143,87 +192,17 @@
             });
             panel.appendChild(closeBtn);
             const content = document.createElement("div");
-            content.innerHTML = `
-<h2>📖 使用帮助</h2>
-<h3>一、界面概览</h3>
-<table>
-<tr><td><b>诗歌库</b></td><td>左侧</td><td>管理所有诗歌：新建、搜索、标签筛选、播放列表</td></tr>
-<tr><td><b>编辑区</b></td><td>中间</td><td>编辑当前诗歌歌词、调性、速度、备注</td></tr>
-<tr><td><b>设置面板</b></td><td>右侧</td><td>调整背景、字体、行数、位置、自动播放</td></tr>
-<tr><td><b>快速预览</b></td><td>右侧上部</td><td>实时预览当前页歌词</td></tr>
-</table>
-<h3>二、核心功能</h3>
-<h4>1. 编辑诗歌</h4>
-<ul>
-<li><b>新建</b>：点击左侧「+」或「新建诗歌」</li>
-<li><b>编辑歌词</b>：在中间编辑区输入，一行一句</li>
-<li><b>分页</b>：用空行或 [page] 标记分页位置</li>
-<li><b>歌名页</b>：第一段只有一行时，自动识别为歌名页（投屏时大字显示）</li>
-<li><b>保存</b>：点击「保存歌词」</li>
-<li><b>应用到演示屏</b>：编辑完成后必须点击，投屏和主领视图才会更新</li>
-</ul>
-<h4>2. 投屏演示</h4>
-<ul>
-<li><b>打开投屏</b>：点击「开启投屏」，弹出新窗口</li>
-<li><b>全屏</b>：在投屏窗口按 F 键</li>
-<li><b>翻页</b>：键盘左右方向键 / 空格键 / 底部按钮</li>
-<li><b>黑屏/白屏</b>：按 B 键黑屏，按 W 键白屏</li>
-</ul>
-<h4>3. 主领视角</h4>
-<ul>
-<li><b>打开</b>：点击「主领视图」按钮，可用手机扫码</li>
-<li><b>显示模式</b>：底部工具栏 🔍单句 / 📋多句 / 📜滚动</li>
-<li><b>翻页</b>：左右滑动屏幕 / 键盘方向键</li>
-<li><b>备注</b>：点击 ✏️ 进入编辑模式 → 点击歌词行末尾 ⊕ 添加 → 再次点击 ✏️ 退出</li>
-<li><b>查看备注</b>：有备注的行末尾有金色标记点，点击查看</li>
-<li><b>背景</b>：🌙纯黑 / ✨粒子</li>
-<li><b>工具栏</b>：3秒无操作自动隐藏，移动鼠标重新出现</li>
-</ul>
-<h4>4. 播放列表</h4>
-<ul>
-<li><b>添加</b>：在诗歌库中点击诗歌右侧的「+」</li>
-<li><b>排序</b>：拖拽播放列表中的诗歌上下移动</li>
-<li><b>删除</b>：点击诗歌旁的「✕」</li>
-<li><b>开始播放</b>：点击「▶ 开始播放」</li>
-<li><b>自动切换</b>：勾选「🔄 自动切换」后，当前歌唱完自动播下一首</li>
-</ul>
-<h4>5. 云端发布与在线搜索</h4>
-<ul>
-<li><b>发布诗歌</b>：编辑完成后点击「☁️ 发布到云端」</li>
-<li><b>搜索诗歌</b>：在「在线搜索诗歌」框输入关键词</li>
-<li><b>导入诗歌</b>：搜索结果中点击「导入」，自动加入本地诗歌库</li>
-</ul>
-<h4>6. 导入/导出</h4>
-<ul>
-<li><b>导出</b>：点击「📤 导出」，下载 .worship 备份文件</li>
-<li><b>导入</b>：点击「📥 导入」，选择之前导出的文件恢复数据</li>
-</ul>
-<h3>三、快捷键</h3>
-<table>
-<tr><td>空格 / → / ↓</td><td>下一页</td></tr>
-<tr><td>← / ↑</td><td>上一页</td></tr>
-<tr><td>F</td><td>全屏（投屏窗口）</td></tr>
-<tr><td>B</td><td>黑屏（投屏窗口）</td></tr>
-<tr><td>W</td><td>白屏（投屏窗口）</td></tr>
-<tr><td>ESC</td><td>退出全屏 / 关闭弹窗</td></tr>
-</table>
-<h3>四、常见问题</h3>
-<ul>
-<li><b>投屏窗口空白？</b> → 回到主页面，点击「应用到演示屏」</li>
-<li><b>主领视图无歌词？</b> → 同样需要点击「应用到演示屏」</li>
-<li><b>云端发布失败？</b> → 检查网络，或稍后重试</li>
-<li><b>页面布局乱了？</b> → 按 Ctrl+Shift+R 强制刷新</li>
-<li><b>数据会丢失吗？</b> → 数据保存在浏览器本地，建议定期导出备份</li>
-<li><b>手机能用吗？</b> → 可以，浏览器打开网址即可，推荐横屏使用</li>
-</ul>
-<p style="text-align:center; color:var(--text-secondary); margin-top:20px;">© 2026 敬拜投屏工具 · 基于 MIT 许可证开源</p>
-            `;
+            content.className = "help-modal-body";
+            content.innerHTML = html;
             panel.appendChild(content);
             modal.appendChild(panel);
             modal.addEventListener("click", (e) => {
                 if (e.target === modal) modal.style.display = "none";
             });
             document.body.appendChild(modal);
+        } else if (html) {
+            const bodyEl = modal.querySelector(".help-modal-body");
+            if (bodyEl) bodyEl.innerHTML = html;
         }
         modal.style.display = "flex";
     }
@@ -253,6 +232,386 @@
 
     function currentSong() {
         return state.songs.find((s) => s.id === state.currentSongId) || state.songs[0] || null;
+    }
+
+    function getCurrentSong() {
+        syncEditorToSong();
+        return currentSong() || { title: "", lyrics: "", tags: "" };
+    }
+
+    function getThemeBgOpacity() {
+        const raw = localStorage.getItem(THEME_BG_OPACITY_STORAGE);
+        const n = parseFloat(raw);
+        if (!Number.isFinite(n)) return 0.75;
+        return clamp(n, 0.3, 1);
+    }
+
+    function applyThemeBgOpacityVar() {
+        document.documentElement.style.setProperty("--theme-bg-opacity", String(getThemeBgOpacity()));
+    }
+
+    function syncThemeBgOpacityControls() {
+        const row = $("theme-bg-opacity-row");
+        const slider = $("theme-bg-opacity-slider");
+        const valEl = $("theme-bg-opacity-value");
+        const hasCustom = !!(localStorage.getItem(THEME_BG_STORAGE) || "").trim();
+        if (row) row.classList.toggle("is-disabled", !hasCustom);
+        const v = getThemeBgOpacity();
+        if (slider) {
+            slider.disabled = !hasCustom;
+            slider.value = String(v);
+        }
+        if (valEl) valEl.textContent = `${Math.round(v * 100)}%`;
+    }
+
+    function updateMyBackgroundThumbActiveState() {
+        const root = $("my-backgrounds-container");
+        if (!root) return;
+        const activeUrl = state.ui.bgType === "image" ? String(state.ui.bgImage || "") : "";
+        root.querySelectorAll(".lyric-bg-thumb").forEach((thumb) => {
+            const id = thumb.dataset.itemId;
+            const item = getUploadedBackgrounds().find((x) => x && x.id === id);
+            const on = !!(item && activeUrl && item.imageData === activeUrl);
+            thumb.classList.toggle("lyric-bg-thumb--active", on);
+        });
+    }
+
+    function applyThemeBackground() {
+        const raw = localStorage.getItem(THEME_BG_STORAGE);
+        const body = document.body;
+        const root = document.documentElement;
+        applyThemeBgOpacityVar();
+        if (raw && String(raw).trim()) {
+            const safe = String(raw).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+            const val = `url("${safe}")`;
+            root.style.setProperty("--theme-bg-image", val);
+            body.setAttribute("data-theme-custom-bg", "1");
+        } else {
+            root.style.setProperty("--theme-bg-image", "none");
+            body.removeAttribute("data-theme-custom-bg");
+        }
+        body.style.backgroundImage = "";
+        syncThemeBgOpacityControls();
+    }
+
+    function bgItemId() {
+        return "bg_" + Date.now() + "_" + Math.random().toString(36).slice(2, 10);
+    }
+
+    function getUploadedBackgrounds() {
+        const raw = parseJSON(localStorage.getItem(UPLOADED_BACKGROUNDS_STORAGE), null);
+        return Array.isArray(raw) ? raw : [];
+    }
+
+    function saveUploadedBackgrounds(arr) {
+        setStore(UPLOADED_BACKGROUNDS_STORAGE, Array.isArray(arr) ? arr : []);
+    }
+
+    function migrateLegacyUploadedBackgrounds() {
+        if (getUploadedBackgrounds().length > 0) return;
+        const old = getStore(LEGACY_LYRIC_BGS_STORAGE, null);
+        if (old && Array.isArray(old.items) && old.items.length) {
+            const mapped = old.items.map((x) => ({
+                id: bgItemId(),
+                imageData: String(x.dataUrl || x.imageData || "").trim(),
+                tags: Array.isArray(x.tags) ? x.tags : [],
+                timestamp: Number(x.addedAt) || Number(x.timestamp) || Date.now(),
+                shared: !!x.shared
+            })).filter((x) => x.imageData);
+            if (mapped.length) saveUploadedBackgrounds(mapped.slice(0, 40));
+            return;
+        }
+    }
+
+    function seedUploadedBackgroundsFromState() {
+        if (getUploadedBackgrounds().length > 0) return;
+        if (state.ui.bgType === "image" && String(state.ui.bgImage || "").trim()) {
+            saveUploadedBackgrounds([{
+                id: bgItemId(),
+                imageData: state.ui.bgImage,
+                tags: [],
+                timestamp: Date.now(),
+                shared: false
+            }]);
+        }
+    }
+
+    function addUploadedBackgroundAndApply(imageData) {
+        const data = String(imageData || "").trim();
+        if (!data) return;
+        let arr = getUploadedBackgrounds();
+        if (!arr.some((x) => x && x.imageData === data)) {
+            arr = [{
+                id: bgItemId(),
+                imageData: data,
+                tags: [],
+                timestamp: Date.now(),
+                shared: false
+            }, ...arr].slice(0, 40);
+            saveUploadedBackgrounds(arr);
+        }
+        state.ui.bgType = "image";
+        state.ui.bgImage = data;
+        state.ui.lyricsBgShareToCloud = false;
+        renderUploadedBackgrounds();
+    }
+
+    function confirmShareMyBackgroundModal() {
+        return new Promise((resolve) => {
+            let settled = false;
+            const overlay = document.createElement("div");
+            overlay.id = "share-bg-confirm-modal";
+            overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:3500;display:flex;align-items:center;justify-content:center;";
+            overlay.innerHTML = `
+                <div style="background:var(--bg-secondary);border-radius:14px;padding:22px 24px;max-width:420px;border:1px solid var(--border-color);">
+                    <p style="margin:0 0 16px;color:var(--text-primary);line-height:1.55;font-size:0.95rem;">是否将此背景共享到云端素材库？共享后其他用户将可以预览和使用此背景。</p>
+                    <div style="display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;">
+                        <button type="button" id="share-bg-cancel" class="btn btn-outline">取消</button>
+                        <button type="button" id="share-bg-ok" class="btn">✅ 共享</button>
+                    </div>
+                </div>`;
+            const finish = (v) => {
+                if (settled) return;
+                settled = true;
+                document.removeEventListener("keydown", onKeyDown);
+                overlay.remove();
+                resolve(!!v);
+            };
+            const onKeyDown = (e) => {
+                if (e.key === "Escape") finish(false);
+            };
+            overlay.querySelector("#share-bg-cancel").addEventListener("click", () => finish(false));
+            overlay.querySelector("#share-bg-ok").addEventListener("click", () => finish(true));
+            overlay.addEventListener("click", (e) => {
+                if (e.target === overlay) finish(false);
+            });
+            document.addEventListener("keydown", onKeyDown);
+            document.body.appendChild(overlay);
+            requestAnimationFrame(() => overlay.querySelector("#share-bg-cancel")?.focus());
+        });
+    }
+
+    function renderUploadedBackgrounds() {
+        const root = $("my-backgrounds-container");
+        if (!root) return;
+        const items = getUploadedBackgrounds();
+        root.innerHTML = "";
+        if (!items.length) {
+            root.innerHTML = '<div class="hint-text" style="grid-column:1/-1;">暂无已上传背景，请在「预设背景」中上传图片</div>';
+            return;
+        }
+        items.forEach((item) => {
+            if (!item || !item.imageData) return;
+            const wrap = document.createElement("div");
+            wrap.className = "lyric-bg-thumb-wrap";
+            const thumb = document.createElement("button");
+            thumb.type = "button";
+            thumb.className = "lyric-bg-thumb";
+            thumb.dataset.itemId = item.id;
+            thumb.style.backgroundImage = `url("${String(item.imageData).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}")`;
+            thumb.title = "设为当前歌词背景";
+            if (state.ui.bgType === "image" && state.ui.bgImage === item.imageData) {
+                thumb.classList.add("lyric-bg-thumb--active");
+            }
+            thumb.addEventListener("click", () => {
+                state.ui.bgType = "image";
+                state.ui.bgImage = item.imageData;
+                state.ui.lyricsBgShareToCloud = false;
+                updateUIFromState();
+                updateAll();
+                saveSettings();
+                showToast("已切换背景", thumb);
+            });
+            wrap.appendChild(thumb);
+            if (!item.shared) {
+                const shareBtn = document.createElement("button");
+                shareBtn.type = "button";
+                shareBtn.className = "bg-share-icon";
+                shareBtn.title = "共享到云端";
+                shareBtn.setAttribute("aria-label", "共享此背景");
+                shareBtn.textContent = "☁";
+                shareBtn.addEventListener("click", (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    shareMyBackgroundItem(item.id, shareBtn);
+                });
+                wrap.appendChild(shareBtn);
+            } else {
+                const badge = document.createElement("span");
+                badge.className = "bg-shared-badge";
+                badge.title = "已共享";
+                wrap.appendChild(badge);
+            }
+            root.appendChild(wrap);
+        });
+    }
+
+    async function shareMyBackgroundItem(itemId, triggerEl) {
+        const arr = getUploadedBackgrounds();
+        const item = arr.find((x) => x && x.id === itemId);
+        if (!item || !item.imageData || item.shared) return;
+        const agreed = await confirmShareMyBackgroundModal();
+        if (!agreed) return;
+        if (!supabase) {
+            showToast("Supabase 未初始化，无法共享", triggerEl);
+            return;
+        }
+        try {
+            const { error } = await supabase.from("backgrounds").insert([{
+                image_url: item.imageData,
+                tags: ["背景"],
+                uploaded_by: "anonymous"
+            }]);
+            if (error) {
+                console.error("shareMyBackgroundItem Supabase error:", error);
+                showToast("❌ 提交失败，请重试", triggerEl);
+                return;
+            }
+            item.shared = true;
+            saveUploadedBackgrounds(arr);
+            renderUploadedBackgrounds();
+            showToast("✅ 已共享到云端素材库", triggerEl);
+            loadSharedBackgrounds();
+        } catch (err) {
+            console.error("shareMyBackgroundItem:", err);
+            showToast("❌ 提交失败，请重试", triggerEl);
+        }
+    }
+
+    async function loadSharedBackgrounds() {
+        const root = $("shared-backgrounds-container");
+        if (!root) return;
+        if (!supabase) {
+            root.innerHTML = '<div class="hint-text" style="grid-column:1/-1;">Supabase 未初始化</div>';
+            return;
+        }
+        root.innerHTML = '<div class="hint-text" style="grid-column:1/-1;">加载中…</div>';
+        const { data, error } = await supabase
+            .from("backgrounds")
+            .select("*")
+            .order("created_at", { ascending: false })
+            .limit(48);
+        if (error) {
+            console.error("loadSharedBackgrounds", error);
+            root.innerHTML = '<div class="hint-text" style="grid-column:1/-1;">共享背景加载失败</div>';
+            return;
+        }
+        const rows = Array.isArray(data) ? data : [];
+        root.innerHTML = "";
+        if (!rows.length) {
+            root.innerHTML = '<div class="hint-text" style="grid-column:1/-1;">暂无云端共享背景</div>';
+            return;
+        }
+        rows.forEach((row) => {
+            const imageUrl = String(row.image_url || "").trim();
+            if (!imageUrl) return;
+            const wrap = document.createElement("div");
+            wrap.className = "lyric-bg-thumb-wrap";
+            const thumb = document.createElement("button");
+            thumb.type = "button";
+            thumb.className = "lyric-bg-thumb";
+            thumb.style.backgroundImage = `url("${imageUrl.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}")`;
+            const tagHint = Array.isArray(row.tags) ? row.tags.filter(Boolean).join(", ") : String(row.tags || "");
+            thumb.title = tagHint || "云端共享背景";
+            thumb.addEventListener("click", () => {
+                state.ui.bgType = "image";
+                state.ui.bgImage = imageUrl;
+                state.ui.lyricsBgShareToCloud = false;
+                updateUIFromState();
+                updateAll();
+                saveSettings();
+                showToast("已应用共享背景", thumb);
+            });
+            wrap.appendChild(thumb);
+            root.appendChild(wrap);
+        });
+    }
+
+    function initBgTabs() {
+        const tabs = document.querySelectorAll(".bg-tab");
+        const panels = document.querySelectorAll(".bg-tab-panel");
+        if (!tabs.length || !panels.length) return;
+        tabs.forEach((tab) => {
+            tab.addEventListener("click", () => {
+                const name = tab.getAttribute("data-bg-tab") || "preset";
+                tabs.forEach((t) => {
+                    const on = t === tab;
+                    t.classList.toggle("active", on);
+                    t.setAttribute("aria-selected", on ? "true" : "false");
+                });
+                panels.forEach((p) => p.classList.toggle("active", p.id === `bg-tab-${name}`));
+                if (name === "shared") loadSharedBackgrounds();
+            });
+        });
+    }
+
+    function openFreeBgMaterialsPanel() {
+        let modal = $("free-bg-materials-modal");
+        if (modal) {
+            modal.style.display = "flex";
+            return;
+        }
+        modal = document.createElement("div");
+        modal.id = "free-bg-materials-modal";
+        modal.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:3600;display:flex;align-items:center;justify-content:center;padding:16px;";
+        const sites = [
+            {
+                name: "Pixabay",
+                desc: "动态视频 / 静态图 / 粒子效果",
+                kw: "推荐搜索：worship background, church motion, particles loop, light rays, golden glow",
+                badge: "免费可商用",
+                url: "https://pixabay.com/"
+            },
+            {
+                name: "Pexels",
+                desc: "高质量视频 / 自然风景",
+                kw: "推荐搜索：worship, church, cross, clouds, sunset, ocean",
+                badge: "免费可商用",
+                url: "https://www.pexels.com/"
+            },
+            {
+                name: "Coverr",
+                desc: "专门免费视频背景",
+                kw: "推荐搜索：faith, spiritual, abstract, nature, ambient",
+                badge: "免费可商用",
+                url: "https://coverr.co/"
+            },
+            {
+                name: "Canva",
+                desc: "设计感强 / 宗教主题",
+                kw: "推荐搜索：worship background, Christian, church stage, 十字架, 敬拜",
+                badge: "免费版可用，部分需署名",
+                url: "https://www.canva.com/"
+            }
+        ];
+        const inner = document.createElement("div");
+        inner.style.cssText = "background:var(--bg-secondary);border-radius:16px;padding:20px 22px;max-width:560px;width:100%;max-height:90vh;overflow-y:auto;border:1px solid var(--border-color);position:relative;";
+        inner.innerHTML = `<button type="button" id="free-bg-modal-close" style="position:absolute;right:12px;top:10px;border:none;background:transparent;color:var(--text-secondary);cursor:pointer;font-size:1.1rem;">✕</button>
+            <h3 style="margin:0 0 4px;color:var(--text-primary);font-size:1.05rem;">🎨 免费背景素材</h3>
+            <p class="hint-text" style="margin-top:6px;">点击卡片在新标签页打开网站</p>
+            <div class="free-bg-modal-grid" id="free-bg-modal-grid"></div>
+            <p class="free-bg-modal-foot">💡 下载后回到本页，用「上传背景图片」即可使用</p>`;
+        const grid = inner.querySelector("#free-bg-modal-grid");
+        sites.forEach((s) => {
+            const card = document.createElement("button");
+            card.type = "button";
+            card.className = "free-bg-card";
+            card.innerHTML = `<div class="free-bg-card-name">${escapeHtml(s.name)}</div>
+                <div class="free-bg-card-desc">${escapeHtml(s.desc)}</div>
+                <div class="free-bg-card-kw">${escapeHtml(s.kw)}</div>
+                <div class="free-bg-card-badge">${escapeHtml(s.badge)}</div>`;
+            card.addEventListener("click", () => window.open(s.url, "_blank", "noopener,noreferrer"));
+            grid.appendChild(card);
+        });
+        inner.querySelector("#free-bg-modal-close").addEventListener("click", () => {
+            modal.style.display = "none";
+        });
+        modal.appendChild(inner);
+        modal.addEventListener("click", (e) => {
+            if (e.target === modal) modal.style.display = "none";
+        });
+        document.body.appendChild(modal);
+        modal.style.display = "flex";
     }
 
     function saveSongs() {
@@ -307,6 +666,7 @@
             state.playlist.activeIndex = clamp(Number(playlist.activeIndex) || 0, 0, Math.max(0, state.playlist.items.length - 1));
         }
         state.playlist.autoSwitch = localStorage.getItem("playlist_auto_switch") === "1";
+        defaultSongPosY = clamp(Number(state.ui.posY) || 45, 20, 70);
     }
 
     function syncSongToEditor() {
@@ -332,8 +692,14 @@
     }
 
     function applyCardBackground(card) {
+        clearCssDynamicBgClass(card);
         card.style.background = "#000";
         card.style.backgroundImage = "none";
+        if (CSS_DYNAMIC_BG_TYPES.has(state.ui.bgType)) {
+            card.style.background = "";
+            card.classList.add(`css-bg-${state.ui.bgType}`);
+            return;
+        }
         if (state.ui.bgType === "solid-white") {
             card.style.background = "#fff";
         } else if (state.ui.bgType === "solid-gray") {
@@ -377,6 +743,11 @@
             const card = document.createElement("div");
             card.className = "card" + (idx === state.currentPage ? " active" : "");
             applyCardBackground(card);
+            card.style.boxSizing = "border-box";
+            card.style.paddingLeft = "20px";
+            card.style.paddingRight = "20px";
+            card.style.paddingBottom = "20px";
+            card.style.paddingTop = `${lyricBlockTopPadPx(200, state.ui.posY)}px`;
             lines.forEach((line, lineIndex) => {
                 const row = document.createElement("div");
                 row.className = "card-line";
@@ -576,9 +947,13 @@
         const lines = pages[state.currentPage] || [];
 
         mini.innerHTML = "";
+        clearCssDynamicBgClass(mini);
         mini.style.background = "var(--preview-bg)";
         mini.style.backgroundImage = "none";
-        if (state.ui.bgType === "solid-white") mini.style.background = "#fff";
+        if (CSS_DYNAMIC_BG_TYPES.has(state.ui.bgType)) {
+            mini.style.background = "";
+            mini.classList.add(`css-bg-${state.ui.bgType}`);
+        } else if (state.ui.bgType === "solid-white") mini.style.background = "#fff";
         else if (state.ui.bgType === "solid-gray") mini.style.background = "#444";
         else if (state.ui.bgType === "gradient") mini.style.background = "linear-gradient(140deg,#1b2f59,#0a0f1d)";
         else if (state.ui.bgType === "image" && state.ui.bgImage) {
@@ -586,6 +961,16 @@
             mini.style.backgroundSize = "cover";
             mini.style.backgroundPosition = "center";
         }
+
+        mini.style.display = "flex";
+        mini.style.flexDirection = "column";
+        mini.style.justifyContent = "flex-start";
+        mini.style.alignItems = "center";
+        mini.style.boxSizing = "border-box";
+        mini.style.paddingTop = `${lyricBlockTopPadPx(mini.clientHeight, state.ui.posY)}px`;
+        mini.style.paddingBottom = "12px";
+        mini.style.paddingLeft = "12px";
+        mini.style.paddingRight = "12px";
 
         lines.forEach((line) => {
             const row = document.createElement("div");
@@ -731,6 +1116,8 @@
             const el = $(id);
             if (el) el.classList.toggle("active", state.sizePreset === id.split("-")[1].toUpperCase());
         });
+        syncThemeBgOpacityControls();
+        updateMyBackgroundThumbActiveState();
     }
 
     function buildLiveState() {
@@ -785,6 +1172,7 @@
 
     function setBackground(bgType) {
         state.ui.bgType = bgType || "solid-black";
+        if (state.ui.bgType !== "image") state.ui.lyricsBgShareToCloud = false;
         updateUIFromState();
         updateAll();
     }
@@ -793,6 +1181,8 @@
         if (!state.songs.some((s) => s.id === songId)) return;
         state.currentSongId = songId;
         state.currentPage = 0;
+        syncPosYFromCurrentSong();
+        updateUIFromState();
         syncSongToEditor();
         renderSongList();
         updateSpeakerCards();
@@ -826,28 +1216,89 @@
 
     async function publishSong() {
         const s = getCurrentSong();
-        if (!s.lyrics.length) { showToast('无歌词可发布'); return; }
-
-        const url = 'https://script.google.com/macros/s/AKfycbxqfo0o9kVsdC_1Tm7QOyDVGB2nRYv0sxk7_LCzcLdycPMSmtNFekmxteTRYJ9d42_ODXA/exec';
-
-        try {
-            const response = await fetch(url, {
-                method: 'POST',
-                body: JSON.stringify({
-                    title: s.title,
-                    lyrics: s.lyrics,
-                    tags: s.tags || []
-                })
-            });
-
-            if (response.ok) {
-                showToast('✅ 已发布到云端');
-            } else {
-                showToast('❌ 发布失败，请重试');
+        const lyricLines = String(s.lyrics || "")
+            .replace(/\r/g, "")
+            .split("\n")
+            .filter((line) => line.trim().length > 0);
+        if (!lyricLines.length) {
+            showToast("无歌词可发布");
+            return;
+        }
+        if (!supabase) {
+            showToast("Supabase 未初始化");
+            return;
+        }
+        const tags = Array.isArray(s.tags)
+            ? s.tags.map((t) => String(t || "").trim()).filter(Boolean)
+            : String(s.tags || "").split(/[,，\s]+/).map((t) => t.trim()).filter(Boolean);
+        const row = {
+            title: String(s.title || "未命名").trim() || "未命名",
+            lyrics: lyricLines,
+            tags
+        };
+        const SHEETS_DUP_CHECK_URL =
+            "https://script.google.com/macros/s/AKfycbxqfo0o9kVsdC_1Tm7QOyDVGB2nRYv0sxk7_LCzcLdycPMSmtNFekmxteTRYJ9d42_ODXA/exec";
+        function collectTitlesFromSheetsData(data, out) {
+            if (data == null) return;
+            if (Array.isArray(data)) {
+                data.forEach((item) => {
+                    if (item && typeof item === "object" && !Array.isArray(item)) {
+                        if (item.title != null) {
+                            const t = String(item.title).trim();
+                            if (t) out.add(t);
+                        }
+                    } else if (Array.isArray(item) && item.length > 0) {
+                        const t = String(item[0]).trim();
+                        if (t) out.add(t);
+                    }
+                });
+                return;
             }
-        } catch(e) {
-            console.error('发布失败:', e);
-            showToast('❌ 发布失败，请重试');
+            if (typeof data !== "object") return;
+            if (Array.isArray(data.values) && data.values.length > 1) {
+                for (let i = 1; i < data.values.length; i++) {
+                    const row0 = data.values[i];
+                    if (Array.isArray(row0) && row0.length > 0) {
+                        const t = String(row0[0]).trim();
+                        if (t) out.add(t);
+                    }
+                }
+            }
+            ["rows", "data", "items", "hymns", "records", "list", "result"].forEach((k) => {
+                if (Array.isArray(data[k])) collectTitlesFromSheetsData(data[k], out);
+            });
+        }
+        try {
+            const dupRes = await fetch(SHEETS_DUP_CHECK_URL, { method: "GET", mode: "cors" });
+            const dupText = await dupRes.text();
+            let dupPayload = null;
+            try {
+                dupPayload = JSON.parse(dupText);
+            } catch (parseErr) {
+                console.warn("publishSong: Sheets doGet 非 JSON", parseErr, dupText.slice(0, 300));
+            }
+            if (dupPayload != null) {
+                const existingTitles = new Set();
+                collectTitlesFromSheetsData(dupPayload, existingTitles);
+                if (existingTitles.has(row.title)) {
+                    showToast("⚠️ 该诗歌已发布过");
+                    return;
+                }
+            }
+        } catch (dupErr) {
+            console.error("publishSong: 重名检查请求失败", dupErr);
+        }
+        try {
+            const { error } = await supabase.from("hymns").insert([row]);
+            if (error) {
+                console.error("publishSong Supabase error:", error);
+                showToast("❌ 发布失败，请重试");
+                return;
+            }
+            showToast("✅ 已发布到云端");
+        } catch (e) {
+            console.error("publishSong:", e);
+            showToast("❌ 发布失败，请重试");
         }
     }
 
@@ -1168,6 +1619,8 @@
         on("pos-slider", "input", () => {
             state.ui.posY = clamp(Number($("pos-slider").value || 45), 20, 70);
             if ($("pos-val")) $("pos-val").textContent = String(state.ui.posY);
+            const song = currentSong();
+            if (song) song.posY = state.ui.posY;
             updateAll();
         });
         on("font-family-selector", "change", () => {
@@ -1182,6 +1635,7 @@
         document.querySelectorAll(".bg-option").forEach((node) => {
             node.addEventListener("click", () => setBackground(node.getAttribute("data-bg") || "solid-black"));
         });
+        initBgTabs();
         on("upload-bg-trigger", "click", () => $("bg-image-input")?.click());
         on("upload-bg-btn", "click", () => $("bg-image-input")?.click());
         on("bg-image-input", "change", (e) => {
@@ -1189,13 +1643,14 @@
             if (!file) return;
             const reader = new FileReader();
             reader.onload = () => {
-                state.ui.bgType = "image";
-                state.ui.bgImage = String(reader.result || "");
+                addUploadedBackgroundAndApply(String(reader.result || ""));
                 updateUIFromState();
                 updateAll();
-                showToast("背景已更新", $("upload-bg-btn"));
+                saveSettings();
+                showToast("已应用背景并加入「我的背景」", $("upload-bg-btn"));
             };
             reader.readAsDataURL(file);
+            e.target.value = "";
         });
         on("theme-bg-upload-btn", "click", () => $("theme-bg-input")?.click());
         on("theme-bg-input", "change", (e) => {
@@ -1203,12 +1658,21 @@
             if (!file) return;
             const reader = new FileReader();
             reader.onload = () => {
-                document.documentElement.style.setProperty("--theme-bg-image", `url("${reader.result}")`);
+                const dataUrl = String(reader.result || "");
+                localStorage.setItem(THEME_BG_STORAGE, dataUrl);
+                applyThemeBackground();
                 showToast("主题背景已设置", $("theme-bg-upload-btn"));
             };
             reader.readAsDataURL(file);
+            e.target.value = "";
         });
-        on("free-bg-link", "click", () => window.open("https://unsplash.com/s/photos/church-background", "_blank"));
+        on("theme-bg-opacity-slider", "input", () => {
+            const v = clamp(parseFloat($("theme-bg-opacity-slider").value || "0.75"), 0.3, 1);
+            localStorage.setItem(THEME_BG_OPACITY_STORAGE, String(v));
+            document.documentElement.style.setProperty("--theme-bg-opacity", String(v));
+            if ($("theme-bg-opacity-value")) $("theme-bg-opacity-value").textContent = `${Math.round(v * 100)}%`;
+        });
+        on("free-bg-link", "click", () => openFreeBgMaterialsPanel());
 
         on("autoplay-toggle", "click", () => {
             if (state.autoplay.running) {
@@ -1369,15 +1833,26 @@
 
     function drawBg(ts) {
         if (!projectionCtx || !liveState) return;
+        const bgState = liveState.background || {};
+        const type = bgState.type || "solid-black";
+        const gifLayer = $("projection-bg-image");
+
+        if (CSS_DYNAMIC_BG_TYPES.has(type)) {
+            ensureProjectionCssBg(type);
+            if (gifLayer) gifLayer.style.display = "none";
+            if (projectionCanvas) projectionCanvas.style.display = "none";
+            projectionLastTs = ts;
+            projectionRaf = 0;
+            return;
+        }
+        removeProjectionCssBg();
+        if (projectionCanvas) projectionCanvas.style.display = "block";
+
         ensureProjectionCanvas();
         const ctx = projectionCtx;
         const w = window.innerWidth;
         const h = window.innerHeight;
-        const bgState = liveState.background || {};
-        const type = bgState.type || "solid-black";
-        const gifLayer = $("projection-bg-image");
         if (gifLayer) gifLayer.style.display = "none";
-        if (projectionCanvas) projectionCanvas.style.display = "block";
 
         if (type === "solid-white") {
             ctx.fillStyle = "#fff";
@@ -1571,7 +2046,24 @@
             let bgMode = localStorage.getItem(BG_MODE_KEY) || "particles";
             if (!["black", "particles"].includes(bgMode)) bgMode = "particles";
             let noteEditMode = false;
-            let notesMap = getStore(NOTES_KEY, {});
+            const migrateLeaderNotes = (raw) => {
+                const out = {};
+                if (!raw || typeof raw !== "object") return out;
+                Object.keys(raw).forEach((k) => {
+                    const v = raw[k];
+                    if (typeof v === "string") {
+                        const t = v.trim();
+                        if (t) out[k] = { note: t, icon: "💬" };
+                    } else if (v && typeof v === "object") {
+                        const t = String(v.note || "").trim();
+                        if (t) out[k] = { note: t, icon: String(v.icon || "💬") };
+                    }
+                });
+                return out;
+            };
+            const notesMapRaw = getStore(NOTES_KEY, {});
+            let notesMap = migrateLeaderNotes(notesMapRaw);
+            if (JSON.stringify(notesMapRaw) !== JSON.stringify(notesMap)) setStore(NOTES_KEY, notesMap);
             let overlay = null;
             let bgLoop = 0;
             let pts = [];
@@ -1614,7 +2106,7 @@
 
             const toolbar = document.createElement("div");
             toolbar.className = "leader-toolbar";
-            toolbar.innerHTML = '<button class="leader-mini-btn" data-mode="single" title="单句"><span class="leader-btn-icon">🔍</span><span class="leader-btn-label">单句</span></button><button class="leader-mini-btn" data-mode="multi" title="多句"><span class="leader-btn-icon">📋</span><span class="leader-btn-label">多句</span></button><button class="leader-mini-btn" data-mode="scroll" title="滚动"><span class="leader-btn-icon">📜</span><span class="leader-btn-label">滚动</span></button><button class="leader-mini-btn" data-action="prev" title="上一页"><span class="leader-btn-icon">◀</span><span class="leader-btn-label">上页</span></button><button class="leader-mini-btn" data-action="next" title="下一页"><span class="leader-btn-icon">▶</span><span class="leader-btn-label">下页</span></button><button class="leader-mini-btn" data-action="font-panel" title="字号"><span class="leader-btn-icon leader-font-aa">Aa</span><span class="leader-btn-label">字号</span></button><button class="leader-mini-btn leader-brush-btn" data-action="brush" title="标注"><span class="leader-btn-icon">✍️</span><span class="leader-btn-label">画笔</span><span class="leader-brush-indicator"></span></button><button class="leader-mini-btn" data-action="bg-panel" title="背景"><span class="leader-btn-icon">🎨</span><span class="leader-btn-label">背景</span></button>';
+            toolbar.innerHTML = '<button class="leader-mini-btn" data-mode="single" title="单句"><span class="leader-btn-icon">🔍</span><span class="leader-btn-label">单句</span></button><button class="leader-mini-btn" data-mode="multi" title="多句"><span class="leader-btn-icon">📋</span><span class="leader-btn-label">多句</span></button><button class="leader-mini-btn" data-mode="scroll" title="滚动"><span class="leader-btn-icon">📜</span><span class="leader-btn-label">滚动</span></button><button class="leader-mini-btn" data-action="prev" title="上一页"><span class="leader-btn-icon">◀</span><span class="leader-btn-label">上页</span></button><button class="leader-mini-btn" data-action="next" title="下一页"><span class="leader-btn-icon">▶</span><span class="leader-btn-label">下页</span></button><button class="leader-mini-btn" data-action="font-panel" title="字号"><span class="leader-btn-icon leader-font-aa">Aa</span><span class="leader-btn-label">字号</span></button><button class="leader-mini-btn" data-action="note" title="备注"><span class="leader-btn-icon">✏️</span><span class="leader-btn-label">备注</span></button><button class="leader-mini-btn leader-brush-btn" data-action="brush" title="标注"><span class="leader-btn-icon">✍️</span><span class="leader-btn-label">画笔</span><span class="leader-brush-indicator"></span></button><button class="leader-mini-btn" data-action="bg-panel" title="背景"><span class="leader-btn-icon">🎨</span><span class="leader-btn-label">背景</span></button>';
             host.appendChild(toolbar);
             const toolbarRail = document.createElement("div");
             toolbarRail.className = "leader-toolbar-rail";
@@ -1694,11 +2186,28 @@
                 }
             };
             const saveNote = (lineIndex, note) => {
-                notesMap[String(lineIndex)] = String(note || "").trim();
-                if (!notesMap[String(lineIndex)]) delete notesMap[String(lineIndex)];
+                const key = String(lineIndex);
+                const text = String(note || "").trim();
+                if (!text) delete notesMap[key];
+                else notesMap[key] = { note: text, icon: "💬" };
                 setStore(NOTES_KEY, notesMap);
             };
-            const loadNote = (lineIndex) => String(notesMap[String(lineIndex)] || "");
+            const loadNote = (lineIndex) => {
+                const v = notesMap[String(lineIndex)];
+                if (v == null) return "";
+                if (typeof v === "string") return v;
+                return String(v.note || "");
+            };
+            const loadNoteRecord = (lineIndex) => {
+                const v = notesMap[String(lineIndex)];
+                if (v == null) return null;
+                if (typeof v === "string") {
+                    const t = v.trim();
+                    return t ? { note: t, icon: "💬" } : null;
+                }
+                const t = String(v.note || "").trim();
+                return t ? { note: t, icon: String(v.icon || "💬") } : null;
+            };
             const closeOverlay = () => {
                 if (overlay?.parentNode) overlay.parentNode.removeChild(overlay);
                 overlay = null;
@@ -1868,10 +2377,13 @@
                 const previousKey = currentPageKey;
                 currentPageKey = buildPageKey();
                 if (previousKey && previousKey !== currentPageKey) saveCurrentDrawing();
+
+                const mount = lyricLayer.querySelector(".leader-brush-mount");
+                if (!mount) return;
+
                 if (!brushCanvas) {
                     brushCanvas = document.createElement("canvas");
                     brushCanvas.className = "leader-brush-canvas";
-                    lyricLayer.appendChild(brushCanvas);
                     brushCtx = brushCanvas.getContext("2d");
                     brushCanvas.addEventListener("mousedown", beginBrush);
                     brushCanvas.addEventListener("mousemove", moveBrush);
@@ -1880,20 +2392,35 @@
                     brushCanvas.addEventListener("touchmove", moveBrush, { passive: false });
                     window.addEventListener("touchend", endBrush, { passive: true });
                     window.addEventListener("touchcancel", endBrush, { passive: true });
-                } else if (!brushCanvas.isConnected) {
-                    lyricLayer.appendChild(brushCanvas);
+                    mount.appendChild(brushCanvas);
+                } else if (brushCanvas.parentNode !== mount) {
+                    mount.appendChild(brushCanvas);
                 }
+
                 const dpr = Math.max(1, window.devicePixelRatio || 1);
-                const rect = lyricLayer.getBoundingClientRect();
-                const prevDataUrl = pageDrawings[currentPageKey];
-                brushCanvas.width = Math.max(1, Math.floor(rect.width * dpr));
-                brushCanvas.height = Math.max(1, Math.floor(rect.height * dpr));
-                brushCanvas.style.width = `${rect.width}px`;
-                brushCanvas.style.height = `${rect.height}px`;
-                brushCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-                brushCtx.clearRect(0, 0, brushCanvas.width, brushCanvas.height);
-                if (prevDataUrl) restoreCurrentDrawing();
-                brushCanvas.style.display = brushMode ? "block" : "none";
+                const cssW = Math.max(1, Math.ceil(mount.scrollWidth));
+                const cssH = Math.max(1, Math.ceil(mount.scrollHeight));
+                const nextW = Math.max(1, Math.floor(cssW * dpr));
+                const nextH = Math.max(1, Math.floor(cssH * dpr));
+                const needResize = brushCanvas.width !== nextW || brushCanvas.height !== nextH;
+
+                if (needResize) {
+                    saveCurrentDrawing();
+                    brushCanvas.width = nextW;
+                    brushCanvas.height = nextH;
+                    brushCanvas.style.width = `${cssW}px`;
+                    brushCanvas.style.height = `${cssH}px`;
+                    brushCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+                    brushCtx.clearRect(0, 0, brushCanvas.width, brushCanvas.height);
+                    if (pageDrawings[currentPageKey]) restoreCurrentDrawing();
+                }
+
+                brushCanvas.style.position = "absolute";
+                brushCanvas.style.left = "0";
+                brushCanvas.style.top = "0";
+                brushCanvas.style.display = "block";
+                brushCanvas.style.visibility = "visible";
+                brushCanvas.style.pointerEvents = brushMode ? "auto" : "none";
             };
             const setBrushMode = (enabled) => {
                 brushMode = !!enabled;
@@ -1910,6 +2437,7 @@
                     hideBgPanel();
                     showBrushPanel();
                 } else {
+                    saveCurrentDrawing();
                     toolbar.classList.remove("brush-hidden");
                     hideBrushPanel();
                     showToolbar();
@@ -1925,10 +2453,12 @@
                 closeOverlay();
                 const wrap = document.createElement("div");
                 wrap.className = "leader-note-pop-wrap";
+                wrap.dataset.noteReadonly = readOnly ? "1" : "0";
                 const box = document.createElement("div");
                 box.className = "leader-note-pop";
-                box.style.width = "350px";
-                const noteVal = loadNote(lineIndex);
+                box.style.width = "300px";
+                const rec = loadNoteRecord(lineIndex);
+                const noteVal = rec ? rec.note : "";
                 const closeBtn = document.createElement("button");
                 closeBtn.type = "button";
                 closeBtn.className = "leader-note-close";
@@ -1938,7 +2468,7 @@
                 if (readOnly) {
                     const view = document.createElement("div");
                     view.className = "leader-note-view";
-                    view.textContent = noteVal || "（无备注）";
+                    view.textContent = rec ? `${rec.icon} ${rec.note}` : "（无备注）";
                     box.appendChild(view);
                 } else {
                     box.insertAdjacentHTML("beforeend", '<textarea class="leader-note-input"></textarea><div class="leader-note-actions"><button class="leader-note-btn">保存</button><button class="leader-note-btn secondary">取消</button></div>');
@@ -1953,12 +2483,17 @@
                 }
                 wrap.appendChild(box);
                 wrap.addEventListener("click", (e) => {
-                    if (e.target === wrap) closeOverlay();
+                    if (e.target !== wrap) return;
+                    closeOverlay();
+                    if (!readOnly) {
+                        noteEditMode = false;
+                        render();
+                    }
                 });
                 document.body.appendChild(wrap);
                 if (anchorEl) {
                     const rect = anchorEl.getBoundingClientRect();
-                    const left = clamp(rect.left + rect.width / 2 - 175, 12, window.innerWidth - 362);
+                    const left = clamp(rect.left + rect.width / 2 - 150, 12, window.innerWidth - 312);
                     const top = clamp(rect.bottom + 8, 12, window.innerHeight - 240);
                     box.style.position = "absolute";
                     box.style.left = `${left}px`;
@@ -2032,22 +2567,23 @@
                 let content = "";
                 if (displayMode === "single") {
                     const gi = globalIndex(pages, idx, 0);
-                    content = `<div class="leader-current leader-single" style="color:${color};font-size:${leaderFontSize};"><div class="leader-line">${escapeHtml(lines[0] || "...")}${loadNote(gi) ? `<span class="leader-note-dot" data-line="${gi}"></span>` : ""}${noteEditMode ? `<span class="leader-plus-dot" data-line="${gi}">+</span>` : ""}</div></div>`;
+                    content = `<div class="leader-brush-mount leader-brush-mount--fit"><div class="leader-current leader-single" style="color:${color};font-size:${leaderFontSize};"><div class="leader-line">${escapeHtml(lines[0] || "...")}${!noteEditMode && loadNote(gi) ? `<span class="leader-note-dot" data-line="${gi}"></span>` : ""}${noteEditMode ? `<span class="leader-plus-dot" data-line="${gi}" title="添加备注">⊕</span>` : ""}</div></div></div>`;
                 } else if (displayMode === "scroll") {
                     const all = pages.flat();
-                    content = `<div class="leader-current leader-scroll" style="color:${color};font-size:${leaderFontSize};">${all.map((line, i) => `<div class="leader-line${i >= curStart && i <= curEnd ? " current" : ""}" style="text-align:center;">${escapeHtml(line)}${loadNote(i) ? `<span class="leader-note-dot" data-line="${i}"></span>` : ""}${noteEditMode ? `<span class="leader-plus-dot" data-line="${i}">+</span>` : ""}</div>`).join("")}</div>`;
+                    content = `<div class="leader-current leader-scroll" style="color:${color};font-size:${leaderFontSize};"><div class="leader-brush-mount leader-brush-mount--scroll">${all.map((line, i) => `<div class="leader-line${i >= curStart && i <= curEnd ? " current" : ""}" style="text-align:center;">${escapeHtml(line)}${!noteEditMode && loadNote(i) ? `<span class="leader-note-dot" data-line="${i}"></span>` : ""}${noteEditMode ? `<span class="leader-plus-dot" data-line="${i}" title="添加备注">⊕</span>` : ""}</div>`).join("")}</div></div>`;
                 } else {
-                    content = `<div class="leader-current leader-multi" style="color:${color};font-size:${leaderFontSize};">${lines.map((line, i) => {
+                    content = `<div class="leader-brush-mount leader-brush-mount--fit"><div class="leader-current leader-multi" style="color:${color};font-size:${leaderFontSize};">${lines.map((line, i) => {
                         const gi = globalIndex(pages, idx, i);
-                        return `<div class="leader-line">${escapeHtml(line)}${loadNote(gi) ? `<span class="leader-note-dot" data-line="${gi}"></span>` : ""}${noteEditMode ? `<span class="leader-plus-dot" data-line="${gi}">+</span>` : ""}</div>`;
-                    }).join("") || "<div class='leader-line'>...</div>"}</div>`;
+                        return `<div class="leader-line">${escapeHtml(line)}${!noteEditMode && loadNote(gi) ? `<span class="leader-note-dot" data-line="${gi}"></span>` : ""}${noteEditMode ? `<span class="leader-plus-dot" data-line="${gi}" title="添加备注">⊕</span>` : ""}</div>`;
+                    }).join("") || "<div class='leader-line'>...</div>"}</div></div>`;
                 }
                 const nextHtml = displayMode === "scroll" ? "" : `<div class="leader-next">下句：${escapeHtml(nextLine)}</div>`;
                 host.classList.toggle("leader-scroll-mode", displayMode === "scroll");
                 const mainClass = displayMode === "scroll" ? "leader-main leader-main-scroll" : "leader-main";
                 lyricLayer.innerHTML = `<div class="leader-page">${idx + 1}/${Math.max(1, pages.length)}</div><div class="${mainClass}">${content}</div>${nextHtml}`;
                 toolbar.querySelectorAll("[data-mode]").forEach((btn) => btn.classList.toggle("active", btn.getAttribute("data-mode") === displayMode));
-                setupBrushCanvas();
+                toolbar.querySelector('[data-action="note"]')?.classList.toggle("active", noteEditMode);
+                requestAnimationFrame(() => setupBrushCanvas());
             }
 
             const flip = (delta) => channel && channel.postMessage({ type: "flip", delta });
@@ -2075,6 +2611,10 @@
                     else showBgPanel();
                 } else if (btn.dataset.action === "font-panel") {
                     toggleFontPanel();
+                } else if (btn.dataset.action === "note") {
+                    noteEditMode = !noteEditMode;
+                    closeOverlay();
+                    render();
                 } else if (btn.dataset.action === "brush") {
                     toggleDrawMode();
                 } else if (btn.dataset.action === "prev") flip(-1);
@@ -2141,7 +2681,16 @@
                 mouseBottomStartY = null;
             });
             document.addEventListener("click", (e) => {
-                if (overlay && e.target === overlay) closeOverlay();
+                if (overlay && e.target === overlay && overlay.classList.contains("leader-note-pop-wrap")) {
+                    const ro = overlay.dataset.noteReadonly === "1";
+                    closeOverlay();
+                    if (!ro) {
+                        noteEditMode = false;
+                        render();
+                    }
+                } else if (overlay && e.target === overlay) {
+                    closeOverlay();
+                }
                 if (fontPanel && fontPanel.style.display !== "none") {
                     const inFont = e.target?.closest?.(".leader-font-pop");
                     const inAa = e.target?.closest?.('[data-action="font-panel"]');
@@ -2491,11 +3040,13 @@
 
     function initMain() {
         loadState();
+        applyThemeBackground();
         const left = $("song-library");
         const right = $("preview-panel");
         if (left && !left.style.width) left.style.width = "260px";
         if (right && !right.style.width) right.style.width = "300px";
         ensureFontColorControls();
+        syncPosYFromCurrentSong();
         updateUIFromState();
         syncSongToEditor();
         renderSongList();
@@ -2507,6 +3058,10 @@
         bindEvents();
         initResizable();
         initPreviewResize();
+        migrateLegacyUploadedBackgrounds();
+        seedUploadedBackgroundsFromState();
+        renderUploadedBackgrounds();
+        loadSharedBackgrounds();
 
         if (channel) {
             const ch = channel;

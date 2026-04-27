@@ -59,6 +59,7 @@
             <div class="editor-area-title" style="font-size:0.8rem; color:var(--text-secondary); margin-right:12px; vertical-align:middle; background:transparent; font-weight:normal;">✍️ 诗歌编辑区</div>
             <button id="save-song-btn" class="btn">保存歌词</button>
             <button id="publish-song-btn" class="btn btn-outline">☁️ 发布到云端</button>
+            <span style="font-size:0.75rem;color:var(--text-secondary);max-width:220px;line-height:1.35;">发布后，其他用户将可以搜索和使用这首诗歌。</span>
         </div>
         <textarea id="lyric-editor-large" placeholder="输入歌词，一行一句。用空行或 [page] 分隔页面。第一页若为单行将作为歌名。"></textarea>
         <details id="song-meta-details" style="margin-bottom:10px;">
@@ -106,20 +107,37 @@
             <div id="mini-preview"></div>
             <div id="preview-resize-handle">⋮⋮</div>
         </div>
-        <div class="setting-group">
-            <label>🎨 背景类型</label>
-            <div class="bg-selector">
-                <div class="bg-option active" data-bg="solid-black" title="纯黑"></div>
-                <div class="bg-option" data-bg="solid-white" title="纯白"></div>
-                <div class="bg-option" data-bg="solid-gray" title="纯灰"></div>
-                <div class="bg-option" data-bg="particles" title="✨ 粒子动态"></div>
-                <div class="bg-option" data-bg="gradient" title="渐变"></div>
-                <div class="bg-option" data-bg="image" id="upload-bg-trigger" title="上传图片"></div>
-                <input type="file" id="bg-image-input" accept="image/png, image/jpg, image/jpeg, image/gif, image/bmp, image/webp" hidden>
+        <div class="setting-group bg-panel-group">
+            <label>🎨 背景</label>
+            <div class="bg-tabs" role="tablist">
+                <button type="button" class="bg-tab active" data-bg-tab="preset" role="tab" aria-selected="true">预设背景</button>
+                <button type="button" class="bg-tab" data-bg-tab="mine" role="tab" aria-selected="false">我的背景</button>
+                <button type="button" class="bg-tab" data-bg-tab="shared" role="tab" aria-selected="false">共享背景</button>
             </div>
-            <button id="upload-bg-btn" class="btn-outline" style="width:100%; margin-top:8px;">🖼️ 上传背景图片</button>
-            <div id="my-backgrounds-container" class="my-backgrounds"></div>
-            <button id="free-bg-link" class="btn-outline" style="width:100%; margin-top:8px;">🎨 免费背景素材</button>
+            <div id="bg-tab-preset" class="bg-tab-panel active" role="tabpanel">
+                <div class="bg-selector">
+                    <div class="bg-option active" data-bg="solid-black" title="纯黑"></div>
+                    <div class="bg-option" data-bg="solid-white" title="纯白"></div>
+                    <div class="bg-option" data-bg="solid-gray" title="纯灰"></div>
+                    <div class="bg-option" data-bg="particles" title="✨ 粒子动态"></div>
+                    <div class="bg-option" data-bg="gentle-light" title="柔和光流"></div>
+                    <div class="bg-option" data-bg="starry-night" title="静谧星空"></div>
+                    <div class="bg-option" data-bg="cross-glow" title="十字光晕"></div>
+                    <div class="bg-option" data-bg="gradient" title="渐变"></div>
+                    <div class="bg-option" data-bg="image" id="upload-bg-trigger" title="从文件上传"></div>
+                    <input type="file" id="bg-image-input" accept="image/png, image/jpg, image/jpeg, image/gif, image/bmp, image/webp" hidden>
+                </div>
+                <button id="upload-bg-btn" class="btn-outline" style="width:100%; margin-top:8px;">🖼️ 上传背景图片</button>
+                <p class="bg-privacy-hint">您上传的背景默认为私密，可在「我的背景」中共享到云端。</p>
+            </div>
+            <div id="bg-tab-mine" class="bg-tab-panel" role="tabpanel">
+                <div id="my-backgrounds-container" class="my-backgrounds"></div>
+                <p class="hint-text" style="margin-top:6px;">点击缩略图应用背景；「共享」可上传到云端素材库。</p>
+            </div>
+            <div id="bg-tab-shared" class="bg-tab-panel" role="tabpanel">
+                <div id="shared-backgrounds-container" class="my-backgrounds shared-cloud-backgrounds" aria-label="云端共享背景"></div>
+            </div>
+            <button type="button" id="free-bg-link" class="btn-outline" style="width:100%; margin-top:10px;">🎨 免费背景素材</button>
         </div>
         <div class="setting-group">
             <label>🅰️ 字体选择</label>
@@ -163,6 +181,13 @@
             </select>
             <button id="theme-bg-upload-btn" class="btn-outline" style="width:100%; margin-top:8px;">🖼️ 自定义主题背景</button>
             <input type="file" id="theme-bg-input" accept="image/*" hidden>
+            <div id="theme-bg-opacity-row" class="theme-bg-opacity-row is-disabled">
+                <label for="theme-bg-opacity-slider">背景透明度</label>
+                <div class="theme-bg-opacity-inner">
+                    <input type="range" id="theme-bg-opacity-slider" min="0.3" max="1" step="0.05" value="0.75" disabled>
+                    <span id="theme-bg-opacity-value">75%</span>
+                </div>
+            </div>
         </div>
         <div style="display:flex;gap:8px;margin-top:8px;">
             <button id="open-display-btn" class="btn" style="background:#2e7d32; flex:1; height:42px; display:flex; align-items:center; justify-content:center;">📺 开启投屏</button>
@@ -171,7 +196,6 @@
         </div>
         <p class="hint-text">© 2026 敬拜投屏工具。基于 MIT 许可证开源，使用者须保留此版权声明。</p>
         <p class="hint-text">隐私说明：本网站不会收集用户个人信息，所有歌词数据仅保留在您的本地浏览器中。</p>
-        <p style="font-size:0.7rem; color:var(--text-secondary); margin-top:10px;">后台管理入口：登录 supabase.com → Table Editor → hymns 表</p>
         <p class="hint-text">📝 用户反馈：<a href="https://docs.google.com/forms/d/e/1FAIpQLSf3XMyOfjcoV1MNWMmZZ0JEapXDnUfa3qWLjELN_YyqvcLQGw/viewform" target="_blank" rel="noopener noreferrer" style="color:var(--accent);text-decoration:underline;">点击提交反馈</a></p>
         <p class="hint-text">B=黑屏 W=白屏 F=全屏</p>
     </div>
@@ -189,5 +213,149 @@
     </div>
   </div>
 </div>
+
+<template id="help-modal-content-template">
+<h2>📖 使用帮助</h2>
+
+<h3>一、界面概览</h3>
+<table>
+<tr><td><b>诗歌库</b></td><td>左侧</td><td>管理所有诗歌：新建、搜索、标签筛选、播放列表</td></tr>
+<tr><td><b>编辑区</b></td><td>中间</td><td>编辑当前诗歌歌词、调性、速度、备注</td></tr>
+<tr><td><b>设置面板</b></td><td>右侧</td><td>调整背景、字体、行数、位置、自动播放、主题外观</td></tr>
+<tr><td><b>快速预览</b></td><td>右侧上部</td><td>实时预览当前页歌词</td></tr>
+</table>
+
+<h3>二、诗歌管理</h3>
+
+<h4>1. 编辑诗歌</h4>
+<ul>
+<li><b>新建</b>：点击左侧「+」或「新建诗歌」</li>
+<li><b>编辑歌词</b>：在中间编辑区输入，一行一句</li>
+<li><b>分页</b>：用空行或 [page] 标记分页位置</li>
+<li><b>歌名页</b>：第一段只有一行时，自动识别为歌名页（投屏时大字显示）</li>
+<li><b>保存</b>：点击「保存歌词」</li>
+<li><b>应用到演示屏</b>：编辑完成后必须点击，投屏和主领视图才会更新</li>
+</ul>
+
+<h4>2. 播放列表</h4>
+<ul>
+<li><b>添加</b>：在诗歌库中点击诗歌右侧的「+」</li>
+<li><b>排序</b>：拖拽播放列表中的诗歌上下调整顺序</li>
+<li><b>删除</b>：点击诗歌旁的「✕」</li>
+<li><b>开始播放</b>：点击「▶ 开始播放」</li>
+<li><b>自动切换</b>：勾选「🔄 自动切换」后，当前歌唱完自动播下一首</li>
+</ul>
+
+<h4>3. 云端发布与在线搜索</h4>
+<ul>
+<li><b>发布诗歌</b>：编辑完成后点击「☁️ 发布到云端」，其他用户在在线搜索中即可找到</li>
+<li><b>重复检测</b>：发布前自动检测是否有同名诗歌，如果已发布过会提示</li>
+<li><b>搜索诗歌</b>：在「在线搜索诗歌」框输入关键词</li>
+<li><b>导入诗歌</b>：搜索结果中点击「导入」，自动加入本地诗歌库</li>
+</ul>
+
+<h4>4. 导入/导出</h4>
+<ul>
+<li><b>导出</b>：点击「📤 导出」，下载 .worship 备份文件</li>
+<li><b>导入</b>：点击「📥 导入」，选择之前导出的文件恢复数据</li>
+</ul>
+
+<h3>三、投屏演示</h3>
+<ul>
+<li><b>打开投屏</b>：点击「开启投屏」，弹出新窗口</li>
+<li><b>全屏</b>：在投屏窗口按 F 键</li>
+<li><b>翻页</b>：键盘左右方向键 / 空格键 / 底部按钮</li>
+<li><b>黑屏/白屏</b>：按 B 键黑屏，按 W 键白屏</li>
+</ul>
+
+<h3>四、主领视角</h3>
+
+<h4>1. 基础操作</h4>
+<ul>
+<li><b>打开</b>：点击「主领视图」按钮，平板和手机可扫码二维码</li>
+<li><b>显示模式</b>：底部悬浮图标 🔍单句 / 📋多句 / 📜滚动</li>
+<li><b>翻页</b>：左右滑动屏幕 / 键盘方向键</li>
+<li><b>字号调节</b>：点击 Aa 图标，拖动滑块调整歌词大小</li>
+<li><b>背景</b>：点击 🎨 图标切换背景（纯黑/粒子）</li>
+<li><b>工具栏收缩</b>：3秒无操作后自动淡出，屏幕右下角圆点点击恢复</li>
+<li><b>离线使用</b>：首次打开后，用浏览器「添加到主屏幕」，下次无网也能用</li>
+</ul>
+
+<h4>2. 备注功能</h4>
+<ul>
+<li><b>进入编辑</b>：点击 ✏️ 进入备注编辑模式，每行末尾出现 ⊕ 标记</li>
+<li><b>添加备注</b>：点击 ⊕ 弹出编辑框，输入备注内容后保存</li>
+<li><b>查看备注</b>：有备注的行末尾有金色微光标记点，点击即可查看</li>
+<li><b>退出编辑</b>：再次点击 ✏️ 退出备注编辑模式</li>
+</ul>
+
+<h4>3. 画笔功能</h4>
+<ul>
+<li><b>进入画笔</b>：点击 ✍️ 进入标注模式，直接在歌词上绘制</li>
+<li><b>颜色选择</b>：6种颜色可选（黄、红、蓝、白、绿、紫）</li>
+<li><b>粗细调节</b>：3档粗细（细、中、粗）</li>
+<li><b>清除标注</b>：点击 🗑️ 清除当前页所有标注</li>
+<li><b>退出画笔</b>：点击 ✅ 完成或双击屏幕退出，标注持续显示</li>
+</ul>
+
+<h3>五、外观个性化设置</h3>
+
+<h4>1. 界面主题</h4>
+<ul>
+<li><b>预设主题</b>：深色（默认）、浅色、暖色、高对比度</li>
+<li><b>自定义主题背景</b>：点击「自定义主题背景」上传喜欢的图片，设为网站整体背景</li>
+<li><b>透明度调节</b>：拖动「背景透明度」滑块，让背景图更清晰或更柔和</li>
+<li><b>背景适配</b>：上传的图片会自动填满全屏并居中，无论尺寸大小</li>
+</ul>
+
+<h4>2. 歌词背景管理</h4>
+<ul>
+<li><b>预设背景</b>：纯黑、纯白、纯灰、粒子、渐变等系统自带选项</li>
+<li><b>我的背景</b>：所有已上传的背景缩略图在此显示，点击即可一键切换</li>
+<li><b>共享背景</b>：查看和使用其他用户共享的背景图</li>
+<li><b>上传背景</b>：点击「上传背景图片」，图片自动应用并存入「我的背景」</li>
+<li><b>共享给他人</b>：在缩略图上点击「共享」按钮，确认后背景同步至云端素材库</li>
+</ul>
+
+<h4>3. 免费素材资源</h4>
+<ul>
+<li>点击「🎨 免费背景素材」查看推荐网站：</li>
+<li><b>Pixabay</b>：动态视频、粒子效果 | 搜索 worship background, particles loop</li>
+<li><b>Pexels</b>：自然风景、高质量图 | 搜索 worship, church, sunset</li>
+<li><b>Coverr</b>：免费视频背景 | 搜索 faith, spiritual, ambient</li>
+<li><b>Canva</b>：设计感强、宗教主题 | 搜索 worship background, 十字架</li>
+<li>以上网站均免费可商用，下载后回到本页用「上传背景图片」即可使用</li>
+</ul>
+
+<h3>六、快捷键</h3>
+<table>
+<tr><td>空格 / → / ↓</td><td>下一页</td></tr>
+<tr><td>← / ↑</td><td>上一页</td></tr>
+<tr><td>F</td><td>全屏（投屏窗口）</td></tr>
+<tr><td>B</td><td>黑屏（投屏窗口）</td></tr>
+<tr><td>W</td><td>白屏（投屏窗口）</td></tr>
+<tr><td>ESC</td><td>退出全屏 / 关闭弹窗</td></tr>
+</table>
+
+<h3>七、隐私与数据管理</h3>
+<ul>
+<li><b>主题背景</b>：仅保存在本地，不自动上传或公开</li>
+<li><b>歌词背景</b>：发布诗歌时可主动选择是否一并共享</li>
+<li><b>已共享的诗歌和背景</b>：其他用户可以搜索并使用</li>
+<li><b>云端发布授权</b>：所有数据共享均需用户主动点击确认</li>
+</ul>
+
+<h3>八、常见问题</h3>
+<ul>
+<li><b>投屏窗口空白？</b> → 回到主页面，点击「应用到演示屏」</li>
+<li><b>主领视图无歌词？</b> → 同样需要点击「应用到演示屏」</li>
+<li><b>云端发布失败？</b> → 检查网络连接，或稍后重试</li>
+<li><b>页面布局乱了？</b> → 按 Ctrl+Shift+R 强制刷新</li>
+<li><b>数据会丢失吗？</b> → 数据保存在浏览器本地，建议定期导出备份</li>
+<li><b>手机和平板能用吗？</b> → 可以，浏览器打开网址，推荐横屏使用</li>
+</ul>
+<p style="text-align:center; color:var(--text-secondary); margin-top:20px;">© 2026 敬拜投屏工具 · 基于 MIT 许可证开源</p>
+</template>
+
 </body>
 </html>

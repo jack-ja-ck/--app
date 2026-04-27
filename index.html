@@ -125,9 +125,9 @@
                     <div class="bg-option" data-bg="cross-glow" title="十字光晕"></div>
                     <div class="bg-option" data-bg="gradient" title="渐变"></div>
                     <div class="bg-option" data-bg="image" id="upload-bg-trigger" title="从文件上传"></div>
-                    <input type="file" id="bg-image-input" accept="image/png, image/jpg, image/jpeg, image/gif, image/bmp, image/webp" hidden>
+                    <input type="file" id="bg-image-input" accept="image/png,image/jpeg,image/jpg,image/gif,image/bmp,image/webp" hidden>
                 </div>
-                <button id="upload-bg-btn" class="btn-outline" style="width:100%; margin-top:8px;">🖼️ 上传背景图片</button>
+                <button type="button" id="upload-bg-btn" class="btn-outline" style="width:100%; margin-top:8px;">🖼️ 上传背景图片</button>
                 <p class="bg-privacy-hint">您上传的背景默认为私密，可在「我的背景」中共享到云端。</p>
             </div>
             <div id="bg-tab-mine" class="bg-tab-panel" role="tabpanel">
@@ -179,8 +179,8 @@
                 <option value="warm">暖色</option>
                 <option value="high-contrast">高对比</option>
             </select>
-            <button id="theme-bg-upload-btn" class="btn-outline" style="width:100%; margin-top:8px;">🖼️ 自定义主题背景</button>
-            <input type="file" id="theme-bg-input" accept="image/*" hidden>
+            <button type="button" id="theme-bg-upload-btn" class="btn-outline" style="width:100%; margin-top:8px;">🖼️ 自定义主题背景</button>
+            <input type="file" id="theme-bg-input" accept="image/png,image/jpeg,image/jpg,image/gif,image/bmp,image/webp,image/*" hidden>
             <div id="theme-bg-opacity-row" class="theme-bg-opacity-row is-disabled">
                 <label for="theme-bg-opacity-slider">背景透明度</label>
                 <div class="theme-bg-opacity-inner">

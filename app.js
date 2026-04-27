@@ -1650,39 +1650,76 @@
             document.body.setAttribute("data-theme", state.ui.theme);
             saveSettings();
         });
+        /* 「上传」入口必须先绑定：同一节点若同时触发 setBackground("image")，部分浏览器会阻止随后的 input.click()，导致文件选择器打不开 */
+        on("upload-bg-trigger", "click", () => $("bg-image-input")?.click());
+        on("upload-bg-btn", "click", () => $("bg-image-input")?.click());
         document.querySelectorAll(".bg-option").forEach((node) => {
+            if (node.id === "upload-bg-trigger") return;
             node.addEventListener("click", () => setBackground(node.getAttribute("data-bg") || "solid-black"));
         });
         initBgTabs();
-        on("upload-bg-trigger", "click", () => $("bg-image-input")?.click());
-        on("upload-bg-btn", "click", () => $("bg-image-input")?.click());
         on("bg-image-input", "change", (e) => {
-            const file = e.target.files?.[0];
+            const input = e.target;
+            const file = input.files?.[0];
             if (!file) return;
             const reader = new FileReader();
+            const toastAnchor = $("upload-bg-btn") || $("upload-bg-trigger");
             reader.onload = () => {
-                addUploadedBackgroundAndApply(String(reader.result || ""));
-                updateUIFromState();
-                updateAll();
-                saveSettings();
-                showToast("已应用背景并加入「我的背景」", $("upload-bg-btn"));
+                const dataUrl = String(reader.result || "").trim();
+                if (!dataUrl) {
+                    showToast("未能读取图片", toastAnchor);
+                    input.value = "";
+                    return;
+                }
+                try {
+                    addUploadedBackgroundAndApply(dataUrl);
+                    updateUIFromState();
+                    updateAll();
+                    saveSettings();
+                    showToast("已应用背景并加入「我的背景」", toastAnchor);
+                } catch (err) {
+                    console.warn(err);
+                    showToast("保存背景失败（存储空间不足）", toastAnchor);
+                } finally {
+                    input.value = "";
+                }
+            };
+            reader.onerror = () => {
+                showToast("读取文件失败", toastAnchor);
+                input.value = "";
             };
             reader.readAsDataURL(file);
-            e.target.value = "";
         });
         on("theme-bg-upload-btn", "click", () => $("theme-bg-input")?.click());
         on("theme-bg-input", "change", (e) => {
-            const file = e.target.files?.[0];
+            const input = e.target;
+            const file = input.files?.[0];
             if (!file) return;
             const reader = new FileReader();
+            const toastAnchor = $("theme-bg-upload-btn");
             reader.onload = () => {
-                const dataUrl = String(reader.result || "");
-                localStorage.setItem(THEME_BG_STORAGE, dataUrl);
-                applyThemeBackground();
-                showToast("主题背景已设置", $("theme-bg-upload-btn"));
+                const dataUrl = String(reader.result || "").trim();
+                if (!dataUrl) {
+                    showToast("未能读取图片", toastAnchor);
+                    input.value = "";
+                    return;
+                }
+                try {
+                    localStorage.setItem(THEME_BG_STORAGE, dataUrl);
+                    applyThemeBackground();
+                    showToast("主题背景已设置", toastAnchor);
+                } catch (err) {
+                    console.warn(err);
+                    showToast("主题背景存储失败（空间不足）", toastAnchor);
+                } finally {
+                    input.value = "";
+                }
+            };
+            reader.onerror = () => {
+                showToast("读取文件失败", toastAnchor);
+                input.value = "";
             };
             reader.readAsDataURL(file);
-            e.target.value = "";
         });
         on("theme-bg-opacity-slider", "input", () => {
             const v = clamp(parseFloat($("theme-bg-opacity-slider").value || "0.75"), 0.3, 1);
@@ -2604,7 +2641,7 @@
                         return `<div class="leader-line">${escapeHtml(line)}${!noteEditMode && loadNote(gi) ? `<span class="leader-note-dot" data-line="${gi}"></span>` : ""}${noteEditMode ? `<span class="leader-plus-dot" data-line="${gi}" title="添加备注">⊕</span>` : ""}</div>`;
                     }).join("") || "<div class='leader-line'>...</div>"}</div></div>`;
                 }
-                const nextHtml = displayMode === "scroll" ? "" : `<div class="leader-next">下句：${escapeHtml(nextLine)}</div>`;
+                const nextHtml = `<div class="leader-next">下句：${escapeHtml(nextLine)}</div>`;
                 host.classList.toggle("leader-scroll-mode", displayMode === "scroll");
                 const mainClass = displayMode === "scroll" ? "leader-main leader-main-scroll" : "leader-main";
                 lyricLayer.innerHTML = `<div class="leader-page">${idx + 1}/${Math.max(1, pages.length)}</div><div class="${mainClass}">${content}</div>${nextHtml}`;

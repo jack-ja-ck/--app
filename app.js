@@ -66,6 +66,11 @@
     let projectionLastTs = 0;
     let publishInFlight = false;
     let publishBlockedBy405 = false;
+    const SUPABASE_URL = "https://yetcpiorfvtysqmfsdso.supabase.co";
+    const SUPABASE_ANON_KEY = "sb_publishable_jbNKXA82g1YoNoCOVDUFg_eO618zti";
+    const supabase = (window.supabase && typeof window.supabase.createClient === "function")
+        ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+        : null;
 
     function $(id) {
         return document.getElementById(id);
@@ -594,26 +599,66 @@
         if ($("preview-line-counter")) $("preview-line-counter").textContent = `(${lines.length} 行)`;
     }
 
-    function renderOnlineSearchResult() {
+    async function searchOnlineHymns() {
         const input = $("online-search-input");
         const panel = $("online-results");
         if (!input || !panel) return;
         const q = input.value.trim().toLowerCase();
         panel.innerHTML = "";
         if (!q) return;
-        const matches = state.songs.filter((s) => (s.title || "").toLowerCase().includes(q)).slice(0, 8);
-        if (!matches.length) {
-            panel.innerHTML = '<div class="hint-text">未找到本地匹配</div>';
+        if (!supabase) {
+            panel.innerHTML = '<div class="hint-text">Supabase 未初始化</div>';
             return;
         }
-        matches.forEach((song) => {
+        const { data, error } = await supabase
+            .from("hymns")
+            .select("*")
+            .ilike("title", `%${q}%`)
+            .limit(12);
+        if (error) {
+            panel.innerHTML = '<div class="hint-text">云端搜索失败</div>';
+            return;
+        }
+        const matches = Array.isArray(data) ? data : [];
+        if (!matches.length) {
+            panel.innerHTML = '<div class="hint-text">未找到云端匹配</div>';
+            return;
+        }
+        matches.forEach((row) => {
+            const box = document.createElement("div");
+            box.style.cssText = "display:flex;gap:6px;align-items:center;margin-top:4px;";
+            const title = document.createElement("div");
+            title.className = "hint-text";
+            title.style.cssText = "flex:1;text-align:left;padding:0 4px;";
+            title.textContent = row.title || "未命名";
             const btn = document.createElement("button");
             btn.className = "small-btn";
-            btn.style.marginTop = "4px";
-            btn.textContent = `加载：${song.title}`;
-            btn.addEventListener("click", () => switchSong(song.id));
-            panel.appendChild(btn);
+            btn.style.cssText = "width:auto;margin-top:0;padding:4px 8px;white-space:nowrap;";
+            btn.textContent = "导入";
+            btn.addEventListener("click", () => {
+                const imported = {
+                    id: uid(),
+                    title: String(row.title || "未命名"),
+                    lyrics: String(row.lyrics || ""),
+                    key: "",
+                    tempo: "",
+                    notes: "",
+                    tags: Array.isArray(row.tags) ? row.tags.join(",") : String(row.tags || "")
+                };
+                state.songs.push(imported);
+                saveSongs();
+                renderSongList();
+                renderTagFilter();
+                showToast("已导入云端诗歌", btn);
+            });
+            box.appendChild(title);
+            box.appendChild(btn);
+            panel.appendChild(box);
         });
+    }
+
+    function renderOnlineSearchResult() {
+        return searchOnlineHymns();
     }
 
     function ensureFontColorControls() {
@@ -783,10 +828,6 @@
         syncEditorToSong();
         const s = currentSong() || { title: "", lyrics: "", tags: "" };
         const btn = $("publish-song-btn");
-        if (publishBlockedBy405) {
-            showToast("发布通道已暂停（405）", btn);
-            return;
-        }
         if (publishInFlight) {
             showToast("发布进行中，请稍候", btn);
             return;
@@ -795,74 +836,64 @@
             showToast("无歌词可发布", btn);
             return;
         }
-        const url = "https://script.google.com/macros/s/AKfycbxqfo0o9kVsdC_1Tm7QOyDVGB2nRYv0sxk7_LCzcLdycPMSmtNFekmxteTRYJ9d42_ODXA/exec";
+        if (!supabase) {
+            showToast("Supabase 未初始化", btn);
+            return;
+        }
         publishInFlight = true;
         if (btn) btn.disabled = true;
         if (btn) btn.textContent = "发布中...";
+        const title = String(s.title || "").trim() || "未命名";
+        const lyrics = String(s.lyrics || "");
+        const tags = Array.isArray(s.tags) ? s.tags : String(s.tags || "").split(/[,\s]+/).filter(Boolean);
 
-        const payload = {
-            title: s.title || "",
-            lyrics: s.lyrics || "",
-            tags: Array.isArray(s.tags) ? s.tags : String(s.tags || "").split(/[,\s]+/).filter(Boolean)
-        };
-
-        const exportTempPublishFile = () => {
-            const content = [
-                "Publish fallback snapshot",
-                `time: ${new Date().toISOString()}`,
-                `title: ${payload.title}`,
-                "lyrics:",
-                payload.lyrics,
-                `tags: ${(payload.tags || []).join(", ")}`
-            ].join("\n");
-            const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
-            const tempUrl = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = tempUrl;
-            a.download = `publish-fallback-${Date.now()}.txt`;
-            a.click();
-            URL.revokeObjectURL(tempUrl);
-        };
-
-        const xhr = new XMLHttpRequest();
-        xhr.open("POST", url, true);
-        xhr.setRequestHeader("Content-Type", "application/json");
-        xhr.onreadystatechange = () => {
-            if (xhr.readyState !== 4) return;
-            publishInFlight = false;
-            if (xhr.status >= 200 && xhr.status < 300) {
-                if (btn) {
-                    btn.disabled = false;
-                    btn.textContent = "发布到云端";
-                }
-                showToast("已发布到云端", btn);
+        supabase.from("hymns").select("*").eq("title", title).then(async ({ data: exists, error: checkErr }) => {
+            if (checkErr) throw checkErr;
+            if (Array.isArray(exists) && exists.length > 0) {
+                showToast("⚠️ 该诗歌已发布过，请勿重复提交", btn);
                 return;
             }
-            if (xhr.status === 405) {
-                publishBlockedBy405 = true;
-                exportTempPublishFile();
-                if (btn) {
-                    btn.disabled = true;
-                    btn.textContent = "发布已暂停";
-                }
-                showToast("405：已改为临时文本发布", btn);
-                return;
-            }
-            if (btn) {
-                btn.disabled = false;
-                btn.textContent = "发布到云端";
-            }
-            showToast(`发布失败：${String(xhr.status || "未知错误")}`, btn);
-        };
-        xhr.onerror = () => {
+            const { error } = await supabase.from("hymns").insert([{ title, lyrics, tags }]);
+            if (error) throw error;
+            showToast("✅ 已发布到云端", btn);
+            await renderOnlineSearchResult();
+        }).catch(() => {
+            showToast("❌ 发布失败，请重试", btn);
+        }).finally(() => {
             publishInFlight = false;
             if (btn) {
                 btn.disabled = false;
-                btn.textContent = "发布到云端";
+                btn.textContent = "☁️ 发布到云端";
             }
-            showToast("发布失败，请稍后再试", btn);
-        };
-        xhr.send(JSON.stringify(payload));
+        });
+    }
+
+    function openLeaderQrModal() {
+        let modal = $("leader-qr-modal");
+        const leaderUrl = `${location.origin}${location.pathname}?leader=1`;
+        const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(leaderUrl)}`;
+        if (!modal) {
+            modal = document.createElement("div");
+            modal.id = "leader-qr-modal";
+            modal.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:2600;display:flex;align-items:center;justify-content:center;";
+            modal.innerHTML = `
+                <div style="background:var(--bg-secondary);border-radius:16px;padding:16px 18px;text-align:center;min-width:220px;position:relative;">
+                    <button id="leader-qr-close" style="position:absolute;right:8px;top:6px;border:none;background:transparent;color:var(--text-secondary);cursor:pointer;">✕</button>
+                    <img id="leader-qr-image" alt="leader qr" style="width:150px;height:150px;border-radius:10px;background:#fff;padding:6px;">
+                    <div style="margin-top:10px;color:var(--text-secondary);font-size:0.9rem;">📱 扫码进入主领视角</div>
+                </div>
+            `;
+            modal.addEventListener("click", (e) => {
+                if (e.target === modal) modal.style.display = "none";
+            });
+            document.body.appendChild(modal);
+            modal.querySelector("#leader-qr-close")?.addEventListener("click", () => {
+                modal.style.display = "none";
+            });
+        }
+        const img = modal.querySelector("#leader-qr-image");
+        if (img) img.src = qrUrl;
+        modal.style.display = "flex";
     }
 
     function exportData() {
@@ -1184,6 +1215,7 @@
 
         on("open-display-btn", "click", openDisplayWindow);
         on("open-leader-btn", "click", openLeaderWindow);
+        on("leader-qr-btn", "click", openLeaderQrModal);
 
         ["size-s", "size-m", "size-l"].forEach((id) => {
             on(id, "click", () => {
@@ -1534,6 +1566,12 @@
             let touchStartX = 0;
             let hideTimer = 0;
             let toolbarCollapsed = localStorage.getItem(TOOLBAR_COLLAPSED_KEY) === "1";
+            if (localStorage.getItem(TOOLBAR_COLLAPSED_KEY) === null && window.innerWidth < 480) toolbarCollapsed = true;
+            let brushMode = false;
+            let brushDrawing = false;
+            let brushCanvas = null;
+            let brushCtx = null;
+            let lastPoint = null;
 
             host.classList.add("leader-host");
             lyricLayer.classList.add("leader-lyric-shell");
@@ -1550,7 +1588,7 @@
 
             const toolbar = document.createElement("div");
             toolbar.className = "leader-toolbar";
-            toolbar.innerHTML = '<button class="leader-mini-btn" data-mode="single">🔍 单句模式</button><button class="leader-mini-btn" data-mode="multi">📋 多句模式</button><button class="leader-mini-btn" data-mode="scroll">📜 滚动模式</button><button class="leader-mini-btn" data-action="prev">◀ 上一页</button><button class="leader-mini-btn" data-action="next">▶ 下一页</button><button class="leader-mini-btn" data-action="note">✏️ 备注</button><button class="leader-mini-btn" data-bg="black">🌙 纯黑背景</button><button class="leader-mini-btn" data-bg="particles">✨ 粒子背景</button><button class="leader-mini-btn leader-collapse-btn" data-action="collapse">∧</button>';
+            toolbar.innerHTML = '<button class="leader-mini-btn" data-mode="single">🔍 单句模式</button><button class="leader-mini-btn" data-mode="multi">📋 多句模式</button><button class="leader-mini-btn" data-mode="scroll">📜 滚动模式</button><button class="leader-mini-btn" data-action="prev">◀ 上一页</button><button class="leader-mini-btn" data-action="next">▶ 下一页</button><button class="leader-mini-btn" data-action="note">✏️ 备注</button><button class="leader-mini-btn" data-action="brush">✍️ 画笔</button><button class="leader-mini-btn" data-action="clear-brush" style="display:none;">🗑️ 清除</button><button class="leader-mini-btn" data-bg="black">🌙 纯黑背景</button><button class="leader-mini-btn" data-bg="particles">✨ 粒子背景</button><button class="leader-mini-btn leader-collapse-btn" data-action="collapse">∧</button>';
             host.appendChild(toolbar);
             const toolbarRail = document.createElement("div");
             toolbarRail.className = "leader-toolbar-rail";
@@ -1558,6 +1596,7 @@
             host.appendChild(toolbarRail);
 
             const showToolbar = () => {
+                if (brushMode) return;
                 if (toolbarCollapsed) return;
                 toolbar.classList.remove("hidden");
                 if (hideTimer) clearTimeout(hideTimer);
@@ -1586,6 +1625,69 @@
                 return { pages, idx };
             };
             const globalIndex = (pages, pageIndex, lineIndex) => pages.slice(0, pageIndex).reduce((n, p) => n + (p || []).length, 0) + lineIndex;
+            const getCanvasPoint = (ev) => {
+                if (!brushCanvas) return null;
+                const rect = brushCanvas.getBoundingClientRect();
+                const p = ev.touches?.[0] || ev.changedTouches?.[0] || ev;
+                return { x: p.clientX - rect.left, y: p.clientY - rect.top };
+            };
+            const beginBrush = (ev) => {
+                if (!brushMode || !brushCtx) return;
+                brushDrawing = true;
+                lastPoint = getCanvasPoint(ev);
+                ev.preventDefault();
+            };
+            const moveBrush = (ev) => {
+                if (!brushMode || !brushDrawing || !brushCtx) return;
+                const pt = getCanvasPoint(ev);
+                if (!pt || !lastPoint) return;
+                brushCtx.strokeStyle = "rgba(255,255,0,0.5)";
+                brushCtx.lineWidth = 3;
+                brushCtx.lineCap = "round";
+                brushCtx.beginPath();
+                brushCtx.moveTo(lastPoint.x, lastPoint.y);
+                brushCtx.lineTo(pt.x, pt.y);
+                brushCtx.stroke();
+                lastPoint = pt;
+                ev.preventDefault();
+            };
+            const endBrush = () => {
+                brushDrawing = false;
+                lastPoint = null;
+            };
+            const setupBrushCanvas = () => {
+                if (!brushCanvas) {
+                    brushCanvas = document.createElement("canvas");
+                    brushCanvas.className = "leader-brush-canvas";
+                    lyricLayer.appendChild(brushCanvas);
+                    brushCtx = brushCanvas.getContext("2d");
+                    brushCanvas.addEventListener("mousedown", beginBrush);
+                    brushCanvas.addEventListener("mousemove", moveBrush);
+                    window.addEventListener("mouseup", endBrush);
+                    brushCanvas.addEventListener("touchstart", beginBrush, { passive: false });
+                    brushCanvas.addEventListener("touchmove", moveBrush, { passive: false });
+                    window.addEventListener("touchend", endBrush, { passive: true });
+                }
+                const dpr = Math.max(1, window.devicePixelRatio || 1);
+                const rect = lyricLayer.getBoundingClientRect();
+                brushCanvas.width = Math.max(1, Math.floor(rect.width * dpr));
+                brushCanvas.height = Math.max(1, Math.floor(rect.height * dpr));
+                brushCanvas.style.width = `${rect.width}px`;
+                brushCanvas.style.height = `${rect.height}px`;
+                brushCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+                brushCanvas.style.display = brushMode ? "block" : "none";
+            };
+            const setBrushMode = (enabled) => {
+                brushMode = !!enabled;
+                toolbar.querySelector('[data-action="brush"]')?.classList.toggle("active", brushMode);
+                const clearBtn = toolbar.querySelector('[data-action="clear-brush"]');
+                if (clearBtn) clearBtn.style.display = brushMode ? "inline-flex" : "none";
+                if (brushMode) {
+                    toolbar.classList.remove("hidden");
+                    setToolbarCollapsed(false);
+                }
+                setupBrushCanvas();
+            };
 
             function openNote(lineIndex, readOnly, anchorEl) {
                 closeOverlay();
@@ -1712,6 +1814,7 @@
                 lyricLayer.innerHTML = `<div class="leader-page">${idx + 1}/${Math.max(1, pages.length)}</div><div class="leader-main">${content}</div>${nextHtml}`;
                 toolbar.querySelectorAll("[data-mode]").forEach((btn) => btn.classList.toggle("active", btn.getAttribute("data-mode") === displayMode));
                 toolbar.querySelector('[data-action="note"]')?.classList.toggle("active", noteEditMode);
+                setupBrushCanvas();
             }
 
             const flip = (delta) => channel && channel.postMessage({ type: "flip", delta });
@@ -1736,6 +1839,10 @@
                 } else if (btn.dataset.action === "note") {
                     noteEditMode = !noteEditMode;
                     render();
+                } else if (btn.dataset.action === "brush") {
+                    setBrushMode(!brushMode);
+                } else if (btn.dataset.action === "clear-brush") {
+                    if (brushCtx && brushCanvas) brushCtx.clearRect(0, 0, brushCanvas.width, brushCanvas.height);
                 } else if (btn.dataset.action === "prev") flip(-1);
                 else if (btn.dataset.action === "next") flip(1);
                 else if (btn.dataset.action === "collapse") setToolbarCollapsed(true);
@@ -1755,6 +1862,7 @@
                 showToolbar();
             }, { passive: true });
             host.addEventListener("touchend", (e) => {
+                if (brushMode) return;
                 const dx = (e.changedTouches?.[0]?.clientX || 0) - touchStartX;
                 if (Math.abs(dx) > 50) flip(dx < 0 ? 1 : -1);
                 showToolbar();

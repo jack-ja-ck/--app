@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>敬拜投屏 · 专业版</title>
     <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js" defer></script>
     <script src="app.js" defer></script>
 </head>
@@ -166,9 +167,11 @@
         <div style="display:flex;gap:8px;margin-top:8px;">
             <button id="open-display-btn" class="btn" style="background:#2e7d32; flex:1; height:42px; display:flex; align-items:center; justify-content:center;">📺 开启投屏</button>
             <button id="open-leader-btn" class="btn btn-outline" style="flex:1; height:42px; display:flex; align-items:center; justify-content:center;">📱 主领视图</button>
+            <button id="leader-qr-btn" class="btn btn-outline" style="width:42px; height:42px; display:flex; align-items:center; justify-content:center;" title="主领视图二维码">📱</button>
         </div>
         <p class="hint-text">© 2026 敬拜投屏工具。基于 MIT 许可证开源，使用者须保留此版权声明。</p>
         <p class="hint-text">隐私说明：本网站不会收集用户个人信息，所有歌词数据仅保留在您的本地浏览器中。</p>
+        <p style="font-size:0.7rem; color:var(--text-secondary); margin-top:10px;">后台管理入口：登录 supabase.com → Table Editor → hymns 表</p>
         <p class="hint-text">📝 用户反馈：<a href="https://docs.google.com/forms/d/e/1FAIpQLSf3XMyOfjcoV1MNWMmZZ0JEapXDnUfa3qWLjELN_YyqvcLQGw/viewform" target="_blank" rel="noopener noreferrer" style="color:var(--accent);text-decoration:underline;">点击提交反馈</a></p>
         <p class="hint-text">B=黑屏 W=白屏 F=全屏</p>
     </div>

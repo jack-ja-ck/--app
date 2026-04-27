@@ -396,6 +396,13 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
     justify-content: center;
     cursor: pointer;
 }
+.leader-brush-canvas {
+    position:absolute;
+    inset:0;
+    z-index:9;
+    pointer-events:auto;
+    background:transparent;
+}
 .leader-plus-dot {
     width: 8px;
     height: 8px;
@@ -781,4 +788,22 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
     #song-library, #editor-area, #preview-panel {
         -webkit-overflow-scrolling: touch;
     }
+}
+
+@media (max-width: 480px) {
+    .leader-current.leader-single { font-size: 5vw; }
+    .leader-current.leader-multi { font-size: 4.2vw; }
+    .leader-current.leader-scroll { font-size: 4vw; }
+    .leader-mini-btn {
+        min-width:44px;
+        min-height:44px;
+        padding:4px 6px;
+        font-size:10px;
+    }
+    .leader-note-dot { width:14px; height:14px; }
+}
+
+@media (min-width: 768px) {
+    .leader-lyric-shell { top:6%; bottom:30%; }
+    .leader-toolbar { min-height:30%; align-content:center; }
 }

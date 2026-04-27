@@ -67,7 +67,7 @@
     let publishInFlight = false;
     let publishBlockedBy405 = false;
     const SUPABASE_URL = "https://yetcpiorfvtysqmfsdso.supabase.co";
-    const SUPABASE_ANON_KEY = "sb_publishable_jbNKXA82g1YoNoCOVDUFg_eO618zti";
+    const SUPABASE_ANON_KEY = "sb_publishable__jbNKXA82g1YoNcOOVDUFg_eO618zti";
     const supabase = (window.supabase && typeof window.supabase.createClient === "function")
         ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
         : null;
@@ -1002,25 +1002,53 @@
             let sx = 0;
             let sw = 0;
             handle.style.cursor = "ew-resize";
-            handle.addEventListener("mousedown", (e) => {
+            handle.style.touchAction = "none";
+            const start = (clientX) => {
                 active = true;
-                sx = e.clientX;
+                sx = clientX;
                 sw = target.getBoundingClientRect().width;
                 handle.classList.add("active");
                 document.body.style.userSelect = "none";
-                e.preventDefault();
-            });
-            window.addEventListener("mousemove", (e) => {
+            };
+            const move = (clientX) => {
                 if (!active) return;
-                const dx = e.clientX - sx;
+                const dx = clientX - sx;
                 const w = clamp(sw + (invert ? -dx : dx), min, max);
                 target.style.width = w + "px";
-            });
-            window.addEventListener("mouseup", () => {
+            };
+            const end = () => {
                 if (!active) return;
                 active = false;
                 handle.classList.remove("active");
                 document.body.style.userSelect = "";
+            };
+            handle.addEventListener("mousedown", (e) => {
+                start(e.clientX);
+                e.preventDefault();
+            });
+            handle.addEventListener("touchstart", (e) => {
+                const t = e.touches?.[0];
+                if (!t) return;
+                start(t.clientX);
+                e.preventDefault();
+            }, { passive: false });
+            window.addEventListener("mousemove", (e) => {
+                move(e.clientX);
+            });
+            window.addEventListener("touchmove", (e) => {
+                const t = e.touches?.[0];
+                if (!t) return;
+                move(t.clientX);
+                if (active) e.preventDefault();
+            }, { passive: false });
+            window.addEventListener("mouseup", () => {
+                end();
+            });
+            window.addEventListener("touchend", () => {
+                end();
+            });
+            window.addEventListener("touchcancel", () => {
+                end();
             });
         };
         bind(r1, left, 180, 520, false);
@@ -1594,6 +1622,7 @@
             toolbarRail.className = "leader-toolbar-rail";
             toolbarRail.innerHTML = '<span class="leader-toolbar-rail-dot"></span>';
             host.appendChild(toolbarRail);
+            const toolbarRailDot = toolbarRail.querySelector(".leader-toolbar-rail-dot");
 
             const showToolbar = () => {
                 if (brushMode) return;
@@ -1667,6 +1696,9 @@
                     brushCanvas.addEventListener("touchstart", beginBrush, { passive: false });
                     brushCanvas.addEventListener("touchmove", moveBrush, { passive: false });
                     window.addEventListener("touchend", endBrush, { passive: true });
+                    window.addEventListener("touchcancel", endBrush, { passive: true });
+                } else if (!brushCanvas.isConnected) {
+                    lyricLayer.appendChild(brushCanvas);
                 }
                 const dpr = Math.max(1, window.devicePixelRatio || 1);
                 const rect = lyricLayer.getBoundingClientRect();
@@ -1688,6 +1720,9 @@
                 }
                 setupBrushCanvas();
             };
+            function toggleDrawMode() {
+                setBrushMode(!brushMode);
+            }
 
             function openNote(lineIndex, readOnly, anchorEl) {
                 closeOverlay();
@@ -1840,7 +1875,7 @@
                     noteEditMode = !noteEditMode;
                     render();
                 } else if (btn.dataset.action === "brush") {
-                    setBrushMode(!brushMode);
+                    toggleDrawMode();
                 } else if (btn.dataset.action === "clear-brush") {
                     if (brushCtx && brushCanvas) brushCtx.clearRect(0, 0, brushCanvas.width, brushCanvas.height);
                 } else if (btn.dataset.action === "prev") flip(-1);
@@ -1848,7 +1883,14 @@
                 else if (btn.dataset.action === "collapse") setToolbarCollapsed(true);
                 showToolbar();
             });
-            toolbarRail.addEventListener("click", () => setToolbarCollapsed(false));
+            toolbarRail.addEventListener("click", (e) => {
+                e.stopPropagation();
+                setToolbarCollapsed(false);
+            });
+            toolbarRailDot?.addEventListener("click", (e) => {
+                e.stopPropagation();
+                setToolbarCollapsed(false);
+            });
             leftArrow.addEventListener("click", () => {
                 flip(-1);
                 showToolbar();

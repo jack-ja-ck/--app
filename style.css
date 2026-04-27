@@ -272,7 +272,8 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
 #speaker-view { display:flex; flex-direction:column; flex:1 1 auto; min-height:150px; }
 #speaker-resize-handle { display:none; }
 .size-btn-group { display:none; }
-.speaker-view-label { margin-bottom:10px; padding:8px 10px; border-radius:10px; background:rgba(74,111,165,0.26); border:1px solid rgba(107,142,201,0.7); color:#d9e8ff; font-size:1rem; font-weight:700; }
+.speaker-view-label { margin-bottom:4px; padding:8px 10px; border-radius:10px; background:rgba(74,111,165,0.26); border:1px solid rgba(107,142,201,0.7); color:#d9e8ff; font-size:1rem; font-weight:700; }
+#speaker-view h4 { margin:4px 0; }
 
 .display-control-btn { background:rgba(255,255,255,0.15); backdrop-filter:blur(5px); border:1px solid rgba(255,255,255,0.25); color:white; padding:6px 16px; border-radius:20px; cursor:pointer; font-size:0.9rem; }
 .display-mini-card {
@@ -399,7 +400,7 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
 .leader-brush-canvas {
     position:absolute;
     inset:0;
-    z-index:9;
+    z-index:2;
     pointer-events:auto;
     background:transparent;
 }
@@ -563,6 +564,15 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
     transition:opacity .25s ease;
     opacity:1;
 }
+.leader-toolbar::after {
+    content:"∧";
+    position:absolute;
+    right:10px;
+    top:8px;
+    color:rgba(255,255,255,0.42);
+    font-size:12px;
+    pointer-events:none;
+}
 .leader-toolbar.hidden { opacity:0; pointer-events:none; }
 .leader-toolbar.collapsed { display:none; }
 .leader-toolbar-rail {
@@ -575,8 +585,9 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
     border-radius:999px;
     background:rgba(255,255,255,0.18);
     display:none;
-    z-index:9;
+    z-index:9999;
     cursor:pointer;
+    pointer-events:auto;
 }
 .leader-toolbar-rail.active { display:block; }
 .leader-toolbar-rail-dot {
@@ -586,9 +597,13 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
     transform:translateY(-50%);
     width:22px;
     height:22px;
+    min-width:16px;
+    min-height:16px;
     border-radius:50%;
     background:rgba(255,255,255,0.3);
     box-shadow:0 0 8px rgba(200,200,200,0.4);
+    z-index:10000;
+    pointer-events:auto;
 }
 .leader-mini-btn {
     font-size:11px;
@@ -733,6 +748,12 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
 
 /* ========== 移动端响应式布局 ========== */
 @media (max-width: 768px) {
+    .leader-mini-btn {
+        height:28px;
+        min-height:28px;
+        font-size:0.7rem;
+        padding:0 8px;
+    }
     #app { flex-direction:column; }
     #song-library { width:100%; max-height:200px; overflow-y:auto; border-right:none; border-bottom:1px solid var(--border-color); }
     #editor-area { width:100%; flex:1; min-height:300px; }

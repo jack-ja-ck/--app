@@ -690,7 +690,7 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
 .progress-bar { flex:1; height:5px; background:#444; border-radius:8px; overflow:hidden; }
 .progress-fill { height:100%; width:0%; background:var(--accent); transition:width 0.1s linear; }
 
-#card-container { display:flex; flex-wrap:nowrap; justify-content:flex-start; gap:10px; flex:1 1 auto; overflow-x:auto; scroll-snap-type:x mandatory; scroll-snap-stop:always; scroll-behavior:smooth; scroll-padding:0; padding-left:0; margin-left:0; max-height:200px; align-items:center; scrollbar-width:none; }
+#card-container { display:flex; flex-wrap:nowrap; justify-content:flex-start; gap:10px; flex:1 1 auto; min-height:0; overflow-x:auto; overflow-y:auto; scroll-snap-type:x mandatory; scroll-snap-stop:always; scroll-behavior:smooth; scroll-padding:0; padding-left:0; margin-left:0; max-height:200px; align-items:center; scrollbar-width:none; }
 #card-container::-webkit-scrollbar { display:none; }
 .card .card-line { color:white; font-weight:bold; text-shadow:2px 2px 6px black; white-space:normal; word-break:break-word; text-align:center; line-height:1.8; font-size:18px; position:relative; z-index:2; }
 .size-btn { background:rgba(255,255,255,0.1); border:none; color:var(--text-secondary); padding:2px 8px; border-radius:12px; cursor:pointer; font-size:0.8rem; transition:0.2s; }

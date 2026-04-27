@@ -1216,86 +1216,26 @@
 
     async function publishSong() {
         const s = getCurrentSong();
-        const lyricLines = String(s.lyrics || "")
-            .replace(/\r/g, "")
-            .split("\n")
-            .filter((line) => line.trim().length > 0);
-        if (!lyricLines.length) {
+        if (!String(s.lyrics || "").trim()) {
             showToast("无歌词可发布");
             return;
         }
-        if (!supabase) {
-            showToast("Supabase 未初始化");
-            return;
-        }
-        const tags = Array.isArray(s.tags)
-            ? s.tags.map((t) => String(t || "").trim()).filter(Boolean)
-            : String(s.tags || "").split(/[,，\s]+/).map((t) => t.trim()).filter(Boolean);
-        const row = {
-            title: String(s.title || "未命名").trim() || "未命名",
-            lyrics: lyricLines,
-            tags
-        };
-        const SHEETS_DUP_CHECK_URL =
-            "https://script.google.com/macros/s/AKfycbxqfo0o9kVsdC_1Tm7QOyDVGB2nRYv0sxk7_LCzcLdycPMSmtNFekmxteTRYJ9d42_ODXA/exec";
-        function collectTitlesFromSheetsData(data, out) {
-            if (data == null) return;
-            if (Array.isArray(data)) {
-                data.forEach((item) => {
-                    if (item && typeof item === "object" && !Array.isArray(item)) {
-                        if (item.title != null) {
-                            const t = String(item.title).trim();
-                            if (t) out.add(t);
-                        }
-                    } else if (Array.isArray(item) && item.length > 0) {
-                        const t = String(item[0]).trim();
-                        if (t) out.add(t);
-                    }
-                });
-                return;
-            }
-            if (typeof data !== "object") return;
-            if (Array.isArray(data.values) && data.values.length > 1) {
-                for (let i = 1; i < data.values.length; i++) {
-                    const row0 = data.values[i];
-                    if (Array.isArray(row0) && row0.length > 0) {
-                        const t = String(row0[0]).trim();
-                        if (t) out.add(t);
-                    }
-                }
-            }
-            ["rows", "data", "items", "hymns", "records", "list", "result"].forEach((k) => {
-                if (Array.isArray(data[k])) collectTitlesFromSheetsData(data[k], out);
+        const HYMN_PUBLISH_URL =
+            "https://script.google.com/macros/s/AKfycbx95LNWRhLyQZRPXZeMTGfezM7M5FCEMNXiSEhSA9uYYvpLN71Qij3w-DGsZ1_8XSvK1Q/exec";
+        try {
+            const response = await fetch(HYMN_PUBLISH_URL, {
+                method: "POST",
+                mode: "cors",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ title: s.title, lyrics: s.lyrics, tags: s.tags || [] })
             });
-        }
-        try {
-            const dupRes = await fetch(SHEETS_DUP_CHECK_URL, { method: "GET", mode: "cors" });
-            const dupText = await dupRes.text();
-            let dupPayload = null;
-            try {
-                dupPayload = JSON.parse(dupText);
-            } catch (parseErr) {
-                console.warn("publishSong: Sheets doGet 非 JSON", parseErr, dupText.slice(0, 300));
-            }
-            if (dupPayload != null) {
-                const existingTitles = new Set();
-                collectTitlesFromSheetsData(dupPayload, existingTitles);
-                if (existingTitles.has(row.title)) {
-                    showToast("⚠️ 该诗歌已发布过");
-                    return;
-                }
-            }
-        } catch (dupErr) {
-            console.error("publishSong: 重名检查请求失败", dupErr);
-        }
-        try {
-            const { error } = await supabase.from("hymns").insert([row]);
-            if (error) {
-                console.error("publishSong Supabase error:", error);
+            if (response.ok) {
+                showToast("✅ 已发布到云端");
+            } else {
+                const errText = await response.text().catch(() => "");
+                console.error("publishSong:", response.status, errText);
                 showToast("❌ 发布失败，请重试");
-                return;
             }
-            showToast("✅ 已发布到云端");
         } catch (e) {
             console.error("publishSong:", e);
             showToast("❌ 发布失败，请重试");
@@ -1410,19 +1350,65 @@
         }, 100);
     }
 
+    async function openDisplayOnSecondScreen(url, windowName, toastAnchor) {
+        const FULLSCREEN_HINT = "📺 请将此窗口拖动到投影仪屏幕上，然后按 F 全屏";
+        const W = 1280;
+        const H = 720;
+        const win = window.open("about:blank", windowName, `width=${W},height=${H}`);
+        if (!win) {
+            if (toastAnchor) showToast("无法打开窗口，请允许弹窗", toastAnchor);
+            return;
+        }
+        win.onload = () => {
+            try {
+                const h = String(win.location.href || "");
+                if (h.includes("display=1") || h.includes("leader=1")) {
+                    win.document.documentElement.requestFullscreen();
+                }
+            } catch (e) {
+                /* 部分环境需用户再次手势 */
+            }
+        };
+
+        let showDragHint = true;
+        if ("getScreenDetails" in window && typeof window.getScreenDetails === "function") {
+            try {
+                const screenDetails = await window.getScreenDetails();
+                const screens = screenDetails.screens;
+                const secondaryScreen = screens.find((s) => !s.isPrimary) || screens[screens.length - 1];
+                if (secondaryScreen) {
+                    const left = Math.round(secondaryScreen.availLeft + (secondaryScreen.availWidth - W) / 2);
+                    const top = Math.round(secondaryScreen.availTop + (secondaryScreen.availHeight - H) / 2);
+                    try {
+                        win.moveTo(left, top);
+                        win.resizeTo(W, H);
+                    } catch (moveErr) {
+                        console.log("移动窗口到目标屏幕失败", moveErr);
+                    }
+                    if (screens.some((s) => !s.isPrimary) && secondaryScreen && !secondaryScreen.isPrimary) {
+                        showDragHint = false;
+                    }
+                }
+            } catch (e) {
+                console.log("多屏幕API失败，使用回退方案", e);
+            }
+        }
+        if (showDragHint && toastAnchor) showToast(FULLSCREEN_HINT, toastAnchor);
+        try {
+            win.location.replace(url);
+        } catch (e) {
+            win.location.href = url;
+        }
+    }
+
     function openDisplayWindow() {
         broadcastState();
-        const win = window.open("./index.html?display=1", "_blank");
-        if (win) {
-            win.addEventListener("load", () => {
-                try { win.document.documentElement.requestFullscreen(); } catch (e) {}
-            });
-        }
+        void openDisplayOnSecondScreen("./index.html?display=1", "_blank", $("open-display-btn"));
     }
 
     function openLeaderWindow() {
         broadcastState();
-        window.open("./index.html?leader=1", "worship_leader", "width=1000,height=760");
+        void openDisplayOnSecondScreen("./index.html?leader=1", "worship_leader", $("open-leader-btn"));
     }
 
     function initResizable() {

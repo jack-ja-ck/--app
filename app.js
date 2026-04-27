@@ -93,7 +93,6 @@
     let projectionRaf = 0;
     let projectionLastTs = 0;
     let publishInFlight = false;
-    let publishBlockedBy405 = false;
     let defaultSongPosY = 45;
     const SUPABASE_URL = "https://yetcpiorfvtysqmfsdso.supabase.co";
     const SUPABASE_ANON_KEY = "sb_publishable__jbNKXA82g1YoNcOOVDUFg_eO618zti";

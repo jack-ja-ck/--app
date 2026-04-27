@@ -824,48 +824,31 @@
         showToast("已新建诗歌", $("new-song-btn"));
     }
 
-    function publishSong() {
-        syncEditorToSong();
-        const s = currentSong() || { title: "", lyrics: "", tags: "" };
-        const btn = $("publish-song-btn");
-        if (publishInFlight) {
-            showToast("发布进行中，请稍候", btn);
-            return;
-        }
-        if (!String(s.lyrics || "").trim().length) {
-            showToast("无歌词可发布", btn);
-            return;
-        }
-        if (!supabase) {
-            showToast("Supabase 未初始化", btn);
-            return;
-        }
-        publishInFlight = true;
-        if (btn) btn.disabled = true;
-        if (btn) btn.textContent = "发布中...";
-        const title = String(s.title || "").trim() || "未命名";
-        const lyrics = String(s.lyrics || "");
-        const tags = Array.isArray(s.tags) ? s.tags : String(s.tags || "").split(/[,\s]+/).filter(Boolean);
+    async function publishSong() {
+        const s = getCurrentSong();
+        if (!s.lyrics.length) { showToast('无歌词可发布'); return; }
 
-        supabase.from("hymns").select("*").eq("title", title).then(async ({ data: exists, error: checkErr }) => {
-            if (checkErr) throw checkErr;
-            if (Array.isArray(exists) && exists.length > 0) {
-                showToast("⚠️ 该诗歌已发布过，请勿重复提交", btn);
-                return;
+        const url = 'https://script.google.com/macros/s/AKfycbxqfo0o9kVsdC_1Tm7QOyDVGB2nRYv0sxk7_LCzcLdycPMSmtNFekmxteTRYJ9d42_ODXA/exec';
+
+        try {
+            const response = await fetch(url, {
+                method: 'POST',
+                body: JSON.stringify({
+                    title: s.title,
+                    lyrics: s.lyrics,
+                    tags: s.tags || []
+                })
+            });
+
+            if (response.ok) {
+                showToast('✅ 已发布到云端');
+            } else {
+                showToast('❌ 发布失败，请重试');
             }
-            const { error } = await supabase.from("hymns").insert([{ title, lyrics, tags }]);
-            if (error) throw error;
-            showToast("✅ 已发布到云端", btn);
-            await renderOnlineSearchResult();
-        }).catch(() => {
-            showToast("❌ 发布失败，请重试", btn);
-        }).finally(() => {
-            publishInFlight = false;
-            if (btn) {
-                btn.disabled = false;
-                btn.textContent = "☁️ 发布到云端";
-            }
-        });
+        } catch(e) {
+            console.error('发布失败:', e);
+            showToast('❌ 发布失败，请重试');
+        }
     }
 
     function openLeaderQrModal() {
@@ -1569,6 +1552,7 @@
             const DISPLAY_MODE_KEY = "leader_display_mode";
             const BG_MODE_KEY = "leader_bg_mode";
             const TOOLBAR_COLLAPSED_KEY = "leader_toolbar_collapsed";
+            const FONT_SIZE_KEY = "leader_font_size";
             const host = $("projection-host");
             const lyricLayer = $("projection-lyric");
             const bgCanvas = $("projection-bg");
@@ -1600,6 +1584,20 @@
             let brushCanvas = null;
             let brushCtx = null;
             let lastPoint = null;
+            let brushColor = "#ffff00";
+            let brushWidth = 4;
+            let brushPanel = null;
+            let bgPanel = null;
+            let fontPanel = null;
+            let fontHideTimer = 0;
+            let currentPageKey = "";
+            const pageDrawings = {};
+            let leaderFontSize = localStorage.getItem(FONT_SIZE_KEY) || "5vw";
+            const parsedLeaderFont = parseFloat(leaderFontSize);
+            if (!Number.isFinite(parsedLeaderFont) || parsedLeaderFont < 3 || parsedLeaderFont > 8) leaderFontSize = "5vw";
+            let touchStartY = 0;
+            let swipeFromBottomY = null;
+            let mouseBottomStartY = null;
 
             host.classList.add("leader-host");
             lyricLayer.classList.add("leader-lyric-shell");
@@ -1616,27 +1614,84 @@
 
             const toolbar = document.createElement("div");
             toolbar.className = "leader-toolbar";
-            toolbar.innerHTML = '<button class="leader-mini-btn" data-mode="single">🔍 单句模式</button><button class="leader-mini-btn" data-mode="multi">📋 多句模式</button><button class="leader-mini-btn" data-mode="scroll">📜 滚动模式</button><button class="leader-mini-btn" data-action="prev">◀ 上一页</button><button class="leader-mini-btn" data-action="next">▶ 下一页</button><button class="leader-mini-btn" data-action="note">✏️ 备注</button><button class="leader-mini-btn" data-action="brush">✍️ 画笔</button><button class="leader-mini-btn" data-action="clear-brush" style="display:none;">🗑️ 清除</button><button class="leader-mini-btn" data-bg="black">🌙 纯黑背景</button><button class="leader-mini-btn" data-bg="particles">✨ 粒子背景</button><button class="leader-mini-btn leader-collapse-btn" data-action="collapse">∧</button>';
+            toolbar.innerHTML = '<button class="leader-mini-btn" data-mode="single" title="单句"><span class="leader-btn-icon">🔍</span><span class="leader-btn-label">单句</span></button><button class="leader-mini-btn" data-mode="multi" title="多句"><span class="leader-btn-icon">📋</span><span class="leader-btn-label">多句</span></button><button class="leader-mini-btn" data-mode="scroll" title="滚动"><span class="leader-btn-icon">📜</span><span class="leader-btn-label">滚动</span></button><button class="leader-mini-btn" data-action="prev" title="上一页"><span class="leader-btn-icon">◀</span><span class="leader-btn-label">上页</span></button><button class="leader-mini-btn" data-action="next" title="下一页"><span class="leader-btn-icon">▶</span><span class="leader-btn-label">下页</span></button><button class="leader-mini-btn" data-action="font-panel" title="字号"><span class="leader-btn-icon leader-font-aa">Aa</span><span class="leader-btn-label">字号</span></button><button class="leader-mini-btn leader-brush-btn" data-action="brush" title="标注"><span class="leader-btn-icon">✍️</span><span class="leader-btn-label">画笔</span><span class="leader-brush-indicator"></span></button><button class="leader-mini-btn" data-action="bg-panel" title="背景"><span class="leader-btn-icon">🎨</span><span class="leader-btn-label">背景</span></button>';
             host.appendChild(toolbar);
             const toolbarRail = document.createElement("div");
             toolbarRail.className = "leader-toolbar-rail";
-            toolbarRail.innerHTML = '<span class="leader-toolbar-rail-dot"></span>';
+            toolbarRail.innerHTML = '<button type="button" class="leader-expand-fab" aria-label="展开工具栏"><span class="leader-expand-fab-icon">∨</span></button>';
             host.appendChild(toolbarRail);
-            const toolbarRailDot = toolbarRail.querySelector(".leader-toolbar-rail-dot");
 
+            const hideFontPanel = () => {
+                if (fontHideTimer) {
+                    clearTimeout(fontHideTimer);
+                    fontHideTimer = 0;
+                }
+                if (fontPanel) fontPanel.style.display = "none";
+            };
+            const positionFontPanel = () => {
+                if (!fontPanel || fontPanel.style.display === "none") return;
+                const aaBtn = toolbar.querySelector('[data-action="font-panel"]');
+                if (!aaBtn) return;
+                const hostRect = host.getBoundingClientRect();
+                const btnRect = aaBtn.getBoundingClientRect();
+                const pw = fontPanel.offsetWidth || 160;
+                const left = clamp(btnRect.left + btnRect.width / 2 - pw / 2 - hostRect.left, 8, hostRect.width - pw - 8);
+                const top = btnRect.top - hostRect.top - fontPanel.offsetHeight - 8;
+                fontPanel.style.left = `${left}px`;
+                fontPanel.style.top = `${Math.max(8, top)}px`;
+            };
+            const resetFontPanelHideTimer = () => {
+                if (fontHideTimer) clearTimeout(fontHideTimer);
+                fontHideTimer = setTimeout(() => hideFontPanel(), 3000);
+            };
+            const ensureFontPanel = () => {
+                if (fontPanel) return;
+                fontPanel = document.createElement("div");
+                fontPanel.className = "leader-font-pop";
+                fontPanel.innerHTML = '<input type="range" class="leader-font-range" min="3" max="8" step="0.1" aria-label="字号">';
+                host.appendChild(fontPanel);
+                const range = fontPanel.querySelector(".leader-font-range");
+                range.addEventListener("input", () => {
+                    const v = clamp(parseFloat(range.value) || 5, 3, 8);
+                    leaderFontSize = `${Number(v.toFixed(1))}vw`;
+                    localStorage.setItem(FONT_SIZE_KEY, leaderFontSize);
+                    render();
+                    resetFontPanelHideTimer();
+                    positionFontPanel();
+                });
+                fontPanel.addEventListener("mousedown", (e) => e.stopPropagation());
+                fontPanel.addEventListener("touchstart", (e) => e.stopPropagation(), { passive: true });
+            };
+            const toggleFontPanel = () => {
+                ensureFontPanel();
+                if (fontPanel.style.display === "block") {
+                    hideFontPanel();
+                    return;
+                }
+                const range = fontPanel.querySelector(".leader-font-range");
+                const parsed = parseFloat(leaderFontSize);
+                range.value = String(Number.isFinite(parsed) ? clamp(parsed, 3, 8) : 5);
+                fontPanel.style.display = "block";
+                positionFontPanel();
+                resetFontPanelHideTimer();
+            };
             const showToolbar = () => {
                 if (brushMode) return;
                 if (toolbarCollapsed) return;
                 toolbar.classList.remove("hidden");
                 if (hideTimer) clearTimeout(hideTimer);
-                hideTimer = setTimeout(() => toolbar.classList.add("hidden"), 3000);
+                hideTimer = setTimeout(() => setToolbarCollapsed(true), 3000);
             };
             const setToolbarCollapsed = (collapsed) => {
                 toolbarCollapsed = !!collapsed;
                 localStorage.setItem(TOOLBAR_COLLAPSED_KEY, toolbarCollapsed ? "1" : "0");
                 toolbar.classList.toggle("collapsed", toolbarCollapsed);
                 toolbarRail.classList.toggle("active", toolbarCollapsed);
-                if (!toolbarCollapsed) showToolbar();
+                if (toolbarCollapsed) hideFontPanel();
+                if (!toolbarCollapsed) {
+                    toolbar.classList.remove("hidden");
+                    showToolbar();
+                }
             };
             const saveNote = (lineIndex, note) => {
                 notesMap[String(lineIndex)] = String(note || "").trim();
@@ -1654,6 +1709,130 @@
                 return { pages, idx };
             };
             const globalIndex = (pages, pageIndex, lineIndex) => pages.slice(0, pageIndex).reduce((n, p) => n + (p || []).length, 0) + lineIndex;
+            const buildPageKey = () => {
+                const { idx } = getPages();
+                const song = String(liveState?.title || "");
+                return `${song}::${idx}`;
+            };
+            const updateBrushIndicator = () => {
+                const indicator = toolbar.querySelector(".leader-brush-indicator");
+                if (!indicator) return;
+                indicator.style.display = brushMode ? "block" : "none";
+                indicator.style.background = brushColor;
+                const size = clamp(brushWidth + 2, 4, 8);
+                indicator.style.width = `${size}px`;
+                indicator.style.height = `${size}px`;
+            };
+            const saveCurrentDrawing = () => {
+                if (!brushCanvas || !currentPageKey) return;
+                pageDrawings[currentPageKey] = brushCanvas.toDataURL("image/png");
+            };
+            const restoreCurrentDrawing = () => {
+                if (!brushCanvas || !brushCtx) return;
+                const dataUrl = pageDrawings[currentPageKey];
+                if (!dataUrl) return;
+                const img = new Image();
+                img.onload = () => {
+                    brushCtx.clearRect(0, 0, brushCanvas.width, brushCanvas.height);
+                    brushCtx.drawImage(img, 0, 0, brushCanvas.width, brushCanvas.height);
+                };
+                img.src = dataUrl;
+            };
+            const hideBrushPanel = () => {
+                if (brushPanel) brushPanel.style.display = "none";
+            };
+            const hideBgPanel = () => {
+                if (bgPanel) bgPanel.style.display = "none";
+            };
+            const syncBrushPanelActiveState = () => {
+                if (!brushPanel) return;
+                brushPanel.querySelectorAll("[data-brush-color]").forEach((el) => {
+                    el.classList.toggle("active", el.getAttribute("data-brush-color") === brushColor);
+                });
+                brushPanel.querySelectorAll("[data-brush-width]").forEach((el) => {
+                    el.classList.toggle("active", Number(el.getAttribute("data-brush-width")) === brushWidth);
+                });
+            };
+            const updateBrushPanelPosition = () => {
+                if (!brushPanel || brushPanel.style.display === "none") return;
+                const hostRect = host.getBoundingClientRect();
+                const panelWidth = brushPanel.offsetWidth || 360;
+                const left = clamp(hostRect.width / 2 - panelWidth / 2, 8, hostRect.width - panelWidth - 8);
+                const top = hostRect.height - brushPanel.offsetHeight - 72;
+                brushPanel.style.left = `${left}px`;
+                brushPanel.style.top = `${Math.max(8, top)}px`;
+            };
+            const showBgPanel = () => {
+                if (!bgPanel) return;
+                const bgBtn = toolbar.querySelector('[data-action="bg-panel"]');
+                if (!bgBtn) return;
+                bgPanel.style.display = "block";
+                const hostRect = host.getBoundingClientRect();
+                const btnRect = bgBtn.getBoundingClientRect();
+                const panelWidth = bgPanel.offsetWidth || 170;
+                const left = clamp(btnRect.left + btnRect.width / 2 - panelWidth / 2 - hostRect.left, 8, hostRect.width - panelWidth - 8);
+                const top = btnRect.top - hostRect.top - bgPanel.offsetHeight - 6;
+                bgPanel.style.left = `${left}px`;
+                bgPanel.style.top = `${Math.max(8, top)}px`;
+                bgPanel.querySelectorAll("[data-bg]").forEach((btn) => btn.classList.toggle("active", btn.getAttribute("data-bg") === bgMode));
+            };
+            const showBrushPanel = () => {
+                if (!brushPanel) return;
+                brushPanel.style.display = "block";
+                syncBrushPanelActiveState();
+                updateBrushPanelPosition();
+            };
+            const ensureBrushPanel = () => {
+                if (brushPanel) return;
+                brushPanel = document.createElement("div");
+                brushPanel.className = "leader-brush-panel";
+                brushPanel.innerHTML = '<div class="leader-brush-row"><button class="leader-brush-color" data-brush-color="#ffff00" style="background:#ffff00;" title="黄色"></button><button class="leader-brush-color" data-brush-color="#ff6666" style="background:#ff6666;" title="红色"></button><button class="leader-brush-color" data-brush-color="#66ccff" style="background:#66ccff;" title="蓝色"></button><button class="leader-brush-color" data-brush-color="#ffffff" style="background:#ffffff;" title="白色"></button><button class="leader-brush-color" data-brush-color="#66ff66" style="background:#66ff66;" title="绿色"></button><button class="leader-brush-color" data-brush-color="#cc66ff" style="background:#cc66ff;" title="紫色"></button></div><div class="leader-brush-row"><button class="leader-brush-width" data-brush-width="2" title="细">2px</button><button class="leader-brush-width" data-brush-width="4" title="中">4px</button><button class="leader-brush-width" data-brush-width="6" title="粗">6px</button><button class="leader-brush-clear" data-action="clear-brush" title="清除">🗑️</button><button class="leader-brush-done" data-action="done-brush" title="完成">✅</button></div>';
+                host.appendChild(brushPanel);
+                brushPanel.addEventListener("click", (e) => {
+                    if (e.target.closest("[data-action='done-brush']")) {
+                        setBrushMode(false);
+                        return;
+                    }
+                    const colorBtn = e.target.closest("[data-brush-color]");
+                    if (colorBtn) {
+                        brushColor = colorBtn.getAttribute("data-brush-color") || "#ffff00";
+                        syncBrushPanelActiveState();
+                        updateBrushIndicator();
+                        hideBrushPanel();
+                        return;
+                    }
+                    const widthBtn = e.target.closest("[data-brush-width]");
+                    if (widthBtn) {
+                        brushWidth = Number(widthBtn.getAttribute("data-brush-width")) || 4;
+                        syncBrushPanelActiveState();
+                        updateBrushIndicator();
+                        hideBrushPanel();
+                        return;
+                    }
+                    if (e.target.closest("[data-action='clear-brush']")) {
+                        if (brushCtx && brushCanvas) {
+                            brushCtx.clearRect(0, 0, brushCanvas.width, brushCanvas.height);
+                            saveCurrentDrawing();
+                        }
+                        hideBrushPanel();
+                    }
+                });
+            };
+            const ensureBgPanel = () => {
+                if (bgPanel) return;
+                bgPanel = document.createElement("div");
+                bgPanel.className = "leader-bg-panel";
+                bgPanel.innerHTML = '<button class="leader-bg-item" data-bg="black">🌙 纯黑</button><button class="leader-bg-item" data-bg="particles">✨ 粒子</button>';
+                host.appendChild(bgPanel);
+                bgPanel.addEventListener("click", (e) => {
+                    const btn = e.target.closest("[data-bg]");
+                    if (!btn) return;
+                    bgMode = btn.getAttribute("data-bg") || "black";
+                    localStorage.setItem(BG_MODE_KEY, bgMode);
+                    applyBg();
+                    hideBgPanel();
+                });
+            };
             const getCanvasPoint = (ev) => {
                 if (!brushCanvas) return null;
                 const rect = brushCanvas.getBoundingClientRect();
@@ -1670,8 +1849,8 @@
                 if (!brushMode || !brushDrawing || !brushCtx) return;
                 const pt = getCanvasPoint(ev);
                 if (!pt || !lastPoint) return;
-                brushCtx.strokeStyle = "rgba(255,255,0,0.5)";
-                brushCtx.lineWidth = 3;
+                brushCtx.strokeStyle = brushColor;
+                brushCtx.lineWidth = brushWidth;
                 brushCtx.lineCap = "round";
                 brushCtx.beginPath();
                 brushCtx.moveTo(lastPoint.x, lastPoint.y);
@@ -1683,8 +1862,12 @@
             const endBrush = () => {
                 brushDrawing = false;
                 lastPoint = null;
+                if (brushMode) saveCurrentDrawing();
             };
             const setupBrushCanvas = () => {
+                const previousKey = currentPageKey;
+                currentPageKey = buildPageKey();
+                if (previousKey && previousKey !== currentPageKey) saveCurrentDrawing();
                 if (!brushCanvas) {
                     brushCanvas = document.createElement("canvas");
                     brushCanvas.className = "leader-brush-canvas";
@@ -1702,23 +1885,37 @@
                 }
                 const dpr = Math.max(1, window.devicePixelRatio || 1);
                 const rect = lyricLayer.getBoundingClientRect();
+                const prevDataUrl = pageDrawings[currentPageKey];
                 brushCanvas.width = Math.max(1, Math.floor(rect.width * dpr));
                 brushCanvas.height = Math.max(1, Math.floor(rect.height * dpr));
                 brushCanvas.style.width = `${rect.width}px`;
                 brushCanvas.style.height = `${rect.height}px`;
                 brushCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+                brushCtx.clearRect(0, 0, brushCanvas.width, brushCanvas.height);
+                if (prevDataUrl) restoreCurrentDrawing();
                 brushCanvas.style.display = brushMode ? "block" : "none";
             };
             const setBrushMode = (enabled) => {
                 brushMode = !!enabled;
                 toolbar.querySelector('[data-action="brush"]')?.classList.toggle("active", brushMode);
-                const clearBtn = toolbar.querySelector('[data-action="clear-brush"]');
-                if (clearBtn) clearBtn.style.display = brushMode ? "inline-flex" : "none";
                 if (brushMode) {
-                    toolbar.classList.remove("hidden");
+                    if (hideTimer) {
+                        clearTimeout(hideTimer);
+                        hideTimer = 0;
+                    }
+                    hideFontPanel();
+                    toolbar.classList.add("brush-hidden");
                     setToolbarCollapsed(false);
+                    ensureBrushPanel();
+                    hideBgPanel();
+                    showBrushPanel();
+                } else {
+                    toolbar.classList.remove("brush-hidden");
+                    hideBrushPanel();
+                    showToolbar();
                 }
                 setupBrushCanvas();
+                updateBrushIndicator();
             };
             function toggleDrawMode() {
                 setBrushMode(!brushMode);
@@ -1821,7 +2018,7 @@
                 } else {
                     bgCanvas.style.display = "none";
                 }
-                toolbar.querySelectorAll("[data-bg]").forEach((btn) => btn.classList.toggle("active", btn.getAttribute("data-bg") === bgMode));
+                bgPanel?.querySelectorAll("[data-bg]").forEach((btn) => btn.classList.toggle("active", btn.getAttribute("data-bg") === bgMode));
             }
 
             function render() {
@@ -1835,20 +2032,21 @@
                 let content = "";
                 if (displayMode === "single") {
                     const gi = globalIndex(pages, idx, 0);
-                    content = `<div class="leader-current leader-single" style="color:${color};"><div class="leader-line">${escapeHtml(lines[0] || "...")}${loadNote(gi) ? `<span class="leader-note-dot" data-line="${gi}"></span>` : ""}${noteEditMode ? `<span class="leader-plus-dot" data-line="${gi}">+</span>` : ""}</div></div>`;
+                    content = `<div class="leader-current leader-single" style="color:${color};font-size:${leaderFontSize};"><div class="leader-line">${escapeHtml(lines[0] || "...")}${loadNote(gi) ? `<span class="leader-note-dot" data-line="${gi}"></span>` : ""}${noteEditMode ? `<span class="leader-plus-dot" data-line="${gi}">+</span>` : ""}</div></div>`;
                 } else if (displayMode === "scroll") {
                     const all = pages.flat();
-                    content = `<div class="leader-current leader-scroll" style="color:${color};">${all.map((line, i) => `<div class="leader-line${i >= curStart && i <= curEnd ? " current" : ""}" style="text-align:center;">${escapeHtml(line)}${loadNote(i) ? `<span class="leader-note-dot" data-line="${i}"></span>` : ""}${noteEditMode ? `<span class="leader-plus-dot" data-line="${i}">+</span>` : ""}</div>`).join("")}</div>`;
+                    content = `<div class="leader-current leader-scroll" style="color:${color};font-size:${leaderFontSize};">${all.map((line, i) => `<div class="leader-line${i >= curStart && i <= curEnd ? " current" : ""}" style="text-align:center;">${escapeHtml(line)}${loadNote(i) ? `<span class="leader-note-dot" data-line="${i}"></span>` : ""}${noteEditMode ? `<span class="leader-plus-dot" data-line="${i}">+</span>` : ""}</div>`).join("")}</div>`;
                 } else {
-                    content = `<div class="leader-current leader-multi" style="color:${color};">${lines.map((line, i) => {
+                    content = `<div class="leader-current leader-multi" style="color:${color};font-size:${leaderFontSize};">${lines.map((line, i) => {
                         const gi = globalIndex(pages, idx, i);
                         return `<div class="leader-line">${escapeHtml(line)}${loadNote(gi) ? `<span class="leader-note-dot" data-line="${gi}"></span>` : ""}${noteEditMode ? `<span class="leader-plus-dot" data-line="${gi}">+</span>` : ""}</div>`;
                     }).join("") || "<div class='leader-line'>...</div>"}</div>`;
                 }
                 const nextHtml = displayMode === "scroll" ? "" : `<div class="leader-next">下句：${escapeHtml(nextLine)}</div>`;
-                lyricLayer.innerHTML = `<div class="leader-page">${idx + 1}/${Math.max(1, pages.length)}</div><div class="leader-main">${content}</div>${nextHtml}`;
+                host.classList.toggle("leader-scroll-mode", displayMode === "scroll");
+                const mainClass = displayMode === "scroll" ? "leader-main leader-main-scroll" : "leader-main";
+                lyricLayer.innerHTML = `<div class="leader-page">${idx + 1}/${Math.max(1, pages.length)}</div><div class="${mainClass}">${content}</div>${nextHtml}`;
                 toolbar.querySelectorAll("[data-mode]").forEach((btn) => btn.classList.toggle("active", btn.getAttribute("data-mode") === displayMode));
-                toolbar.querySelector('[data-action="note"]')?.classList.toggle("active", noteEditMode);
                 setupBrushCanvas();
             }
 
@@ -1871,23 +2069,19 @@
                     bgMode = btn.dataset.bg;
                     localStorage.setItem(BG_MODE_KEY, bgMode);
                     applyBg();
-                } else if (btn.dataset.action === "note") {
-                    noteEditMode = !noteEditMode;
-                    render();
+                } else if (btn.dataset.action === "bg-panel") {
+                    ensureBgPanel();
+                    if (bgPanel?.style.display === "block") hideBgPanel();
+                    else showBgPanel();
+                } else if (btn.dataset.action === "font-panel") {
+                    toggleFontPanel();
                 } else if (btn.dataset.action === "brush") {
                     toggleDrawMode();
-                } else if (btn.dataset.action === "clear-brush") {
-                    if (brushCtx && brushCanvas) brushCtx.clearRect(0, 0, brushCanvas.width, brushCanvas.height);
                 } else if (btn.dataset.action === "prev") flip(-1);
                 else if (btn.dataset.action === "next") flip(1);
-                else if (btn.dataset.action === "collapse") setToolbarCollapsed(true);
                 showToolbar();
             });
             toolbarRail.addEventListener("click", (e) => {
-                e.stopPropagation();
-                setToolbarCollapsed(false);
-            });
-            toolbarRailDot?.addEventListener("click", (e) => {
                 e.stopPropagation();
                 setToolbarCollapsed(false);
             });
@@ -1900,28 +2094,68 @@
                 showToolbar();
             });
             host.addEventListener("touchstart", (e) => {
+                if (toolbarCollapsed && !brushMode) setToolbarCollapsed(false);
                 touchStartX = e.changedTouches?.[0]?.clientX || 0;
+                touchStartY = e.changedTouches?.[0]?.clientY || 0;
+                if (toolbarCollapsed && touchStartY > window.innerHeight - 100) swipeFromBottomY = touchStartY;
+                else swipeFromBottomY = null;
                 showToolbar();
             }, { passive: true });
             host.addEventListener("touchend", (e) => {
                 if (brushMode) return;
-                const dx = (e.changedTouches?.[0]?.clientX || 0) - touchStartX;
-                if (Math.abs(dx) > 50) flip(dx < 0 ? 1 : -1);
+                const x = e.changedTouches?.[0]?.clientX || 0;
+                const y = e.changedTouches?.[0]?.clientY || 0;
+                const dx = x - touchStartX;
+                const dy = y - touchStartY;
+                if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) flip(dx < 0 ? 1 : -1);
+                if (toolbarCollapsed && swipeFromBottomY != null && y < swipeFromBottomY - 20) setToolbarCollapsed(false);
+                swipeFromBottomY = null;
                 showToolbar();
             }, { passive: true });
+            host.addEventListener("dblclick", (e) => {
+                if (!brushMode) return;
+                if (e.target?.closest?.(".leader-brush-panel")) return;
+                setBrushMode(false);
+            });
             document.addEventListener("keydown", (e) => {
-                if (e.key === "ArrowLeft") flip(-1);
-                if (e.key === "ArrowRight") flip(1);
+                if (!brushMode && e.key === "ArrowLeft") flip(-1);
+                if (!brushMode && e.key === "ArrowRight") flip(1);
+                if (brushMode && e.key === "Escape") setBrushMode(false);
                 if (e.key === "Escape") closeOverlay();
                 showToolbar();
             });
-            document.addEventListener("mousemove", showToolbar);
+            document.addEventListener("mousemove", () => {
+                if (toolbarCollapsed && !brushMode) {
+                    setToolbarCollapsed(false);
+                    return;
+                }
+                showToolbar();
+            });
+            host.addEventListener("mousedown", (e) => {
+                if (brushMode || e.button !== 0) return;
+                mouseBottomStartY = e.clientY > window.innerHeight - 100 ? e.clientY : null;
+            });
+            window.addEventListener("mouseup", (e) => {
+                if (brushMode || mouseBottomStartY == null) return;
+                if (toolbarCollapsed && e.clientY < mouseBottomStartY - 20) setToolbarCollapsed(false);
+                mouseBottomStartY = null;
+            });
             document.addEventListener("click", (e) => {
                 if (overlay && e.target === overlay) closeOverlay();
+                if (fontPanel && fontPanel.style.display !== "none") {
+                    const inFont = e.target?.closest?.(".leader-font-pop");
+                    const inAa = e.target?.closest?.('[data-action="font-panel"]');
+                    if (!inFont && !inAa) hideFontPanel();
+                }
+                if (bgPanel && bgPanel.style.display !== "none") {
+                    const inBgPanel = e.target?.closest?.(".leader-bg-panel");
+                    const inBgBtn = e.target?.closest?.('[data-action="bg-panel"]');
+                    if (!inBgPanel && !inBgBtn) hideBgPanel();
+                }
                 if (toolbarCollapsed) {
                     const inToolbar = e.target?.closest?.(".leader-toolbar");
-                    const inRailDot = e.target?.closest?.(".leader-toolbar-rail-dot");
-                    if (!inToolbar && !inRailDot) setToolbarCollapsed(false);
+                    const inFab = e.target?.closest?.(".leader-expand-fab");
+                    if (!inToolbar && !inFab) setToolbarCollapsed(false);
                 }
                 showToolbar();
             });
@@ -1946,6 +2180,9 @@
             window.addEventListener("resize", () => {
                 applyBg();
                 render();
+                updateBrushPanelPosition();
+                positionFontPanel();
+                if (bgPanel?.style.display === "block") showBgPanel();
             });
 
             const initState = getStore(STORAGE.LIVE, null);
@@ -1953,6 +2190,7 @@
             applyBg();
             render();
             setToolbarCollapsed(toolbarCollapsed);
+            updateBrushIndicator();
             showToolbar();
             return;
         }

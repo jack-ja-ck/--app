@@ -1258,16 +1258,17 @@
 
     async function publishSong() {
         const s = getCurrentSong();
-        if (!s.lyrics.length) { showToast('无歌词可发布'); return; }
-        const url = 'https://script.google.com/macros/s/AKfycbx95LNWRhLyQZRPXZeMTGfezM7M5FCEMNXiSEhSA9uYYvpLN71Qij3w-DGsZ1_8XSvK1Q/exec';
+        if (!s.lyrics || !s.lyrics.length) { showToast('无歌词可发布'); return; }
+        const url = 'https://spring-bush-d415.cuirenjie123456789.workers.dev';
         try {
             const response = await fetch(url, {
                 method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ title: s.title, lyrics: s.lyrics, tags: s.tags || [] })
             });
-            if (response.ok) { showToast('已发布到云端'); }
-            else { showToast('发布失败，请重试'); }
-        } catch(e) { console.error('发布失败:', e); showToast('发布失败，请重试'); }
+            if (response.ok) { showToast('✅ 已发布到云端'); }
+            else { showToast('❌ 发布失败，请重试'); }
+        } catch(e) { console.error('发布失败:', e); showToast('❌ 发布失败，请重试'); }
     }
 
     function openLeaderQrModal() {

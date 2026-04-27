@@ -237,7 +237,7 @@ body[data-theme-custom-bg="1"][data-theme="high-contrast"] #editor-area {
 .file-import-export .small-btn { flex:1; margin-top:0; }
 .hint-text { font-size:0.7rem; color:var(--text-secondary); margin-top:6px; text-align:center; }
 
-#editor-area { flex:1; padding:16px 20px; overflow-y:auto; background:rgba(18,18,24,0.77); backdrop-filter:blur(5px); -webkit-backdrop-filter:blur(5px); display:flex !important; flex-direction:column !important; gap:10px; will-change:transform; -webkit-overflow-scrolling:touch; }
+#editor-area { flex:1; min-height:0; padding:16px 20px; overflow-y:auto; background:rgba(18,18,24,0.77); backdrop-filter:blur(5px); -webkit-backdrop-filter:blur(5px); display:flex !important; flex-direction:column !important; gap:10px; will-change:transform; -webkit-overflow-scrolling:touch; }
 .editor-area-title { font-size:0.8rem; color:var(--text-secondary); margin-right:12px; vertical-align:middle; background:transparent; font-weight:normal; }
 #current-song-title { display:flex; align-items:center; gap:12px; margin-bottom:15px; }
 #current-song-title input { background:transparent; border:none; border-bottom:2px solid var(--accent); color:var(--text-primary); font-size:1.6rem; padding:4px 0; width:300px; }
@@ -690,12 +690,12 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
 .progress-bar { flex:1; height:5px; background:#444; border-radius:8px; overflow:hidden; }
 .progress-fill { height:100%; width:0%; background:var(--accent); transition:width 0.1s linear; }
 
-#card-container { display:flex; flex-wrap:nowrap; justify-content:flex-start; gap:10px; flex:1 1 auto; flex-grow:1; height:auto; min-height:0; align-content:start; align-items:center; overflow-x:auto; overflow-y:auto; scroll-snap-type:x mandatory; scroll-snap-stop:always; scroll-behavior:smooth; scroll-padding:0; padding-left:0; margin-left:0; max-height:200px; scrollbar-width:none; }
+#card-container { display:flex; flex-wrap:nowrap; justify-content:flex-start; gap:10px; flex:1 1 auto; flex-grow:1; min-height:0; height:100%; align-content:start; align-items:center; overflow-x:auto; overflow-y:auto; scroll-snap-type:x mandatory; scroll-snap-stop:always; scroll-behavior:smooth; scroll-padding:0; padding-left:0; margin-left:0; scrollbar-width:none; }
 #card-container::-webkit-scrollbar { display:none; }
 .card .card-line { color:white; font-weight:bold; text-shadow:2px 2px 6px black; white-space:normal; word-break:break-word; text-align:center; line-height:1.8; font-size:18px; position:relative; z-index:2; }
 .size-btn { background:rgba(255,255,255,0.1); border:none; color:var(--text-secondary); padding:2px 8px; border-radius:12px; cursor:pointer; font-size:0.8rem; transition:0.2s; }
 .size-btn.active { background:var(--accent); color:white; }
-#speaker-view { display:flex; flex-direction:column; flex:1 1 auto; min-height:150px; }
+#speaker-view { display:flex; flex-direction:column; flex:1 1 auto; flex-grow:1; min-height:0; }
 #speaker-resize-handle { display:none; }
 .size-btn-group { display:none; }
 .speaker-view-label { margin-bottom:4px; padding:8px 10px; border-radius:10px; background:rgba(74,111,165,0.26); border:1px solid rgba(107,142,201,0.7); color:#d9e8ff; font-size:1rem; font-weight:700; }
@@ -741,7 +741,7 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
 #display-card-preview {
     display: flex !important;
     flex-wrap: nowrap !important;
-    justify-content: flex-start !important;
+    justify-content: center !important;
     align-items: center !important;
     gap: 10px !important;
     flex: 1 1 auto !important;
@@ -1339,7 +1339,7 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
     .leader-host .leader-btn-label { font-size:0.55rem; }
     #app { flex-direction:column; }
     #song-library { width:100%; max-height:200px; overflow-y:auto; border-right:none; border-bottom:1px solid var(--border-color); }
-    #editor-area { width:100%; flex:1; min-height:300px; }
+    #editor-area { width:100%; flex:1; min-height:300px; display:flex; flex-direction:column; }
     #preview-panel { width:100%; max-height:250px; overflow-y:auto; border-left:none; border-top:1px solid var(--border-color); }
     .resize-handle { display:none; }
     body { font-size:14px; }
@@ -1356,7 +1356,7 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
     }
     
     /* 投屏预览适配 */
-    #speaker-view { width:100%; padding:10px; }
+    #speaker-view { width:100%; padding:10px; display:flex; flex-direction:column; flex:1 1 auto; min-height:0; }
     .card { width:200px; height:150px; }
     
     /* 弹窗适配 */

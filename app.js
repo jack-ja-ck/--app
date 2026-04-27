@@ -148,20 +148,34 @@
         if (!t) return;
         t.textContent = text;
         t.style.position = "fixed";
-        if (triggerElement && typeof triggerElement.getBoundingClientRect === "function") {
-            const rect = triggerElement.getBoundingClientRect();
-            t.style.left = `${Math.min(window.innerWidth - 220, rect.right + 8)}px`;
-            t.style.top = `${Math.max(10, rect.top + (rect.height - 20) / 2)}px`;
+        t.classList.remove("bounceIn");
+        const anchor = triggerElement && typeof triggerElement.getBoundingClientRect === "function" ? triggerElement : null;
+        if (anchor) {
+            const rect = anchor.getBoundingClientRect();
+            const pad = 8;
+            const estW = Math.min(280, window.innerWidth - 16);
+            let left = rect.right + pad;
+            if (left + estW > window.innerWidth - 8) {
+                left = rect.left - estW - pad;
+            }
+            left = clamp(left, 8, Math.max(8, window.innerWidth - estW - 8));
+            const top = rect.top + rect.height / 2;
+            t.style.left = `${left}px`;
+            t.style.top = `${clamp(top, 24, window.innerHeight - 24)}px`;
             t.style.bottom = "auto";
-            t.style.transform = "none";
+            t.style.right = "auto";
+            t.style.transform = "translateY(-50%)";
+            void t.offsetHeight;
+            t.style.opacity = "1";
         } else {
             t.style.left = "50%";
             t.style.bottom = "30px";
             t.style.top = "auto";
+            t.style.right = "auto";
             t.style.transform = "translateX(-50%)";
+            t.classList.add("bounceIn");
+            t.style.opacity = "1";
         }
-        t.style.opacity = "1";
-        t.classList.add("bounceIn");
         setTimeout(() => {
             t.style.opacity = "0";
             t.classList.remove("bounceIn");
@@ -1149,18 +1163,46 @@
     }
 
     function respondCurrentState() {
-        const payload = liveState || getStore(STORAGE.LIVE, null);
-        if (payload && channel) {
-            channel.postMessage({ type: "update", payload });
-        }
+        if (!channel) return;
+        const payload = buildLiveState();
+        liveState = payload;
+        channel.postMessage({ type: "update", payload, source: "main" });
     }
 
     function broadcastState() {
         liveState = buildLiveState();
         setStore(STORAGE.LIVE, liveState);
-        if (channel) channel.postMessage({ type: "update", payload: liveState });
+        if (channel) {
+            const msg = { type: "update", payload: liveState, source: "main" };
+            channel.postMessage(msg);
+            requestAnimationFrame(() => {
+                channel.postMessage(msg);
+            });
+        }
         saveSongs();
         saveSettings();
+    }
+
+    /** 投屏/主领新窗口打开后抢焦点时，尽量把键盘控制权留在主窗口（放映员操作） */
+    function refocusMainWindowForOperator() {
+        const tryFocus = () => {
+            try {
+                window.focus();
+                const appEl = $("app");
+                if (appEl) {
+                    if (!appEl.hasAttribute("tabindex")) appEl.setAttribute("tabindex", "-1");
+                    appEl.focus({ preventScroll: true });
+                }
+            } catch (e) {
+                /* ignore */
+            }
+        };
+        tryFocus();
+        requestAnimationFrame(() => {
+            tryFocus();
+            requestAnimationFrame(tryFocus);
+        });
+        [50, 200, 500, 1200].forEach((ms) => setTimeout(tryFocus, ms));
     }
 
     function updateAll() {
@@ -1216,30 +1258,16 @@
 
     async function publishSong() {
         const s = getCurrentSong();
-        if (!String(s.lyrics || "").trim()) {
-            showToast("无歌词可发布");
-            return;
-        }
-        const HYMN_PUBLISH_URL =
-            "https://script.google.com/macros/s/AKfycbx95LNWRhLyQZRPXZeMTGfezM7M5FCEMNXiSEhSA9uYYvpLN71Qij3w-DGsZ1_8XSvK1Q/exec";
+        if (!s.lyrics.length) { showToast('无歌词可发布'); return; }
+        const url = 'https://script.google.com/macros/s/AKfycbx95LNWRhLyQZRPXZeMTGfezM7M5FCEMNXiSEhSA9uYYvpLN71Qij3w-DGsZ1_8XSvK1Q/exec';
         try {
-            const response = await fetch(HYMN_PUBLISH_URL, {
-                method: "POST",
-                mode: "cors",
-                headers: { "Content-Type": "application/json" },
+            const response = await fetch(url, {
+                method: 'POST',
                 body: JSON.stringify({ title: s.title, lyrics: s.lyrics, tags: s.tags || [] })
             });
-            if (response.ok) {
-                showToast("✅ 已发布到云端");
-            } else {
-                const errText = await response.text().catch(() => "");
-                console.error("publishSong:", response.status, errText);
-                showToast("❌ 发布失败，请重试");
-            }
-        } catch (e) {
-            console.error("publishSong:", e);
-            showToast("❌ 发布失败，请重试");
-        }
+            if (response.ok) { showToast('已发布到云端'); }
+            else { showToast('发布失败，请重试'); }
+        } catch(e) { console.error('发布失败:', e); showToast('发布失败，请重试'); }
     }
 
     function openLeaderQrModal() {
@@ -1399,15 +1427,18 @@
         } catch (e) {
             win.location.href = url;
         }
+        if (!isDisplay && !isLeader) refocusMainWindowForOperator();
     }
 
     function openDisplayWindow() {
         broadcastState();
+        refocusMainWindowForOperator();
         void openDisplayOnSecondScreen("./index.html?display=1", "_blank", $("open-display-btn"));
     }
 
     function openLeaderWindow() {
         broadcastState();
+        refocusMainWindowForOperator();
         void openDisplayOnSecondScreen("./index.html?leader=1", "worship_leader", $("open-leader-btn"));
     }
 
@@ -1987,13 +2018,15 @@
             if (e.key === "ArrowRight") onNext();
         });
 
-        const bc = new BroadcastChannel('worship_channel');
-        bc.onmessage = (e) => {
-            if (e.data.type === 'update') {
-                applyLive(e.data.payload);
-            }
-        };
-        bc.postMessage({ type: 'request_state' });
+        if (channel) {
+            channel.onmessage = (e) => {
+                const d = e.data;
+                if (d && d.type === "update" && d.payload && d.payload.pages) {
+                    applyLive("display", d.payload);
+                }
+            };
+            channel.postMessage({ type: "request_state" });
+        }
 
         window.addEventListener("storage", (e) => {
             if (e.key === STORAGE.LIVE && e.newValue) applyLive("display", parseJSON(e.newValue, null));
@@ -2695,14 +2728,15 @@
                 showToolbar();
             });
 
-            const bc = new BroadcastChannel("worship_channel");
-            bc.onmessage = (e) => {
-                if (e.data?.type === "update" && e.data.payload?.pages) {
-                    liveState = e.data.payload;
-                    render();
-                }
-            };
-            bc.postMessage({ type: "request_state" });
+            if (channel) {
+                channel.onmessage = (e) => {
+                    if (e.data?.type === "update" && e.data.payload?.pages) {
+                        liveState = e.data.payload;
+                        render();
+                    }
+                };
+                channel.postMessage({ type: "request_state" });
+            }
             window.addEventListener("storage", (e) => {
                 if (e.key === STORAGE.LIVE && e.newValue) {
                     const payload = parseJSON(e.newValue, null);
@@ -2967,14 +3001,15 @@
             showToolbar();
         });
 
-        const bc = new BroadcastChannel("worship_channel");
-        bc.onmessage = (e) => {
-            if (e.data?.type === "update" && e.data.payload?.pages) {
-                liveState = e.data.payload;
-                render();
-            }
-        };
-        bc.postMessage({ type: "request_state" });
+        if (channel) {
+            channel.onmessage = (e) => {
+                if (e.data?.type === "update" && e.data.payload?.pages) {
+                    liveState = e.data.payload;
+                    render();
+                }
+            };
+            channel.postMessage({ type: "request_state" });
+        }
         window.addEventListener("storage", (e) => {
             if (e.key === STORAGE.LIVE && e.newValue) {
                 const payload = parseJSON(e.newValue, null);
@@ -3050,16 +3085,20 @@
         loadSharedBackgrounds();
 
         if (channel) {
-            const ch = channel;
-            ch.onmessage = (e) => {
-                if (e.data.type === 'request_state') {
+            channel.onmessage = (e) => {
+                const d = e.data;
+                if (!d || typeof d !== "object") return;
+                if (d.type === "request_state") {
                     respondCurrentState();
-                } else if (e.data && e.data.type === "update" && e.data.payload) {
-                    liveState = e.data.payload;
-                    setStore(STORAGE.LIVE, liveState);
-                } else {
-                    handleControlMessage(e.data);
+                    return;
                 }
+                if (d.type === "update" && d.payload) {
+                    if (d.source === "main") return;
+                    liveState = d.payload;
+                    setStore(STORAGE.LIVE, liveState);
+                    return;
+                }
+                handleControlMessage(d);
             };
         }
         broadcastState();

@@ -2180,6 +2180,22 @@ ${deleteBtnHtml}
             }
             if (!state.ui.bgImageId) state.ui.bgImageId = "";
             normalizeLegacyBgImageReference();
+            const importedSongIds = new Set(state.songs.map((s) => s && s.id).filter(Boolean));
+            if (!importedSongIds.has(state.currentSongId)) {
+                state.currentSongId = state.songs[0].id;
+                state.currentPage = 0;
+            }
+            state.playlist.items = state.playlist.items.filter((id) => importedSongIds.has(id));
+            if (state.playlist.activeIndex >= state.playlist.items.length) {
+                state.playlist.activeIndex = Math.max(0, state.playlist.items.length - 1);
+            }
+            if (!state.playlist.items.length) {
+                state.playlist.running = false;
+                state.playlist.activeIndex = -1;
+            }
+            saveSongs();
+            saveSettings();
+            savePlaylist();
             updateUIFromState();
             syncSongToEditor();
             renderSongList();

@@ -397,6 +397,8 @@
 
     /** 主窗口缓存的投屏窗口引用（?display=1），关闭或失效后置空 */
     let projectionDisplayWindowRef = null;
+    /** 为 true 时表示翻页来自投屏窗口 BroadcastChannel，不向投屏窗口回发「控制台已翻页」提示 */
+    let suppressProjectionConsoleNotify = false;
 
     const state = {
         songs: [],
@@ -2087,6 +2089,11 @@ ${deleteBtnHtml}
         } catch(e) { console.error('发布失败:', e); showToast('❌ 发布失败，请重试'); }
     }
 
+    function notifyProjectionConsoleReadyForGuide() {
+        if (suppressProjectionConsoleNotify || isDisplay || isLeader) return;
+        if (channel) channel.postMessage({ type: "projection_console_ready", source: "main" });
+    }
+
     function showRestoreProjectionBanner() {
         if (isDisplay || isLeader) return;
         const el = $("restore-projection-overlay");
@@ -2714,6 +2721,11 @@ ${deleteBtnHtml}
 
         on("open-display-btn", "click", openDisplayWindow);
         on("restore-projection-btn", "click", openDisplayWindow);
+        on("restore-projection-dismiss", "click", hideRestoreProjectionBanner);
+        on("restore-projection-overlay", "click", (e) => {
+            const el = $("restore-projection-overlay");
+            if (el && e.target === el) hideRestoreProjectionBanner();
+        });
         on("open-leader-btn", "click", openLeaderWindow);
         on("leader-qr-btn", "click", openLeaderQrModal);
 
@@ -3063,11 +3075,24 @@ ${deleteBtnHtml}
         let bwMaskKind = null;
 
         let fullscreenGuideOverlay = null;
-        let fullscreenGuideTimer = 0;
+        let displayGuideIdleTimer = 0;
         let displayHadFullscreenSession = false;
         let guideMovePollTimer = 0;
         /** 显示主引导面板时用于检测「整窗移到另一块屏」的起点 */
         let guideWindowBaseline = null;
+
+        function clearGuideIdleTimer() {
+            if (displayGuideIdleTimer) {
+                window.clearTimeout(displayGuideIdleTimer);
+                displayGuideIdleTimer = 0;
+            }
+        }
+
+        function resetGuideIdleTimer() {
+            clearGuideIdleTimer();
+            if (!fullscreenGuideOverlay || document.fullscreenElement) return;
+            displayGuideIdleTimer = window.setTimeout(() => removeFullscreenGuide(false), 10000);
+        }
 
         function captureGuideWindowBaseline() {
             return {
@@ -3102,8 +3127,7 @@ ${deleteBtnHtml}
 
         function removeFullscreenGuide(immediate) {
             stopGuideMovePoll();
-            window.clearTimeout(fullscreenGuideTimer);
-            fullscreenGuideTimer = 0;
+            clearGuideIdleTimer();
             if (!fullscreenGuideOverlay) return;
             const el = fullscreenGuideOverlay;
             if (immediate) {
@@ -3118,15 +3142,16 @@ ${deleteBtnHtml}
             }, 380);
         }
 
-        /**
-         * @param {{ autoHideMs?: number|null }} [opts]
-         * autoHideMs：毫秒后淡出；null/undefined 缺省为 5000；≤0 表示不自动关闭（仅按 H 召唤时使用）
-         */
-        function showFullscreenGuidePanel(opts) {
-            const o = opts && typeof opts === "object" ? opts : {};
-            let autoHideMs = "autoHideMs" in o ? o.autoHideMs : 5000;
-            if (autoHideMs === undefined) autoHideMs = 5000;
+        function hideFullscreenGuideFsZone() {
+            if (!fullscreenGuideOverlay) return;
+            const fs = fullscreenGuideOverlay.querySelector("#display-fs-zone-fs");
+            if (fs) fs.style.display = "none";
+        }
 
+        /**
+         * 仅按 H 召唤等场景使用；投屏就绪后由主窗口通过 BroadcastChannel 通知整层移除。
+         */
+        function showFullscreenGuidePanel() {
             removeFullscreenGuide(true);
             if (document.fullscreenElement) return;
 
@@ -3135,26 +3160,19 @@ ${deleteBtnHtml}
             overlay.style.opacity = "1";
             overlay.innerHTML = `
                 <div class="display-fs-guide-panel">
-                    <button type="button" id="display-fs-guide-fs-btn" class="display-fs-guide-big-btn">📺 点击此处全屏</button>
-                    <p class="display-fs-guide-sub">或按 F 键全屏</p>
-                    <p class="display-fs-guide-sub">或按 Win+Shift+→ 移到投影仪</p>
-                    <p class="display-fs-guide-note">ℹ️ 浏览器安全策略暂不支持一键自动投屏，敬请谅解</p>
-                    <p id="display-fs-guide-auto-msg" class="display-fs-guide-timer"></p>
+                    <div id="display-fs-zone-fs" class="display-fs-zone-fs">
+                        <button type="button" id="display-fs-guide-fs-btn" class="display-fs-guide-big-btn">📺 点击此处全屏</button>
+                        <p class="display-fs-guide-sub">或按 F 键全屏</p>
+                        <p class="display-fs-guide-note">ℹ️ 浏览器安全策略暂不支持一键自动投屏，敬请谅解</p>
+                    </div>
+                    <div id="display-fs-zone-move" class="display-fs-zone-move">
+                        <p class="display-fs-guide-sub">或按 Win+Shift+→ 移到投影仪</p>
+                    </div>
+                    <p id="display-fs-guide-auto-msg" class="display-fs-guide-timer">（10 秒内无投屏相关操作将自动关闭）</p>
                     <p class="display-fs-guide-timer" style="margin-top:10px;opacity:.88;">按 H 键随时查看操作提示</p>
                 </div>`;
             document.body.appendChild(overlay);
             fullscreenGuideOverlay = overlay;
-
-            const autoEl = overlay.querySelector("#display-fs-guide-auto-msg");
-            if (autoEl) {
-                if (typeof autoHideMs === "number" && autoHideMs > 0) {
-                    const sec = Math.round(autoHideMs / 1000);
-                    autoEl.textContent = `（此提示${sec}秒后自动消失）`;
-                    fullscreenGuideTimer = window.setTimeout(() => removeFullscreenGuide(false), autoHideMs);
-                } else {
-                    autoEl.textContent = "";
-                }
-            }
 
             const panel = overlay.querySelector(".display-fs-guide-panel");
             overlay.addEventListener("click", (e) => {
@@ -3168,13 +3186,15 @@ ${deleteBtnHtml}
                 e.preventDefault();
                 try {
                     await document.documentElement.requestFullscreen({ navigationUI: "hide" });
-                    removeFullscreenGuide(true);
+                    hideFullscreenGuideFsZone();
+                    resetGuideIdleTimer();
                 } catch (_) {
                     /* ignore */
                 }
             });
 
             startGuideMovePoll();
+            resetGuideIdleTimer();
         }
 
         function showDisplayReadyToast() {
@@ -3196,11 +3216,12 @@ ${deleteBtnHtml}
             () => {
                 if (document.fullscreenElement) {
                     displayHadFullscreenSession = true;
-                    removeFullscreenGuide(true);
+                    hideFullscreenGuideFsZone();
+                    resetGuideIdleTimer();
                     showDisplayReadyToast();
                     if (channel) channel.postMessage({ type: "projection_fs_active", source: "display" });
                 } else if (displayHadFullscreenSession) {
-                    showFullscreenGuidePanel({ autoHideMs: 8000 });
+                    showFullscreenGuidePanel();
                     if (channel) channel.postMessage({ type: "projection_attention", reason: "fs_exit", source: "display" });
                 }
             },
@@ -3241,7 +3262,7 @@ ${deleteBtnHtml}
         /** 静默尝试一次自动全屏；若仍非全屏则在延迟后展示引导面板（多数浏览器会因用户手势策略拦截） */
         requestAnimationFrame(() => requestAnimationFrame(() => tryProjectionFullscreenOnce()));
         window.setTimeout(() => {
-            if (!document.fullscreenElement) showFullscreenGuidePanel({ autoHideMs: 5000 });
+            if (!document.fullscreenElement) showFullscreenGuidePanel();
         }, 750);
 
         document.addEventListener("mousemove", onProjectionPointerActivity, { passive: true });
@@ -3283,7 +3304,11 @@ ${deleteBtnHtml}
         async function toggleProjectionFullscreen() {
             try {
                 if (document.fullscreenElement) await document.exitFullscreen();
-                else await document.documentElement.requestFullscreen({ navigationUI: "hide" });
+                else {
+                    await document.documentElement.requestFullscreen({ navigationUI: "hide" });
+                    hideFullscreenGuideFsZone();
+                    resetGuideIdleTimer();
+                }
             } catch (_) {
                 /* ignore */
             }
@@ -3301,37 +3326,42 @@ ${deleteBtnHtml}
             const isArrowRight = k === "ArrowRight" || e.code === "ArrowRight";
             if (k === "h" || k === "H") {
                 e.preventDefault();
-                showFullscreenGuidePanel({ autoHideMs: 0 });
+                showFullscreenGuidePanel();
                 bumpCursorIdle();
                 return;
             }
             if (isArrowLeft) {
                 e.preventDefault();
                 onPrev();
+                resetGuideIdleTimer();
                 bumpCursorIdle();
                 return;
             }
             if (isArrowRight) {
                 e.preventDefault();
                 onNext();
+                resetGuideIdleTimer();
                 bumpCursorIdle();
                 return;
             }
             if (k === "f" || k === "F") {
                 e.preventDefault();
-                toggleProjectionFullscreen();
+                void toggleProjectionFullscreen();
+                resetGuideIdleTimer();
                 bumpCursorIdle();
                 return;
             }
             if (k === "b" || k === "B") {
                 e.preventDefault();
                 toggleBwMask("black");
+                resetGuideIdleTimer();
                 bumpCursorIdle();
                 return;
             }
             if (k === "w" || k === "W") {
                 e.preventDefault();
                 toggleBwMask("white");
+                resetGuideIdleTimer();
                 bumpCursorIdle();
                 return;
             }
@@ -3340,6 +3370,10 @@ ${deleteBtnHtml}
         if (channel) {
             channel.onmessage = (e) => {
                 const d = e.data;
+                if (d && d.type === "projection_console_ready" && d.source === "main") {
+                    removeFullscreenGuide(true);
+                    return;
+                }
                 if (d && d.type === "update" && d.payload && d.payload.pages) {
                     applyLive("display", d.payload);
                 }
@@ -4363,6 +4397,7 @@ ${deleteBtnHtml}
             renderMiniPreview();
             renderPlaylist();
             broadcastState();
+            notifyProjectionConsoleReadyForGuide();
             return;
         }
 
@@ -4370,7 +4405,9 @@ ${deleteBtnHtml}
             if (state.playlist.running && state.playlist.autoSwitch) {
                 const nextIdx = state.playlist.activeIndex + 1;
                 if (nextIdx < state.playlist.items.length) {
-                    switchToPlaylistSong(nextIdx, true);
+                    if (switchToPlaylistSong(nextIdx, true)) {
+                        notifyProjectionConsoleReadyForGuide();
+                    }
                 }
             }
             return;
@@ -4381,6 +4418,7 @@ ${deleteBtnHtml}
         renderMiniPreview();
         renderPlaylist();
         broadcastState();
+        notifyProjectionConsoleReadyForGuide();
     }
 
     function prevPage() {
@@ -4400,9 +4438,16 @@ ${deleteBtnHtml}
     function handleControlMessage(msg) {
         if (!msg || typeof msg !== "object") return;
         if (msg.type === "flip") {
+            suppressProjectionConsoleNotify = true;
             changePage(Number(msg.delta) || 0);
-        } else if (msg.type === "goto") {
+            suppressProjectionConsoleNotify = false;
+            return;
+        }
+        if (msg.type === "goto") {
+            suppressProjectionConsoleNotify = true;
             jumpToPage(Number(msg.page));
+            suppressProjectionConsoleNotify = false;
+            return;
         }
     }
 

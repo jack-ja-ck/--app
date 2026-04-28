@@ -214,7 +214,14 @@
     </div>
 </div>
 <div id="restore-projection-overlay" class="restore-projection-overlay" hidden>
-    <button type="button" id="restore-projection-btn" class="restore-projection-btn">📺 恢复投屏</button>
+    <div class="restore-projection-card" role="dialog" aria-modal="true" aria-labelledby="restore-projection-title">
+        <div id="restore-projection-title" class="restore-projection-title">📺 投屏已丢失或退出全屏</div>
+        <div class="restore-projection-actions">
+            <button type="button" id="restore-projection-btn" class="restore-projection-primary">恢复投屏</button>
+            <button type="button" id="restore-projection-dismiss" class="restore-projection-secondary">关闭</button>
+        </div>
+        <p class="restore-projection-foot">💡 按 H 键查看操作提示</p>
+    </div>
 </div>
 <div id="toast"></div>
 <!-- 批量导入弹窗 -->

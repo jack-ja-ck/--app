@@ -13,6 +13,9 @@
     const THEME_BG_SLOTS_STORAGE = "worship.theme_bg_slots.v1";
     const THEME_BG_ACTIVE_ID_STORAGE = "worship.theme_bg_active.v1";
     const THEME_BG_SLOTS_MAX = 4;
+    /** 无自定义主题背景时的默认壁纸（相对路径，置于项目根目录） */
+    const DEFAULT_THEME_BG_REL_PATH = "./cross.jpg";
+    const DEFAULT_THEME_BG_SLOT_ID = "tbg_default_cross";
     const UPLOADED_BACKGROUNDS_STORAGE = "uploaded_backgrounds";
     /** 「我的背景」本地槽位上限；超出时丢弃最旧（按 timestamp） */
     const UPLOADED_BACKGROUNDS_MAX = 4;
@@ -248,6 +251,19 @@
             _themeBgActiveId = "";
             _idbThemeBgCache = "";
         }
+    }
+
+    /** 仅在 IndexedDB / 本地槽位均无主题背景时注入默认十字架图（不写存储，不影响已有用户数据） */
+    function ensureDefaultThemeBackgroundAtBoot() {
+        if ((_idbThemeBgCache || "").trim()) return;
+        if (Array.isArray(_themeBgSlotsCache) && _themeBgSlotsCache.length > 0) return;
+        _idbThemeBgCache = DEFAULT_THEME_BG_REL_PATH;
+        _themeBgSlotsCache = [{
+            id: DEFAULT_THEME_BG_SLOT_ID,
+            imageData: DEFAULT_THEME_BG_REL_PATH,
+            timestamp: Date.now()
+        }];
+        _themeBgActiveId = DEFAULT_THEME_BG_SLOT_ID;
     }
 
     function removeThemeBgSlot(slotId) {
@@ -583,8 +599,8 @@
     function getThemeBgOpacity() {
         const raw = localStorage.getItem(THEME_BG_OPACITY_STORAGE);
         const n = parseFloat(raw);
-        if (!Number.isFinite(n)) return 0.75;
-        return clamp(n, 0.3, 1);
+        if (!Number.isFinite(n)) return 0.65;
+        return clamp(n, 0.05, 1);
     }
 
     function applyThemeBgOpacityVar() {
@@ -1354,14 +1370,16 @@
 
         mini.innerHTML = "";
         clearCssDynamicBgClass(mini);
-        mini.style.background = "var(--preview-bg)";
+        mini.style.background = "rgba(0, 0, 0, 0.55)";
         mini.style.backgroundImage = "none";
         if (CSS_DYNAMIC_BG_TYPES.has(state.ui.bgType)) {
             mini.style.background = "";
             mini.classList.add(`css-bg-${state.ui.bgType}`);
-        } else if (state.ui.bgType === "solid-white") mini.style.background = "#fff";
-        else if (state.ui.bgType === "solid-gray") mini.style.background = "#444";
-        else if (state.ui.bgType === "gradient") mini.style.background = "linear-gradient(140deg,#1b2f59,#0a0f1d)";
+        } else if (state.ui.bgType === "solid-white") mini.style.background = "rgba(255, 255, 255, 0.55)";
+        else if (state.ui.bgType === "solid-gray") mini.style.background = "rgba(68, 68, 68, 0.55)";
+        else if (state.ui.bgType === "gradient") {
+            mini.style.background = "linear-gradient(140deg, rgba(27, 47, 89, 0.55), rgba(10, 15, 29, 0.55))";
+        }
         else if (state.ui.bgType === "image" && state.ui.bgImage) {
             mini.style.backgroundImage = `url("${state.ui.bgImage}")`;
             mini.style.backgroundSize = "cover";
@@ -2166,7 +2184,7 @@
             reader.readAsDataURL(file);
         });
         on("theme-bg-opacity-slider", "input", () => {
-            const v = clamp(parseFloat($("theme-bg-opacity-slider").value || "0.75"), 0.3, 1);
+            const v = clamp(parseFloat($("theme-bg-opacity-slider").value || "0.65"), 0.05, 1);
             localStorage.setItem(THEME_BG_OPACITY_STORAGE, String(v));
             document.documentElement.style.setProperty("--theme-bg-opacity", String(v));
             if ($("theme-bg-opacity-value")) $("theme-bg-opacity-value").textContent = `${Math.round(v * 100)}%`;
@@ -3574,6 +3592,7 @@
         const boot = () => {
             loadState();
             loadThemeBgSlotsFromStorage();
+            ensureDefaultThemeBackgroundAtBoot();
             normalizeLegacyBgImageReference();
             applyThemeBackground();
             const left = $("song-library");

@@ -11,6 +11,169 @@
     const THEME_BG_OPACITY_STORAGE = "theme_bg_opacity";
     const UPLOADED_BACKGROUNDS_STORAGE = "uploaded_backgrounds";
     const LEGACY_LYRIC_BGS_STORAGE = "worship.lyric_bgs.v1";
+    /** 背景大图存 IndexedDB；以下为库名与运行时缓存（失败时回退 localStorage） */
+    const IDB_NAME = "WorshipAppDB";
+    const IDB_VERSION = 1;
+    const IDB_STORE_THEME = "themeBackground";
+    const IDB_STORE_UPLOADED = "uploadedBackgrounds";
+    const IDB_THEME_ROW_ID = "__theme_bg__";
+
+    let _bgUseIdbFallbackLs = false;
+    let _idbThemeBgCache = "";
+    let _idbUploadedCache = [];
+
+    function promiseReq(req) {
+        return new Promise((resolve, reject) => {
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+        });
+    }
+
+    function promiseTx(tx) {
+        return new Promise((resolve, reject) => {
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+            tx.onabort = () => reject(tx.error);
+        });
+    }
+
+    let _openBgDbPromise = null;
+    function openWorshipBgDatabase() {
+        if (_openBgDbPromise) return _openBgDbPromise;
+        _openBgDbPromise = new Promise((resolve, reject) => {
+            if (typeof indexedDB === "undefined") {
+                reject(new Error("indexedDB unsupported"));
+                return;
+            }
+            const req = indexedDB.open(IDB_NAME, IDB_VERSION);
+            req.onerror = () => reject(req.error || new Error("indexedDB open failed"));
+            req.onsuccess = () => resolve(req.result);
+            req.onupgradeneeded = (e) => {
+                const db = e.target.result;
+                if (!db.objectStoreNames.contains(IDB_STORE_THEME)) {
+                    db.createObjectStore(IDB_STORE_THEME, { keyPath: "id" });
+                }
+                if (!db.objectStoreNames.contains(IDB_STORE_UPLOADED)) {
+                    db.createObjectStore(IDB_STORE_UPLOADED, { keyPath: "id" });
+                }
+            };
+        });
+        return _openBgDbPromise;
+    }
+
+    async function idbReadThemeBg(db) {
+        const tx = db.transaction(IDB_STORE_THEME, "readonly");
+        const row = await promiseReq(tx.objectStore(IDB_STORE_THEME).get(IDB_THEME_ROW_ID));
+        return row && row.imageData ? String(row.imageData) : "";
+    }
+
+    async function idbWriteThemeBg(db, imageData) {
+        const tx = db.transaction(IDB_STORE_THEME, "readwrite");
+        tx.objectStore(IDB_STORE_THEME).put({ id: IDB_THEME_ROW_ID, imageData: String(imageData || "") });
+        await promiseTx(tx);
+    }
+
+    async function idbClearThemeBg(db) {
+        const tx = db.transaction(IDB_STORE_THEME, "readwrite");
+        tx.objectStore(IDB_STORE_THEME).delete(IDB_THEME_ROW_ID);
+        await promiseTx(tx);
+    }
+
+    async function idbReadAllUploaded(db) {
+        const tx = db.transaction(IDB_STORE_UPLOADED, "readonly");
+        const rows = await promiseReq(tx.objectStore(IDB_STORE_UPLOADED).getAll());
+        return Array.isArray(rows) ? rows.filter((x) => x && x.id && x.imageData) : [];
+    }
+
+    async function idbWriteAllUploaded(db, list) {
+        const tx = db.transaction(IDB_STORE_UPLOADED, "readwrite");
+        const store = tx.objectStore(IDB_STORE_UPLOADED);
+        store.clear();
+        const arr = Array.isArray(list) ? list.slice(0, 40) : [];
+        arr.forEach((item) => {
+            if (item && item.id && item.imageData) store.put(item);
+        });
+        await promiseTx(tx);
+    }
+
+    async function migrateLocalStorageBackgroundsToIndexedDb(db) {
+        try {
+            const themeLs = localStorage.getItem(THEME_BG_STORAGE);
+            if (themeLs && themeLs.trim()) {
+                await idbWriteThemeBg(db, themeLs);
+                localStorage.removeItem(THEME_BG_STORAGE);
+            }
+            const uploadedLs = localStorage.getItem(UPLOADED_BACKGROUNDS_STORAGE);
+            if (uploadedLs) {
+                const parsed = parseJSON(uploadedLs, null);
+                if (Array.isArray(parsed) && parsed.length) {
+                    await idbWriteAllUploaded(db, parsed);
+                }
+                localStorage.removeItem(UPLOADED_BACKGROUNDS_STORAGE);
+            }
+        } catch (e) {
+            console.warn("migrateLocalStorageBackgroundsToIndexedDb", e);
+        }
+    }
+
+    async function initBackgroundImageIndexedDb() {
+        try {
+            const db = await openWorshipBgDatabase();
+            await migrateLocalStorageBackgroundsToIndexedDb(db);
+            _idbThemeBgCache = await idbReadThemeBg(db);
+            _idbUploadedCache = await idbReadAllUploaded(db);
+            _bgUseIdbFallbackLs = false;
+        } catch (e) {
+            console.warn("IndexedDB unavailable, fallback localStorage for backgrounds", e);
+            _bgUseIdbFallbackLs = true;
+            try {
+                _idbThemeBgCache = localStorage.getItem(THEME_BG_STORAGE) || "";
+            } catch (_e) {
+                _idbThemeBgCache = "";
+            }
+            try {
+                _idbUploadedCache = parseJSON(localStorage.getItem(UPLOADED_BACKGROUNDS_STORAGE), []);
+            } catch (_e2) {
+                _idbUploadedCache = [];
+            }
+            if (!Array.isArray(_idbUploadedCache)) _idbUploadedCache = [];
+        }
+    }
+
+    function persistThemeBgAsync(imageData) {
+        _idbThemeBgCache = String(imageData || "");
+        if (_bgUseIdbFallbackLs) {
+            try {
+                if (_idbThemeBgCache.trim()) localStorage.setItem(THEME_BG_STORAGE, _idbThemeBgCache);
+                else localStorage.removeItem(THEME_BG_STORAGE);
+            } catch (err) {
+                console.warn(err);
+            }
+            return;
+        }
+        openWorshipBgDatabase()
+            .then((db) => {
+                if (!_idbThemeBgCache.trim()) return idbClearThemeBg(db);
+                return idbWriteThemeBg(db, _idbThemeBgCache);
+            })
+            .catch((err) => console.warn("persistThemeBgAsync", err));
+    }
+
+    function persistUploadedBackgroundsAsync(arr) {
+        _idbUploadedCache = Array.isArray(arr) ? arr.slice(0, 40) : [];
+        if (_bgUseIdbFallbackLs) {
+            try {
+                setStore(UPLOADED_BACKGROUNDS_STORAGE, _idbUploadedCache);
+            } catch (err) {
+                console.warn(err);
+            }
+            return;
+        }
+        openWorshipBgDatabase()
+            .then((db) => idbWriteAllUploaded(db, _idbUploadedCache))
+            .catch((err) => console.warn("persistUploadedBackgroundsAsync", err));
+    }
+
     const CSS_DYNAMIC_BG_TYPES = new Set(["gentle-light", "starry-night", "cross-glow"]);
 
     function clearCssDynamicBgClass(el) {
@@ -65,6 +228,7 @@
             posY: 45,
             bgType: "solid-black",
             bgImage: "",
+            bgImageId: "",
             lyricsBgShareToCloud: false,
             fontColor: "#ffffff"
         },
@@ -268,7 +432,7 @@
         const row = $("theme-bg-opacity-row");
         const slider = $("theme-bg-opacity-slider");
         const valEl = $("theme-bg-opacity-value");
-        const hasCustom = !!(localStorage.getItem(THEME_BG_STORAGE) || "").trim();
+        const hasCustom = !!(_idbThemeBgCache || "").trim();
         if (row) row.classList.toggle("is-disabled", !hasCustom);
         const v = getThemeBgOpacity();
         if (slider) {
@@ -291,7 +455,7 @@
     }
 
     function applyThemeBackground() {
-        const raw = localStorage.getItem(THEME_BG_STORAGE);
+        const raw = _idbThemeBgCache;
         const body = document.body;
         const root = document.documentElement;
         applyThemeBgOpacityVar();
@@ -313,12 +477,40 @@
     }
 
     function getUploadedBackgrounds() {
-        const raw = parseJSON(localStorage.getItem(UPLOADED_BACKGROUNDS_STORAGE), null);
-        return Array.isArray(raw) ? raw : [];
+        return Array.isArray(_idbUploadedCache) ? _idbUploadedCache : [];
     }
 
     function saveUploadedBackgrounds(arr) {
-        setStore(UPLOADED_BACKGROUNDS_STORAGE, Array.isArray(arr) ? arr : []);
+        persistUploadedBackgroundsAsync(Array.isArray(arr) ? arr : []);
+    }
+
+    function normalizeLegacyBgImageReference() {
+        if (state.ui.bgType !== "image") return;
+        const items = getUploadedBackgrounds();
+        if (state.ui.bgImageId) {
+            const it = items.find((x) => x && x.id === state.ui.bgImageId);
+            if (it && it.imageData) {
+                state.ui.bgImage = it.imageData;
+                saveSettings();
+                return;
+            }
+            state.ui.bgImageId = "";
+        }
+        const bg = String(state.ui.bgImage || "").trim();
+        if (!bg) return;
+        let match = items.find((x) => x && x.imageData === bg);
+        if (!match) {
+            match = {
+                id: bgItemId(),
+                imageData: bg,
+                tags: [],
+                timestamp: Date.now(),
+                shared: false
+            };
+            saveUploadedBackgrounds([match, ...items].slice(0, 40));
+        }
+        state.ui.bgImageId = match.id;
+        saveSettings();
     }
 
     function migrateLegacyUploadedBackgrounds() {
@@ -340,23 +532,31 @@
     function seedUploadedBackgroundsFromState() {
         if (getUploadedBackgrounds().length > 0) return;
         if (state.ui.bgType === "image" && String(state.ui.bgImage || "").trim()) {
+            const nid = bgItemId();
             saveUploadedBackgrounds([{
-                id: bgItemId(),
+                id: nid,
                 imageData: state.ui.bgImage,
                 tags: [],
                 timestamp: Date.now(),
                 shared: false
             }]);
+            state.ui.bgImageId = nid;
+            saveSettings();
         }
     }
 
     function addUploadedBackgroundAndApply(imageData) {
         const data = String(imageData || "").trim();
         if (!data) return;
-        let arr = getUploadedBackgrounds();
-        if (!arr.some((x) => x && x.imageData === data)) {
+        let arr = getUploadedBackgrounds().slice();
+        let chosenId = "";
+        const existing = arr.find((x) => x && x.imageData === data);
+        if (existing) {
+            chosenId = existing.id;
+        } else {
+            chosenId = bgItemId();
             arr = [{
-                id: bgItemId(),
+                id: chosenId,
                 imageData: data,
                 tags: [],
                 timestamp: Date.now(),
@@ -366,6 +566,7 @@
         }
         state.ui.bgType = "image";
         state.ui.bgImage = data;
+        state.ui.bgImageId = chosenId;
         state.ui.lyricsBgShareToCloud = false;
         renderUploadedBackgrounds();
     }
@@ -429,6 +630,7 @@
             }
             thumb.addEventListener("click", () => {
                 state.ui.bgType = "image";
+                state.ui.bgImageId = item.id;
                 state.ui.bgImage = item.imageData;
                 state.ui.lyricsBgShareToCloud = false;
                 updateUIFromState();
@@ -529,6 +731,7 @@
             thumb.title = tagHint || "云端共享背景";
             thumb.addEventListener("click", () => {
                 state.ui.bgType = "image";
+                state.ui.bgImageId = "";
                 state.ui.bgImage = imageUrl;
                 state.ui.lyricsBgShareToCloud = false;
                 updateUIFromState();
@@ -633,11 +836,15 @@
     }
 
     function saveSettings() {
+        const ui = { ...state.ui };
+        if (ui.bgType === "image" && ui.bgImageId) {
+            ui.bgImage = "";
+        }
         setStore(STORAGE.SETTINGS, {
             currentSongId: state.currentSongId,
             currentPage: state.currentPage,
             sizePreset: state.sizePreset,
-            ui: state.ui
+            ui
         });
     }
 
@@ -666,6 +873,7 @@
             if (settings.ui && typeof settings.ui === "object") {
                 state.ui = { ...state.ui, ...settings.ui };
             }
+            if (!state.ui.bgImageId) state.ui.bgImageId = "";
         } else {
             state.currentSongId = state.songs[0].id;
         }
@@ -1214,7 +1422,11 @@
 
     function setBackground(bgType) {
         state.ui.bgType = bgType || "solid-black";
-        if (state.ui.bgType !== "image") state.ui.lyricsBgShareToCloud = false;
+        if (state.ui.bgType !== "image") {
+            state.ui.lyricsBgShareToCloud = false;
+            state.ui.bgImage = "";
+            state.ui.bgImageId = "";
+        }
         updateUIFromState();
         updateAll();
     }
@@ -1338,6 +1550,8 @@
             if (settings.ui && typeof settings.ui === "object") {
                 state.ui = { ...state.ui, ...settings.ui };
             }
+            if (!state.ui.bgImageId) state.ui.bgImageId = "";
+            normalizeLegacyBgImageReference();
             updateUIFromState();
             syncSongToEditor();
             renderSongList();
@@ -1705,7 +1919,7 @@
                     return;
                 }
                 try {
-                    localStorage.setItem(THEME_BG_STORAGE, dataUrl);
+                    persistThemeBgAsync(dataUrl);
                     applyThemeBackground();
                     showToast("主题背景已设置", toastAnchor);
                 } catch (err) {
@@ -1854,23 +2068,52 @@
         }
     }
 
+    /** 粒子动态背景：数量 / 尺寸 / 速度与配色（仅此处维护） */
+    const PARTICLE_BG_COUNT = 135;
+
+    function rollParticleTint() {
+        const r = Math.random();
+        if (r < 0.38) return "w";
+        if (r < 0.69) return "g";
+        return "b";
+    }
+
+    function createAmbientParticles(w, h, count) {
+        return Array.from({ length: count }, () => {
+            const a = Math.random() * Math.PI * 2;
+            const speed = 0.5 + Math.random() * 0.3;
+            const tint = rollParticleTint();
+            return {
+                x: Math.random() * w,
+                y: Math.random() * h,
+                vx: Math.cos(a) * speed,
+                vy: Math.sin(a) * speed,
+                r: 3 + Math.random() * 4,
+                alpha: 0.7 + Math.random() * 0.2,
+                colorMode: tint
+            };
+        });
+    }
+
+    function applyParticleShadow(ctx, p) {
+        ctx.shadowBlur = 16;
+        if (p.colorMode === "g") ctx.shadowColor = "rgba(255,215,0,0.72)";
+        else if (p.colorMode === "b") ctx.shadowColor = "rgba(173,216,230,0.68)";
+        else ctx.shadowColor = "rgba(255,255,255,0.78)";
+    }
+
+    function applyParticleFill(ctx, p) {
+        const a = p.alpha.toFixed(3);
+        if (p.colorMode === "g") ctx.fillStyle = `rgba(255,215,0,${a})`;
+        else if (p.colorMode === "b") ctx.fillStyle = `rgba(173,216,230,${a})`;
+        else ctx.fillStyle = `rgba(255,255,255,${a})`;
+    }
+
     function drawParticles(w, h, dt) {
         const ctx = projectionCtx;
         if (!ctx) return;
-        const count = 80;
-        if (projectionParticles.length !== count) {
-            projectionParticles = Array.from({ length: count }, () => {
-                const a = Math.random() * Math.PI * 2;
-                const speed = 0.45 + Math.random() * 0.55;
-                return {
-                    x: Math.random() * w,
-                    y: Math.random() * h,
-                    vx: Math.cos(a) * speed,
-                    vy: Math.sin(a) * speed,
-                    r: 1 + Math.random() * 3,
-                    alpha: 0.2 + Math.random() * 0.6
-                };
-            });
+        if (projectionParticles.length !== PARTICLE_BG_COUNT) {
+            projectionParticles = createAmbientParticles(w, h, PARTICLE_BG_COUNT);
         }
         projectionParticles.forEach((p) => {
             p.x += p.vx * dt;
@@ -1879,11 +2122,13 @@
             if (p.y < 0 || p.y > h) p.vy *= -1;
             p.x = clamp(p.x, 0, w);
             p.y = clamp(p.y, 0, h);
+            applyParticleShadow(ctx, p);
+            applyParticleFill(ctx, p);
             ctx.beginPath();
-            ctx.fillStyle = `rgba(255,255,255,${p.alpha.toFixed(3)})`;
             ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
             ctx.fill();
         });
+        ctx.shadowBlur = 0;
     }
 
     function drawBg(ts) {
@@ -2578,12 +2823,8 @@
                 g.addColorStop(1, "#000");
                 ctx.fillStyle = g;
                 ctx.fillRect(0, 0, w, h);
-                if (pts.length !== 80) {
-                    pts = Array.from({ length: 80 }, () => {
-                        const a = Math.random() * Math.PI * 2;
-                        const speed = 0.3 + Math.random() * 0.3;
-                        return { x: Math.random() * w, y: Math.random() * h, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, r: 2 + Math.random() * 3, alpha: 0.18 + Math.random() * 0.25 };
-                    });
+                if (pts.length !== PARTICLE_BG_COUNT) {
+                    pts = createAmbientParticles(w, h, PARTICLE_BG_COUNT);
                 }
                 const dt = clamp((ts - (projectionLastTs || ts)) / 16.67, 0.5, 1.8);
                 projectionLastTs = ts;
@@ -2594,10 +2835,9 @@
                     if (p.y < 0 || p.y > h) p.vy *= -1;
                     p.x = clamp(p.x, 0, w);
                     p.y = clamp(p.y, 0, h);
+                    applyParticleShadow(ctx, p);
+                    applyParticleFill(ctx, p);
                     ctx.beginPath();
-                    ctx.fillStyle = `rgba(255,255,255,${p.alpha.toFixed(3)})`;
-                    ctx.shadowBlur = 8;
-                    ctx.shadowColor = "rgba(255,255,255,.35)";
                     ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
                     ctx.fill();
                 });
@@ -2921,12 +3161,8 @@
             g.addColorStop(1, "#000000");
             ctx.fillStyle = g;
             ctx.fillRect(0, 0, w, h);
-            if (bgParticles.length !== 80) {
-                bgParticles = Array.from({ length: 80 }, () => {
-                    const a = Math.random() * Math.PI * 2;
-                    const speed = 0.3 + Math.random() * 0.3;
-                    return { x: Math.random() * w, y: Math.random() * h, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, r: 2 + Math.random() * 3, alpha: 0.18 + Math.random() * 0.25 };
-                });
+            if (bgParticles.length !== PARTICLE_BG_COUNT) {
+                bgParticles = createAmbientParticles(w, h, PARTICLE_BG_COUNT);
             }
             const dt = clamp((ts - (projectionLastTs || ts)) / 16.67, 0.5, 1.8);
             projectionLastTs = ts;
@@ -2937,10 +3173,9 @@
                 if (p.y < 0 || p.y > h) p.vy *= -1;
                 p.x = clamp(p.x, 0, w);
                 p.y = clamp(p.y, 0, h);
+                applyParticleShadow(ctx, p);
+                applyParticleFill(ctx, p);
                 ctx.beginPath();
-                ctx.fillStyle = `rgba(255,255,255,${p.alpha.toFixed(3)})`;
-                ctx.shadowBlur = 8;
-                ctx.shadowColor = "rgba(255,255,255,.35)";
                 ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
                 ctx.fill();
             });
@@ -3105,48 +3340,55 @@
     }
 
     function initMain() {
-        loadState();
-        applyThemeBackground();
-        const left = $("song-library");
-        const right = $("preview-panel");
-        if (left && !left.style.width) left.style.width = "260px";
-        if (right && !right.style.width) right.style.width = "300px";
-        ensureFontColorControls();
-        syncPosYFromCurrentSong();
-        updateUIFromState();
-        syncSongToEditor();
-        renderSongList();
-        renderTagFilter();
-        updateSpeakerCards();
-        renderMiniPreview();
-        renderPlaylist();
-        if ($("playlist-auto-switch")) $("playlist-auto-switch").checked = !!state.playlist.autoSwitch;
-        bindEvents();
-        initResizable();
-        initPreviewResize();
-        migrateLegacyUploadedBackgrounds();
-        seedUploadedBackgroundsFromState();
-        renderUploadedBackgrounds();
-        loadSharedBackgrounds();
+        const boot = () => {
+            loadState();
+            normalizeLegacyBgImageReference();
+            applyThemeBackground();
+            const left = $("song-library");
+            const right = $("preview-panel");
+            if (left && !left.style.width) left.style.width = "260px";
+            if (right && !right.style.width) right.style.width = "300px";
+            ensureFontColorControls();
+            syncPosYFromCurrentSong();
+            updateUIFromState();
+            syncSongToEditor();
+            renderSongList();
+            renderTagFilter();
+            updateSpeakerCards();
+            renderMiniPreview();
+            renderPlaylist();
+            if ($("playlist-auto-switch")) $("playlist-auto-switch").checked = !!state.playlist.autoSwitch;
+            bindEvents();
+            initResizable();
+            initPreviewResize();
+            migrateLegacyUploadedBackgrounds();
+            seedUploadedBackgroundsFromState();
+            renderUploadedBackgrounds();
+            loadSharedBackgrounds();
 
-        if (channel) {
-            channel.onmessage = (e) => {
-                const d = e.data;
-                if (!d || typeof d !== "object") return;
-                if (d.type === "request_state") {
-                    respondCurrentState();
-                    return;
-                }
-                if (d.type === "update" && d.payload) {
-                    if (d.source === "main") return;
-                    liveState = d.payload;
-                    setStore(STORAGE.LIVE, liveState);
-                    return;
-                }
-                handleControlMessage(d);
-            };
-        }
-        broadcastState();
+            if (channel) {
+                channel.onmessage = (e) => {
+                    const d = e.data;
+                    if (!d || typeof d !== "object") return;
+                    if (d.type === "request_state") {
+                        respondCurrentState();
+                        return;
+                    }
+                    if (d.type === "update" && d.payload) {
+                        if (d.source === "main") return;
+                        liveState = d.payload;
+                        setStore(STORAGE.LIVE, liveState);
+                        return;
+                    }
+                    handleControlMessage(d);
+                };
+            }
+            broadcastState();
+        };
+        initBackgroundImageIndexedDb().then(boot).catch((err) => {
+            console.error(err);
+            boot();
+        });
     }
 
     function init() {

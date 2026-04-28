@@ -470,6 +470,24 @@
         }
         body.style.backgroundImage = "";
         syncThemeBgOpacityControls();
+        updateThemeBgPreviewThumb();
+    }
+
+    function updateThemeBgPreviewThumb() {
+        const thumb = $("theme-bg-preview-thumb");
+        const empty = $("theme-bg-preview-empty");
+        if (!thumb) return;
+        const raw = (_idbThemeBgCache || "").trim();
+        if (raw) {
+            const safe = String(raw).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+            thumb.style.backgroundImage = `url("${safe}")`;
+            if (empty) empty.style.display = "none";
+            thumb.classList.add("theme-bg-preview-thumb--has-image");
+        } else {
+            thumb.style.backgroundImage = "";
+            if (empty) empty.style.display = "";
+            thumb.classList.remove("theme-bg-preview-thumb--has-image");
+        }
     }
 
     function bgItemId() {
@@ -628,7 +646,9 @@
             if (state.ui.bgType === "image" && state.ui.bgImage === item.imageData) {
                 thumb.classList.add("lyric-bg-thumb--active");
             }
-            thumb.addEventListener("click", () => {
+            thumb.addEventListener("click", (e) => {
+                e.preventDefault();
+                e.stopPropagation();
                 state.ui.bgType = "image";
                 state.ui.bgImageId = item.id;
                 state.ui.bgImage = item.imageData;
@@ -636,6 +656,7 @@
                 updateUIFromState();
                 updateAll();
                 saveSettings();
+                renderUploadedBackgrounds();
                 showToast("已切换背景", thumb);
             });
             wrap.appendChild(thumb);
@@ -744,20 +765,26 @@
         });
     }
 
+    function switchBgTabTo(name) {
+        const tabName = name || "preset";
+        document.querySelectorAll(".bg-tab").forEach((tab) => {
+            const on = tab.getAttribute("data-bg-tab") === tabName;
+            tab.classList.toggle("active", on);
+            tab.setAttribute("aria-selected", on ? "true" : "false");
+        });
+        document.querySelectorAll(".bg-tab-panel").forEach((p) => {
+            p.classList.toggle("active", p.id === `bg-tab-${tabName}`);
+        });
+        if (tabName === "shared") loadSharedBackgrounds();
+        if (tabName === "mine") renderUploadedBackgrounds();
+    }
+
     function initBgTabs() {
         const tabs = document.querySelectorAll(".bg-tab");
-        const panels = document.querySelectorAll(".bg-tab-panel");
-        if (!tabs.length || !panels.length) return;
+        if (!tabs.length) return;
         tabs.forEach((tab) => {
             tab.addEventListener("click", () => {
-                const name = tab.getAttribute("data-bg-tab") || "preset";
-                tabs.forEach((t) => {
-                    const on = t === tab;
-                    t.classList.toggle("active", on);
-                    t.setAttribute("aria-selected", on ? "true" : "false");
-                });
-                panels.forEach((p) => p.classList.toggle("active", p.id === `bg-tab-${name}`));
-                if (name === "shared") loadSharedBackgrounds();
+                switchBgTabTo(tab.getAttribute("data-bg-tab") || "preset");
             });
         });
     }
@@ -1864,9 +1891,33 @@
             document.body.setAttribute("data-theme", state.ui.theme);
             saveSettings();
         });
-        /* 「上传」入口必须先绑定：同一节点若同时触发 setBackground("image")，部分浏览器会阻止随后的 input.click()，导致文件选择器打不开 */
-        on("upload-bg-trigger", "click", () => $("bg-image-input")?.click());
-        on("upload-bg-btn", "click", () => $("bg-image-input")?.click());
+        /* 仅「上传背景图片」按钮打开文件框；预设网格中的图片入口切换到「我的背景」并应用已有缩略图 */
+        on("upload-bg-trigger", "click", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            switchBgTabTo("mine");
+            const items = getUploadedBackgrounds();
+            if (!items.length) {
+                showToast('请先点击下方「上传背景图片」添加图片', $("upload-bg-btn"));
+                return;
+            }
+            const prefer = state.ui.bgImageId ? items.find((x) => x && x.id === state.ui.bgImageId) : null;
+            const pick = prefer || items[0];
+            if (!pick || !pick.imageData) return;
+            state.ui.bgType = "image";
+            state.ui.bgImageId = pick.id;
+            state.ui.bgImage = pick.imageData;
+            state.ui.lyricsBgShareToCloud = false;
+            updateUIFromState();
+            updateAll();
+            saveSettings();
+            renderUploadedBackgrounds();
+            showToast("已应用歌词背景", $("upload-bg-trigger"));
+        });
+        on("upload-bg-btn", "click", (e) => {
+            e.preventDefault();
+            $("bg-image-input")?.click();
+        });
         document.querySelectorAll(".bg-option").forEach((node) => {
             if (node.id === "upload-bg-trigger") return;
             node.addEventListener("click", () => setBackground(node.getAttribute("data-bg") || "solid-black"));
@@ -1890,6 +1941,7 @@
                     updateUIFromState();
                     updateAll();
                     saveSettings();
+                    switchBgTabTo("mine");
                     showToast("已应用背景并加入「我的背景」", toastAnchor);
                 } catch (err) {
                     console.warn(err);
@@ -1904,6 +1956,7 @@
             };
             reader.readAsDataURL(file);
         });
+        on("theme-bg-preview-thumb", "click", () => $("theme-bg-input")?.click());
         on("theme-bg-upload-btn", "click", () => $("theme-bg-input")?.click());
         on("theme-bg-input", "change", (e) => {
             const input = e.target;

@@ -179,7 +179,12 @@
                 <option value="warm">暖色</option>
                 <option value="high-contrast">高对比</option>
             </select>
-            <button type="button" id="theme-bg-upload-btn" class="btn-outline" style="width:100%; margin-top:8px;">🖼️ 自定义主题背景</button>
+            <div class="theme-bg-upload-row">
+                <button type="button" id="theme-bg-preview-thumb" class="theme-bg-preview-thumb" title="点击上传主题背景" aria-label="主题背景预览，点击上传">
+                    <span id="theme-bg-preview-empty" class="theme-bg-preview-empty">暂无背景<br><span class="theme-bg-preview-hint">点击上传</span></span>
+                </button>
+                <button type="button" id="theme-bg-upload-btn" class="btn-outline theme-bg-upload-btn-main">🖼️ 自定义主题背景</button>
+            </div>
             <input type="file" id="theme-bg-input" accept="image/png,image/jpeg,image/jpg,image/gif,image/bmp,image/webp,image/*" hidden>
             <div id="theme-bg-opacity-row" class="theme-bg-opacity-row is-disabled">
                 <label for="theme-bg-opacity-slider">背景透明度</label>

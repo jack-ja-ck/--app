@@ -395,6 +395,9 @@
         ? new BroadcastChannel(CHANNEL_NAME)
         : null;
 
+    /** 主窗口缓存的投屏窗口引用（?display=1），关闭或失效后置空 */
+    let projectionDisplayWindowRef = null;
+
     const state = {
         songs: [],
         currentSongId: "",
@@ -424,8 +427,22 @@
             activeIndex: -1,
             fadeNext: false,
             autoSwitch: false
+        },
+        /** 诗歌库视图：全部 / 分类 / 批量 */
+        library: {
+            viewMode: "all"
         }
     };
+
+    /** 批量视图：勾选 id，与 state 分开避免污染 store */
+    let libraryBatchSelected = new Set();
+    let librarySongDragId = "";
+    /** 单行删除待确认（✕ 一次进入确认态） */
+    let libraryPendingDeleteId = "";
+    /** 仅在切换全部/分类/批量时做内容区淡入淡出 */
+    let libraryViewModeBeforeRender = null;
+    /** 右键菜单当前诗歌 id */
+    let contextMenuSongId = "";
 
     let liveState = null;
     let projectionMode = isDisplay ? "display" : (isLeader ? "leader" : null);
@@ -435,6 +452,8 @@
     let projectionBgImage = null;
     let projectionRaf = 0;
     let projectionLastTs = 0;
+    /** 投屏窗口（display=1）：固定不展示预览条与翻页按钮，仅歌词与背景 */
+    let displayProjectionChromeHidden = false;
     let publishInFlight = false;
     let publishBlockedBy405 = false;
     let defaultSongPosY = 45;
@@ -569,6 +588,35 @@
             .replace(/&/g, "&amp;")
             .replace(/</g, "&lt;")
             .replace(/>/g, "&gt;");
+    }
+
+    function escapeRegExp(str) {
+        return String(str).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    }
+
+    function highlightSearchHtml(text, keyLower) {
+        const esc = escapeHtml(text ?? "");
+        if (!keyLower) return esc;
+        try {
+            return esc.replace(new RegExp(`(${escapeRegExp(keyLower)})`, "gi"), "<mark>$1</mark>");
+        } catch {
+            return esc;
+        }
+    }
+
+    /** 列表/分类：搜索仅匹配标题 */
+    function songTitleMatchesSearch(song, keyLower) {
+        if (!keyLower) return true;
+        return String(song.title || "")
+            .toLowerCase()
+            .includes(keyLower);
+    }
+
+    function getLibraryFilteredSongRows() {
+        const keyLower = ($("search-input")?.value || "").trim().toLowerCase();
+        return state.songs
+            .filter((s) => songTitleMatchesSearch(s, keyLower))
+            .map((song) => ({ song, score: 0 }));
     }
 
     function splitPages(lyrics, linesPerPage) {
@@ -1131,10 +1179,23 @@
             card.style.background = "#444";
         } else if (state.ui.bgType === "gradient") {
             card.style.background = "linear-gradient(135deg,#1a2f59,#0a0f1d)";
-        } else if (state.ui.bgType === "image" && state.ui.bgImage) {
+        } else         if (state.ui.bgType === "image" && state.ui.bgImage) {
             card.style.backgroundImage = `url("${state.ui.bgImage}")`;
             card.style.backgroundSize = "cover";
             card.style.backgroundPosition = "center";
+        }
+    }
+
+    /** 投屏预览 #card-container：翻页后将当前页卡片滚入可视区域（需在卡片 DOM 更新之后调用） */
+    function scrollSpeakerPreviewCardIntoView() {
+        const container = $("card-container");
+        if (!container) return;
+        const cards = container.querySelectorAll(".card");
+        if (!cards.length) return;
+        const idx = clamp(state.currentPage, 0, cards.length - 1);
+        const card = cards[idx];
+        if (card && typeof card.scrollIntoView === "function") {
+            card.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
         }
     }
 
@@ -1211,26 +1272,299 @@
         });
 
         if ($("page-indicator")) $("page-indicator").textContent = `${state.currentPage + 1}/${pages.length}`;
+        requestAnimationFrame(() => {
+            requestAnimationFrame(scrollSpeakerPreviewCardIntoView);
+        });
+    }
+
+    function syncLibraryChrome() {
+        const batchBar = $("song-batch-bar");
+        if (batchBar) {
+            batchBar.style.display = state.library.viewMode === "batch" ? "flex" : "none";
+        }
+        const allB = $("library-view-all");
+        const catB = $("library-view-category");
+        const batB = $("library-view-batch");
+        if (allB) {
+            allB.classList.toggle("is-active", state.library.viewMode === "all");
+            allB.setAttribute("aria-selected", state.library.viewMode === "all" ? "true" : "false");
+        }
+        if (catB) {
+            catB.classList.toggle("is-active", state.library.viewMode === "category");
+            catB.setAttribute("aria-selected", state.library.viewMode === "category" ? "true" : "false");
+        }
+        if (batB) {
+            batB.classList.toggle("is-active", state.library.viewMode === "batch");
+            batB.setAttribute("aria-selected", state.library.viewMode === "batch" ? "true" : "false");
+        }
+    }
+
+    function hideSongContextMenu() {
+        const menu = $("song-context-menu");
+        if (menu) menu.hidden = true;
+        contextMenuSongId = "";
+    }
+
+    function showSongContextMenu(clientX, clientY, songId) {
+        const menu = $("song-context-menu");
+        if (!menu) return;
+        contextMenuSongId = songId;
+        menu.hidden = false;
+        const pad = 8;
+        const estW = 168;
+        const estH = 108;
+        const x = clamp(clientX, pad, window.innerWidth - estW - pad);
+        const y = clamp(clientY, pad, window.innerHeight - estH - pad);
+        menu.style.left = `${x}px`;
+        menu.style.top = `${y}px`;
+    }
+
+    function duplicateSong(songId) {
+        const song = state.songs.find((s) => s.id === songId);
+        if (!song) return;
+        const copy = {
+            ...song,
+            id: uid(),
+            title: `${song.title || "未命名"} 副本`
+        };
+        const idx = state.songs.findIndex((s) => s.id === songId);
+        state.songs.splice(Math.max(0, idx + 1), 0, copy);
+        saveSongs();
+        hideSongContextMenu();
+        switchSong(copy.id);
+        showToast("已复制诗歌", $("add-song-btn"));
+    }
+
+    function buildSongCategoryPanels(filteredSongsInOrder) {
+        const map = new Map();
+        const untagged = [];
+        filteredSongsInOrder.forEach((song) => {
+            const tags = String(song.tags || "")
+                .split(/[,\s]+/)
+                .map((t) => t.trim())
+                .filter(Boolean);
+            if (!tags.length) {
+                untagged.push(song);
+                return;
+            }
+            tags.forEach((tag) => {
+                if (!map.has(tag)) map.set(tag, []);
+                map.get(tag).push(song);
+            });
+        });
+        const panels = [...map.entries()]
+            .sort((a, b) => a[0].localeCompare(b[0], "zh"))
+            .map(([label, songs]) => ({
+                label,
+                songs,
+                count: songs.length
+            }));
+        if (untagged.length) {
+            panels.push({
+                label: "其他",
+                songs: untagged,
+                count: untagged.length
+            });
+        }
+        return panels;
+    }
+
+    function appendSongLibraryRow(parent, song, keyLower, opts) {
+        const showDragHandle = !!(opts && opts.showDragHandle);
+        const variant = (opts && opts.variant) || "list";
+        const showBatchCb = !!(opts && opts.showBatchCb);
+
+        const row = document.createElement("div");
+        row.className = "song-item" + (song.id === state.currentSongId ? " active" : "");
+        row.classList.add(variant === "category" ? "song-item--category" : "song-item--list");
+        row.dataset.songId = song.id;
+
+        const pendingDelete = libraryPendingDeleteId === song.id;
+        if (pendingDelete) row.classList.add("song-item--confirm-delete");
+
+        const titleHtml = highlightSearchHtml(song.title || "未命名", keyLower);
+        const pageCount = splitPages(song.lyrics, state.ui.defaultLines).length;
+        const tagLine = String(song.tags || "").trim() || "—";
+        const tagsHtml = highlightSearchHtml(tagLine, keyLower);
+
+        const cbHtml = showBatchCb
+            ? `<input type="checkbox" class="song-batch-cb" aria-label="选择" data-song-id="${song.id}" ${libraryBatchSelected.has(song.id) ? "checked" : ""}>`
+            : "";
+
+        const handleHtml = showDragHandle
+            ? `<span class="song-drag-handle" draggable="true" title="拖拽排序">⋮⋮</span>`
+            : `<span class="song-drag-spacer" aria-hidden="true"></span>`;
+
+        const deleteBtnHtml = pendingDelete
+            ? `<button type="button" class="song-delete-btn song-delete-btn--pending" data-song-id="${song.id}">确认删除？</button>`
+            : `<button type="button" class="song-delete-btn" title="删除" data-song-id="${song.id}">✕</button>`;
+
+        row.innerHTML = `${cbHtml}${handleHtml}
+<div class="song-item-main">
+  <div class="song-item-text">
+    <div class="song-item-title">${titleHtml}</div>
+    <div class="song-item-meta"><span class="song-item-tags">${tagsHtml}</span><span class="song-item-pages">${pageCount} 页</span></div>
+  </div>
+</div>
+${deleteBtnHtml}
+<button type="button" class="song-add-btn" title="加入播放列表" data-song-id="${song.id}">+</button>`;
+
+        const openSong = () => {
+            switchSong(song.id);
+        };
+
+        row.addEventListener("click", (e) => {
+            if (e.target.closest(".song-delete-btn") || e.target.closest(".song-add-btn") || e.target.closest(".song-batch-cb")) {
+                return;
+            }
+            if (e.target.closest(".song-drag-handle")) return;
+
+            if (libraryPendingDeleteId === song.id) {
+                e.stopPropagation();
+                libraryPendingDeleteId = "";
+                deleteSong(song.id);
+                return;
+            }
+
+            openSong();
+        });
+
+        row.addEventListener("contextmenu", (e) => {
+            e.preventDefault();
+            hideSongContextMenu();
+            showSongContextMenu(e.clientX, e.clientY, song.id);
+        });
+
+        row.querySelector(".song-delete-btn")?.addEventListener("click", (e) => {
+            e.stopPropagation();
+            if (libraryPendingDeleteId === song.id) {
+                libraryPendingDeleteId = "";
+                deleteSong(song.id);
+                return;
+            }
+            libraryPendingDeleteId = song.id;
+            renderSongList();
+        });
+
+        row.querySelector(".song-add-btn")?.addEventListener("click", (e) => {
+            e.stopPropagation();
+            addToPlaylist(song.id, e.currentTarget);
+        });
+
+        const handleEl = row.querySelector(".song-drag-handle");
+        if (showDragHandle && handleEl) {
+            handleEl.addEventListener("mousedown", (e) => e.stopPropagation());
+            handleEl.addEventListener("click", (e) => e.stopPropagation());
+            handleEl.addEventListener("dragstart", (e) => {
+                e.stopPropagation();
+                librarySongDragId = song.id;
+                row.classList.add("song-item-dragging");
+                if (e.dataTransfer) {
+                    e.dataTransfer.effectAllowed = "move";
+                    e.dataTransfer.setData("text/plain", song.id);
+                }
+            });
+            handleEl.addEventListener("dragend", () => {
+                librarySongDragId = "";
+                row.classList.remove("song-item-dragging");
+            });
+        }
+
+        if (showDragHandle) {
+            row.addEventListener("dragover", (e) => {
+                e.preventDefault();
+                if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+            });
+            row.addEventListener("drop", (e) => {
+                e.preventDefault();
+                const fromId = librarySongDragId || String(e.dataTransfer?.getData("text/plain") || "");
+                reorderLibrarySongs(fromId, song.id);
+            });
+        }
+
+        parent.appendChild(row);
+    }
+
+    function renderSongListBodyCore() {
+        const list = $("song-list");
+        const hint = $("search-result-hint");
+        if (!list) return;
+
+        const keyLower = ($("search-input")?.value || "").trim().toLowerCase();
+
+        if (state.library.viewMode === "category") {
+            const filtered = state.songs.filter((s) => songTitleMatchesSearch(s, keyLower));
+            const panels = buildSongCategoryPanels(filtered);
+
+            if (hint) {
+                hint.textContent = keyLower ? `共找到 ${filtered.length} 首匹配诗歌` : "";
+            }
+
+            list.innerHTML = "";
+            panels.forEach(({ label, songs: sg, count }) => {
+                const det = document.createElement("details");
+                det.className = "song-cat-details";
+                det.open = true;
+                const sum = document.createElement("summary");
+                sum.className = "song-cat-summary";
+                sum.textContent = `${label}（${count}首）`;
+                const body = document.createElement("div");
+                body.className = "song-cat-body";
+                sg.forEach((song) =>
+                    appendSongLibraryRow(body, song, keyLower, {
+                        showDragHandle: false,
+                        showBatchCb: false,
+                        variant: "category"
+                    })
+                );
+                det.appendChild(sum);
+                det.appendChild(body);
+                list.appendChild(det);
+            });
+            return;
+        }
+
+        const ordered = getLibraryFilteredSongRows();
+        if (hint) {
+            hint.textContent = keyLower ? `共找到 ${ordered.length} 首匹配诗歌` : "";
+        }
+
+        list.innerHTML = "";
+
+        const batchMode = state.library.viewMode === "batch";
+        const showDragHandle = state.library.viewMode === "all";
+
+        ordered.forEach(({ song }) =>
+            appendSongLibraryRow(list, song, keyLower, {
+                showDragHandle,
+                showBatchCb: batchMode,
+                variant: "list"
+            })
+        );
     }
 
     function renderSongList() {
-        const list = $("song-list");
-        if (!list) return;
-        const key = ($("search-input")?.value || "").trim().toLowerCase();
-        list.innerHTML = "";
-        state.songs.forEach((song) => {
-            const hay = `${song.title || ""}\n${song.lyrics || ""}\n${song.tags || ""}`.toLowerCase();
-            if (key && !hay.includes(key)) return;
-            const li = document.createElement("li");
-            li.className = "song-item" + (song.id === state.currentSongId ? " active" : "");
-            li.innerHTML = `<div class="song-item-main"><span>${escapeHtml(song.title || "未命名")}</span><span style="opacity:.65">${splitPages(song.lyrics, state.ui.defaultLines).length}页</span></div><button class="song-add-btn" title="加入播放列表" data-song-id="${song.id}">+</button>`;
-            li.addEventListener("click", () => switchSong(song.id));
-            li.querySelector(".song-add-btn")?.addEventListener("click", (e) => {
-                e.stopPropagation();
-                addToPlaylist(song.id, e.currentTarget);
-            });
-            list.appendChild(li);
-        });
+        const vm = state.library.viewMode;
+        const fade = libraryViewModeBeforeRender !== null && libraryViewModeBeforeRender !== vm;
+        libraryViewModeBeforeRender = vm;
+
+        const inner = $("library-view-inner");
+
+        const run = () => {
+            syncLibraryChrome();
+            renderSongListBodyCore();
+        };
+
+        if (!fade || !inner) {
+            run();
+            return;
+        }
+
+        inner.style.opacity = "0";
+        window.setTimeout(() => {
+            run();
+            inner.style.opacity = "1";
+        }, 200);
     }
 
     function renderPlaylist() {
@@ -1338,29 +1672,6 @@
         showToast("播放列表已开始", $("playlist-start-btn"));
     }
 
-    function renderTagFilter() {
-        const root = $("tag-filter");
-        if (!root) return;
-        const tags = new Set();
-        state.songs.forEach((s) => {
-            (s.tags || "").split(/[,\s]+/).map((t) => t.trim()).filter(Boolean).forEach((t) => tags.add(t));
-        });
-        root.innerHTML = "";
-        [...tags].slice(0, 20).forEach((tag) => {
-            const b = document.createElement("button");
-            b.className = "small-btn";
-            b.style.width = "auto";
-            b.style.padding = "4px 8px";
-            b.style.marginTop = "0";
-            b.textContent = tag;
-            b.addEventListener("click", () => {
-                if ($("search-input")) $("search-input").value = tag;
-                renderSongList();
-            });
-            root.appendChild(b);
-        });
-    }
-
     function renderMiniPreview() {
         const mini = $("mini-preview");
         if (!mini) return;
@@ -1457,7 +1768,6 @@
                 state.songs.push(imported);
                 saveSongs();
                 renderSongList();
-                renderTagFilter();
                 showToast("已导入云端诗歌", btn);
             });
             box.appendChild(title);
@@ -1633,8 +1943,97 @@
         updateAll();
     }
 
+    function reorderLibrarySongs(fromSongId, toSongId) {
+        if (!fromSongId || !toSongId || fromSongId === toSongId) return;
+        const arr = [...state.songs];
+        const fi = arr.findIndex((s) => s.id === fromSongId);
+        if (fi < 0) return;
+        const [moved] = arr.splice(fi, 1);
+        const insertAt = arr.findIndex((s) => s.id === toSongId);
+        if (insertAt < 0) return;
+        arr.splice(insertAt, 0, moved);
+        state.songs = arr;
+        saveSongs();
+        renderSongList();
+    }
+
+    function deleteSong(songId) {
+        if (!songId) return;
+        libraryPendingDeleteId = "";
+        const idx = state.songs.findIndex((s) => s.id === songId);
+        if (idx < 0) return;
+        state.songs.splice(idx, 1);
+        libraryBatchSelected.delete(songId);
+        if (!state.songs.length) {
+            state.songs.push({ id: uid(), ...DEFAULT_SONG });
+        }
+        state.playlist.items = state.playlist.items.filter((id) => id !== songId);
+        savePlaylist();
+        if (state.currentSongId === songId) {
+            state.currentSongId = state.songs[0].id;
+            state.currentPage = 0;
+            syncPosYFromCurrentSong();
+            syncSongToEditor();
+        }
+        saveSongs();
+        updateUIFromState();
+        renderSongList();
+        updateSpeakerCards();
+        renderMiniPreview();
+        renderPlaylist();
+        broadcastState();
+    }
+
+    function batchDeleteSelectedSongs() {
+        const ids = [...libraryBatchSelected];
+        if (!ids.length) {
+            showToast("请先勾选诗歌", $("batch-delete-btn"));
+            return;
+        }
+        if (!confirm(`确定删除选中的 ${ids.length} 首诗歌？`)) return;
+        const rm = new Set(ids);
+        state.songs = state.songs.filter((s) => !rm.has(s.id));
+        libraryBatchSelected.clear();
+        if (!state.songs.length) {
+            state.songs.push({ id: uid(), ...DEFAULT_SONG });
+        }
+        state.playlist.items = state.playlist.items.filter((id) => !rm.has(id));
+        savePlaylist();
+        if (!state.songs.some((s) => s.id === state.currentSongId)) {
+            state.currentSongId = state.songs[0].id;
+            state.currentPage = 0;
+            syncPosYFromCurrentSong();
+            syncSongToEditor();
+        }
+        saveSongs();
+        updateUIFromState();
+        renderSongList();
+        updateSpeakerCards();
+        renderMiniPreview();
+        renderPlaylist();
+        broadcastState();
+    }
+
+    function batchExportSelectedWorship() {
+        const ids = [...libraryBatchSelected];
+        if (!ids.length) {
+            showToast("请先勾选诗歌", $("batch-export-btn"));
+            return;
+        }
+        const subset = state.songs.filter((s) => ids.includes(s.id));
+        const blob = new Blob([JSON.stringify({ songs: subset, settings: {} }, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `worship-batch-${Date.now()}.worship`;
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast("已导出所选诗歌", $("batch-export-btn"));
+    }
+
     function switchSong(songId) {
         if (!state.songs.some((s) => s.id === songId)) return;
+        libraryPendingDeleteId = "";
         state.currentSongId = songId;
         state.currentPage = 0;
         syncPosYFromCurrentSong();
@@ -1651,7 +2050,6 @@
         syncEditorToSong();
         saveSongs();
         renderSongList();
-        renderTagFilter();
         updateSpeakerCards();
         renderMiniPreview();
         broadcastState();
@@ -1659,15 +2057,19 @@
     }
 
     function createNewSong() {
-        const title = (prompt("请输入诗歌标题", "新诗歌") || "").trim();
-        if (!title) return;
-        const song = { id: uid(), title, lyrics: "", key: "", tempo: "", notes: "", tags: "" };
+        const song = { id: uid(), title: "", lyrics: "", key: "", tempo: "", notes: "", tags: "" };
         const currentIndex = Math.max(0, state.songs.findIndex((s) => s.id === state.currentSongId));
         state.songs.splice(currentIndex + 1, 0, song);
         saveSongs();
         switchSong(song.id);
-        renderTagFilter();
-        showToast("已新建诗歌", $("new-song-btn"));
+        showToast("✅ 已新建诗歌，请编辑歌词", $("add-song-btn"));
+        queueMicrotask(() => {
+            const inp = $("song-title-input");
+            if (inp) {
+                inp.focus();
+                inp.select();
+            }
+        });
     }
 
     async function publishSong() {
@@ -1683,6 +2085,30 @@
             if (response.ok) { showToast('✅ 已发布到云端'); }
             else { showToast('❌ 发布失败，请重试'); }
         } catch(e) { console.error('发布失败:', e); showToast('❌ 发布失败，请重试'); }
+    }
+
+    function showRestoreProjectionBanner() {
+        if (isDisplay || isLeader) return;
+        const el = $("restore-projection-overlay");
+        if (el) el.hidden = false;
+    }
+
+    function hideRestoreProjectionBanner() {
+        const el = $("restore-projection-overlay");
+        if (el) el.hidden = true;
+    }
+
+    function attachProjectionDisplayWindow(win) {
+        if (!win) return;
+        projectionDisplayWindowRef = win;
+        try {
+            win.addEventListener("unload", () => {
+                if (projectionDisplayWindowRef === win) projectionDisplayWindowRef = null;
+                showRestoreProjectionBanner();
+            });
+        } catch (_) {
+            /* ignore */
+        }
     }
 
     function openLeaderQrModal() {
@@ -1757,7 +2183,6 @@
             updateUIFromState();
             syncSongToEditor();
             renderSongList();
-            renderTagFilter();
             updateSpeakerCards();
             renderMiniPreview();
             renderPlaylist();
@@ -1795,62 +2220,73 @@
         }, 100);
     }
 
-    async function openDisplayOnSecondScreen(url, windowName, toastAnchor) {
-        const FULLSCREEN_HINT = "📺 请将此窗口拖动到投影仪屏幕上，然后按 F 全屏";
-        const W = 1280;
-        const H = 720;
-        const win = window.open("about:blank", windowName, `width=${W},height=${H}`);
+    /**
+     * 基于 window.screen 估算投屏窗口位置（无需异步 API）：扩展桌面时常用技巧是将 left 置于主屏右侧（availLeft+availWidth），
+     * 超出主屏可见范围时由系统将窗口放到第二块屏幕。单屏时在当前可用区域内打开。
+     */
+    function getDisplayWindowPlacement() {
+        const scr = window.screen;
+        const availLeft = Number(scr.availLeft) || 0;
+        const availTop = Number(scr.availTop) || 0;
+        const availWidth = Number(scr.availWidth) || 1280;
+        const availHeight = Number(scr.availHeight) || 720;
+        const screenWidth = Number(scr.width) || availWidth;
+
+        const likelySingleScreen = availLeft === 0 && screenWidth <= availWidth;
+        if (likelySingleScreen) {
+            return { left: availLeft, top: availTop, width: availWidth, height: availHeight };
+        }
+        return {
+            left: availLeft + availWidth,
+            top: 0,
+            width: availWidth,
+            height: availHeight
+        };
+    }
+
+    function openDisplayOnSecondScreen(url, windowName, toastAnchor) {
+        const { left, top, width, height } = getDisplayWindowPlacement();
+        const feats = `left=${left},top=${top},width=${width},height=${height}`;
+        const win = window.open("about:blank", windowName, feats);
         if (!win) {
             if (toastAnchor) showToast("无法打开窗口，请允许弹窗", toastAnchor);
-            return;
+            return null;
         }
-        win.onload = () => {
-            try {
-                const h = String(win.location.href || "");
-                if (h.includes("display=1") || h.includes("leader=1")) {
-                    win.document.documentElement.requestFullscreen();
-                }
-            } catch (e) {
-                /* 部分环境需用户再次手势 */
-            }
-        };
+        try {
+            win.moveTo(left, top);
+            win.resizeTo(width, height);
+        } catch (e) {
+            console.log("定位投屏窗口失败", e);
+        }
 
-        let showDragHint = true;
-        if ("getScreenDetails" in window && typeof window.getScreenDetails === "function") {
-            try {
-                const screenDetails = await window.getScreenDetails();
-                const screens = screenDetails.screens;
-                const secondaryScreen = screens.find((s) => !s.isPrimary) || screens[screens.length - 1];
-                if (secondaryScreen) {
-                    const left = Math.round(secondaryScreen.availLeft + (secondaryScreen.availWidth - W) / 2);
-                    const top = Math.round(secondaryScreen.availTop + (secondaryScreen.availHeight - H) / 2);
-                    try {
-                        win.moveTo(left, top);
-                        win.resizeTo(W, H);
-                    } catch (moveErr) {
-                        console.log("移动窗口到目标屏幕失败", moveErr);
-                    }
-                    if (screens.some((s) => !s.isPrimary) && secondaryScreen && !secondaryScreen.isPrimary) {
-                        showDragHint = false;
-                    }
-                }
-            } catch (e) {
-                console.log("多屏幕API失败，使用回退方案", e);
-            }
-        }
-        if (showDragHint && toastAnchor) showToast(FULLSCREEN_HINT, toastAnchor);
         try {
             win.location.replace(url);
         } catch (e) {
             win.location.href = url;
         }
         if (!isDisplay && !isLeader) refocusMainWindowForOperator();
+        return win;
     }
 
     function openDisplayWindow() {
         broadcastState();
-        refocusMainWindowForOperator();
-        void openDisplayOnSecondScreen("./index.html?display=1", "_blank", $("open-display-btn"));
+        const anchor = $("open-display-btn");
+        const w = projectionDisplayWindowRef;
+        if (w && !w.closed) {
+            try {
+                w.focus();
+                const de = w.document.documentElement;
+                if (de.requestFullscreen) void de.requestFullscreen({ navigationUI: "hide" }).catch(() => {});
+                hideRestoreProjectionBanner();
+                refocusMainWindowForOperator();
+                return;
+            } catch (_) {
+                projectionDisplayWindowRef = null;
+            }
+        }
+        const newWin = openDisplayOnSecondScreen("./index.html?display=1", "worship_projection_display", anchor);
+        if (newWin) attachProjectionDisplayWindow(newWin);
+        hideRestoreProjectionBanner();
     }
 
     function openLeaderWindow() {
@@ -1957,7 +2393,6 @@
             if (el) el.addEventListener(event, fn);
         };
 
-        on("new-song-btn", "click", createNewSong);
         on("add-song-btn", "click", createNewSong);
         on("save-song-btn", "click", saveCurrentLyrics);
         on("publish-song-btn", "click", publishSong);
@@ -2027,7 +2462,6 @@
             if ($("batch-import-textarea")) $("batch-import-textarea").value = "";
             saveSongs();
             renderSongList();
-            renderTagFilter();
             renderPlaylist();
             showToast(`已导入 ${count} 首`, $("batch-import-btn"));
         });
@@ -2038,6 +2472,79 @@
         });
 
         on("search-input", "input", renderSongList);
+        on("library-view-all", "click", () => {
+            if (state.library.viewMode === "batch") libraryBatchSelected.clear();
+            state.library.viewMode = "all";
+            renderSongList();
+        });
+        on("library-view-category", "click", () => {
+            if (state.library.viewMode === "batch") libraryBatchSelected.clear();
+            state.library.viewMode = "category";
+            renderSongList();
+        });
+        on("library-view-batch", "click", () => {
+            state.library.viewMode = "batch";
+            renderSongList();
+        });
+        on("batch-delete-btn", "click", batchDeleteSelectedSongs);
+        on("batch-export-btn", "click", batchExportSelectedWorship);
+
+        const songCtxMenu = $("song-context-menu");
+        if (songCtxMenu) {
+            songCtxMenu.addEventListener("click", (e) => {
+                const btn = e.target.closest("[data-action]");
+                if (!btn) return;
+                e.stopPropagation();
+                const action = btn.getAttribute("data-action");
+                const sid = contextMenuSongId;
+                hideSongContextMenu();
+                if (!sid) return;
+                if (action === "edit") switchSong(sid);
+                else if (action === "copy") duplicateSong(sid);
+                else if (action === "delete") {
+                    libraryPendingDeleteId = sid;
+                    renderSongList();
+                }
+            });
+        }
+
+        document.addEventListener(
+            "mousedown",
+            (e) => {
+                if (e.button !== 0) return;
+                const ctx = $("song-context-menu");
+                if (ctx && !ctx.hidden && !e.target.closest("#song-context-menu")) {
+                    hideSongContextMenu();
+                }
+                if (libraryPendingDeleteId) {
+                    if (e.target.closest("#song-context-menu")) return;
+                    const row = e.target.closest(".song-item");
+                    if (row && row.dataset.songId === libraryPendingDeleteId) return;
+                    libraryPendingDeleteId = "";
+                    renderSongList();
+                }
+            },
+            true
+        );
+
+        document.addEventListener("keydown", (e) => {
+            if (e.key !== "Escape") return;
+            hideSongContextMenu();
+            if (libraryPendingDeleteId) {
+                libraryPendingDeleteId = "";
+                renderSongList();
+            }
+        });
+
+        $("song-list")?.addEventListener("change", (e) => {
+            const t = e.target;
+            if (!(t instanceof HTMLInputElement) || !t.classList.contains("song-batch-cb")) return;
+            const id = t.dataset.songId;
+            if (!id) return;
+            if (t.checked) libraryBatchSelected.add(id);
+            else libraryBatchSelected.delete(id);
+        });
+
         on("online-search-input", "input", renderOnlineSearchResult);
 
         on("font-slider", "input", () => {
@@ -2206,6 +2713,7 @@
         });
 
         on("open-display-btn", "click", openDisplayWindow);
+        on("restore-projection-btn", "click", openDisplayWindow);
         on("open-leader-btn", "click", openLeaderWindow);
         on("leader-qr-btn", "click", openLeaderQrModal);
 
@@ -2233,7 +2741,6 @@
         on("song-notes", "input", syncEditorToSong);
         on("song-tags", "input", () => {
             syncEditorToSong();
-            renderTagFilter();
         });
 
         document.addEventListener("keydown", (e) => {
@@ -2242,9 +2749,17 @@
                 e.preventDefault();
                 changePage(1);
             } else if (e.key === "ArrowRight") {
+                e.preventDefault();
                 changePage(1);
             } else if (e.key === "ArrowLeft") {
+                e.preventDefault();
                 changePage(-1);
+            } else if (e.key === "ArrowUp") {
+                e.preventDefault();
+                prevPage();
+            } else if (e.key === "ArrowDown") {
+                e.preventDefault();
+                nextPage();
             }
         });
     }
@@ -2290,16 +2805,11 @@
         if (mode === "leader") lyric.style.textAlign = "left";
         host.appendChild(lyric);
 
-        const nav = document.createElement("div");
-        nav.style.cssText = "position:absolute;left:0;right:0;bottom:24px;display:flex;justify-content:center;gap:12px;z-index:3;";
-        nav.innerHTML = '<button id="projection-prev-btn" class="display-control-btn">上一页</button><button id="projection-next-btn" class="display-control-btn">下一页</button>';
-        host.appendChild(nav);
-
-        if (mode === "display") {
-            const preview = document.createElement("div");
-            preview.id = "display-card-preview";
-            preview.style.cssText = "position:absolute;left:20px;right:20px;bottom:72px;display:flex;gap:8px;overflow:auto;justify-content:center;z-index:3;padding:4px;flex:1 1 auto;";
-            host.appendChild(preview);
+        if (mode === "leader") {
+            const nav = document.createElement("div");
+            nav.style.cssText = "position:absolute;left:0;right:0;bottom:24px;display:flex;justify-content:center;gap:12px;z-index:3;";
+            nav.innerHTML = '<button id="projection-prev-btn" class="display-control-btn">上一页</button><button id="projection-next-btn" class="display-control-btn">下一页</button>';
+            host.appendChild(nav);
         }
     }
 
@@ -2504,7 +3014,7 @@
 
     function updateDisplayCardPreview() {
         const holder = $("display-card-preview");
-        if (!holder || !liveState) return;
+        if (!holder || !liveState || displayProjectionChromeHidden) return;
         holder.innerHTML = "";
         const pages = liveState.pages || [];
         if (!pages.length) return;
@@ -2538,15 +3048,293 @@
     function initDisplayMode() {
         projectionMode = "display";
         installProjectionUI("display");
+        displayProjectionChromeHidden = true;
+
+        if (!document.getElementById("worship-display-pro-style")) {
+            const st = document.createElement("style");
+            st.id = "worship-display-pro-style";
+            st.textContent =
+                "html.projection-cursor-idle,html.projection-cursor-idle body,html.projection-cursor-idle #projection-host{cursor:none!important;}";
+            document.head.appendChild(st);
+        }
+
+        let cursorIdleTimer = 0;
+        let bwMaskEl = null;
+        let bwMaskKind = null;
+
+        let fullscreenGuideOverlay = null;
+        let fullscreenGuideTimer = 0;
+        let displayHadFullscreenSession = false;
+        let guideMovePollTimer = 0;
+        /** 显示主引导面板时用于检测「整窗移到另一块屏」的起点 */
+        let guideWindowBaseline = null;
+
+        function captureGuideWindowBaseline() {
+            return {
+                left: window.screenLeft ?? window.screenX ?? 0,
+                top: window.screenTop ?? window.screenY ?? 0
+            };
+        }
+
+        function stopGuideMovePoll() {
+            if (guideMovePollTimer) {
+                window.clearInterval(guideMovePollTimer);
+                guideMovePollTimer = 0;
+            }
+            guideWindowBaseline = null;
+        }
+
+        function maybeDismissGuideForWindowMove() {
+            if (!fullscreenGuideOverlay || document.fullscreenElement || !guideWindowBaseline) return;
+            const cur = captureGuideWindowBaseline();
+            const dl = Math.abs(cur.left - guideWindowBaseline.left);
+            const dt = Math.abs(cur.top - guideWindowBaseline.top);
+            if (dl > 72 || dt > 72) {
+                removeFullscreenGuide(true);
+            }
+        }
+
+        function startGuideMovePoll() {
+            stopGuideMovePoll();
+            guideWindowBaseline = captureGuideWindowBaseline();
+            guideMovePollTimer = window.setInterval(maybeDismissGuideForWindowMove, 400);
+        }
+
+        function removeFullscreenGuide(immediate) {
+            stopGuideMovePoll();
+            window.clearTimeout(fullscreenGuideTimer);
+            fullscreenGuideTimer = 0;
+            if (!fullscreenGuideOverlay) return;
+            const el = fullscreenGuideOverlay;
+            if (immediate) {
+                el.remove();
+                fullscreenGuideOverlay = null;
+                return;
+            }
+            el.style.opacity = "0";
+            window.setTimeout(() => {
+                el.remove();
+                if (fullscreenGuideOverlay === el) fullscreenGuideOverlay = null;
+            }, 380);
+        }
+
+        /**
+         * @param {{ autoHideMs?: number|null }} [opts]
+         * autoHideMs：毫秒后淡出；null/undefined 缺省为 5000；≤0 表示不自动关闭（仅按 H 召唤时使用）
+         */
+        function showFullscreenGuidePanel(opts) {
+            const o = opts && typeof opts === "object" ? opts : {};
+            let autoHideMs = "autoHideMs" in o ? o.autoHideMs : 5000;
+            if (autoHideMs === undefined) autoHideMs = 5000;
+
+            removeFullscreenGuide(true);
+            if (document.fullscreenElement) return;
+
+            const overlay = document.createElement("div");
+            overlay.className = "display-fs-guide-overlay";
+            overlay.style.opacity = "1";
+            overlay.innerHTML = `
+                <div class="display-fs-guide-panel">
+                    <button type="button" id="display-fs-guide-fs-btn" class="display-fs-guide-big-btn">📺 点击此处全屏</button>
+                    <p class="display-fs-guide-sub">或按 F 键全屏</p>
+                    <p class="display-fs-guide-sub">或按 Win+Shift+→ 移到投影仪</p>
+                    <p class="display-fs-guide-note">ℹ️ 浏览器安全策略暂不支持一键自动投屏，敬请谅解</p>
+                    <p id="display-fs-guide-auto-msg" class="display-fs-guide-timer"></p>
+                    <p class="display-fs-guide-timer" style="margin-top:10px;opacity:.88;">按 H 键随时查看操作提示</p>
+                </div>`;
+            document.body.appendChild(overlay);
+            fullscreenGuideOverlay = overlay;
+
+            const autoEl = overlay.querySelector("#display-fs-guide-auto-msg");
+            if (autoEl) {
+                if (typeof autoHideMs === "number" && autoHideMs > 0) {
+                    const sec = Math.round(autoHideMs / 1000);
+                    autoEl.textContent = `（此提示${sec}秒后自动消失）`;
+                    fullscreenGuideTimer = window.setTimeout(() => removeFullscreenGuide(false), autoHideMs);
+                } else {
+                    autoEl.textContent = "";
+                }
+            }
+
+            const panel = overlay.querySelector(".display-fs-guide-panel");
+            overlay.addEventListener("click", (e) => {
+                if (e.target === overlay) removeFullscreenGuide(false);
+            });
+            panel?.addEventListener("click", (e) => {
+                e.stopPropagation();
+            });
+
+            overlay.querySelector("#display-fs-guide-fs-btn")?.addEventListener("click", async (e) => {
+                e.preventDefault();
+                try {
+                    await document.documentElement.requestFullscreen({ navigationUI: "hide" });
+                    removeFullscreenGuide(true);
+                } catch (_) {
+                    /* ignore */
+                }
+            });
+
+            startGuideMovePoll();
+        }
+
+        function showDisplayReadyToast() {
+            const el = document.createElement("div");
+            el.className = "display-ready-toast";
+            el.textContent = "✅ 投屏已就绪 · 请在控制台翻页";
+            document.body.appendChild(el);
+            requestAnimationFrame(() => {
+                el.style.opacity = "1";
+            });
+            window.setTimeout(() => {
+                el.style.opacity = "0";
+                window.setTimeout(() => el.remove(), 400);
+            }, 2000);
+        }
+
+        document.addEventListener(
+            "fullscreenchange",
+            () => {
+                if (document.fullscreenElement) {
+                    displayHadFullscreenSession = true;
+                    removeFullscreenGuide(true);
+                    showDisplayReadyToast();
+                    if (channel) channel.postMessage({ type: "projection_fs_active", source: "display" });
+                } else if (displayHadFullscreenSession) {
+                    showFullscreenGuidePanel({ autoHideMs: 8000 });
+                    if (channel) channel.postMessage({ type: "projection_attention", reason: "fs_exit", source: "display" });
+                }
+            },
+            false
+        );
+
+        window.addEventListener(
+            "pagehide",
+            () => {
+                try {
+                    if (channel) channel.postMessage({ type: "projection_attention", reason: "pagehide", source: "display" });
+                } catch (_) {
+                    /* ignore */
+                }
+            },
+            false
+        );
+
+        function bumpCursorIdle() {
+            if (!displayProjectionChromeHidden) return;
+            document.documentElement.classList.remove("projection-cursor-idle");
+            clearTimeout(cursorIdleTimer);
+            cursorIdleTimer = window.setTimeout(() => {
+                document.documentElement.classList.add("projection-cursor-idle");
+            }, 2000);
+        }
+
+        function onProjectionPointerActivity() {
+            bumpCursorIdle();
+        }
+
+        function tryProjectionFullscreenOnce() {
+            const el = document.documentElement;
+            if (!el.requestFullscreen) return;
+            el.requestFullscreen({ navigationUI: "hide" }).catch(() => {});
+        }
+
+        /** 静默尝试一次自动全屏；若仍非全屏则在延迟后展示引导面板（多数浏览器会因用户手势策略拦截） */
+        requestAnimationFrame(() => requestAnimationFrame(() => tryProjectionFullscreenOnce()));
+        window.setTimeout(() => {
+            if (!document.fullscreenElement) showFullscreenGuidePanel({ autoHideMs: 5000 });
+        }, 750);
+
+        document.addEventListener("mousemove", onProjectionPointerActivity, { passive: true });
+        document.addEventListener("mousedown", onProjectionPointerActivity, { passive: true });
+        document.addEventListener("touchstart", onProjectionPointerActivity, { passive: true });
+        document.addEventListener(
+            "wheel",
+            () => {
+                bumpCursorIdle();
+            },
+            { passive: true }
+        );
+
+        function ensureBwMask() {
+            if (bwMaskEl) return bwMaskEl;
+            const host = $("projection-host");
+            if (!host) return null;
+            bwMaskEl = document.createElement("div");
+            bwMaskEl.id = "projection-bw-mask";
+            bwMaskEl.setAttribute("aria-hidden", "true");
+            bwMaskEl.style.cssText = "display:none;position:absolute;inset:0;z-index:20;pointer-events:none;";
+            host.appendChild(bwMaskEl);
+            return bwMaskEl;
+        }
+
+        function toggleBwMask(kind) {
+            const m = ensureBwMask();
+            if (!m) return;
+            if (bwMaskKind === kind) {
+                m.style.display = "none";
+                bwMaskKind = null;
+                return;
+            }
+            bwMaskKind = kind;
+            m.style.background = kind === "black" ? "#000" : "#fff";
+            m.style.display = "block";
+        }
+
+        async function toggleProjectionFullscreen() {
+            try {
+                if (document.fullscreenElement) await document.exitFullscreen();
+                else await document.documentElement.requestFullscreen({ navigationUI: "hide" });
+            } catch (_) {
+                /* ignore */
+            }
+        }
+
         const initState = getStore(STORAGE.LIVE, null);
         if (initState) applyLive("display", initState);
         const onPrev = () => channel && channel.postMessage({ type: "flip", delta: -1 });
         const onNext = () => channel && channel.postMessage({ type: "flip", delta: 1 });
-        $("projection-prev-btn")?.addEventListener("click", onPrev);
-        $("projection-next-btn")?.addEventListener("click", onNext);
+
         document.addEventListener("keydown", (e) => {
-            if (e.key === "ArrowLeft") onPrev();
-            if (e.key === "ArrowRight") onNext();
+            if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA")) return;
+            const k = e.key;
+            const isArrowLeft = k === "ArrowLeft" || e.code === "ArrowLeft";
+            const isArrowRight = k === "ArrowRight" || e.code === "ArrowRight";
+            if (k === "h" || k === "H") {
+                e.preventDefault();
+                showFullscreenGuidePanel({ autoHideMs: 0 });
+                bumpCursorIdle();
+                return;
+            }
+            if (isArrowLeft) {
+                e.preventDefault();
+                onPrev();
+                bumpCursorIdle();
+                return;
+            }
+            if (isArrowRight) {
+                e.preventDefault();
+                onNext();
+                bumpCursorIdle();
+                return;
+            }
+            if (k === "f" || k === "F") {
+                e.preventDefault();
+                toggleProjectionFullscreen();
+                bumpCursorIdle();
+                return;
+            }
+            if (k === "b" || k === "B") {
+                e.preventDefault();
+                toggleBwMask("black");
+                bumpCursorIdle();
+                return;
+            }
+            if (k === "w" || k === "W") {
+                e.preventDefault();
+                toggleBwMask("white");
+                bumpCursorIdle();
+                return;
+            }
         });
 
         if (channel) {
@@ -2564,8 +3352,9 @@
         });
         window.addEventListener("resize", () => {
             restartBg();
-            updateDisplayCardPreview();
         });
+
+        bumpCursorIdle();
     }
 
     function initLeaderView() {
@@ -3562,19 +4351,50 @@
 
     function changePage(delta) {
         const pages = splitPages(currentSong()?.lyrics || "", state.ui.defaultLines);
-        const atLastPage = state.currentPage >= Math.max(0, pages.length - 1);
-        if (delta > 0 && atLastPage && state.playlist.running && state.playlist.autoSwitch) {
-            const nextIdx = state.playlist.activeIndex + 1;
-            if (nextIdx < state.playlist.items.length) {
-                switchToPlaylistSong(nextIdx, true);
-                return;
-            }
+        const maxIdx = Math.max(0, pages.length - 1);
+        const cur = state.currentPage;
+        const d = Number(delta);
+        if (!Number.isFinite(d) || d === 0) return;
+
+        if (d < 0) {
+            if (cur <= 0) return;
+            state.currentPage = cur + d;
+            updateSpeakerCards();
+            renderMiniPreview();
+            renderPlaylist();
+            broadcastState();
+            return;
         }
-        state.currentPage = clamp(state.currentPage + delta, 0, Math.max(0, pages.length - 1));
+
+        if (cur >= maxIdx) {
+            if (state.playlist.running && state.playlist.autoSwitch) {
+                const nextIdx = state.playlist.activeIndex + 1;
+                if (nextIdx < state.playlist.items.length) {
+                    switchToPlaylistSong(nextIdx, true);
+                }
+            }
+            return;
+        }
+
+        state.currentPage = Math.min(cur + d, maxIdx);
         updateSpeakerCards();
         renderMiniPreview();
         renderPlaylist();
         broadcastState();
+    }
+
+    function prevPage() {
+        changePage(-1);
+    }
+
+    function nextPage() {
+        changePage(1);
+    }
+
+    function jumpToPage(pageIndex) {
+        const pages = splitPages(currentSong()?.lyrics || "", state.ui.defaultLines);
+        state.currentPage = clamp(Number(pageIndex) || 0, 0, Math.max(0, pages.length - 1));
+        updateAll();
     }
 
     function handleControlMessage(msg) {
@@ -3582,9 +4402,7 @@
         if (msg.type === "flip") {
             changePage(Number(msg.delta) || 0);
         } else if (msg.type === "goto") {
-            const pages = splitPages(currentSong()?.lyrics || "", state.ui.defaultLines);
-            state.currentPage = clamp(Number(msg.page) || 0, 0, Math.max(0, pages.length - 1));
-            updateAll();
+            jumpToPage(Number(msg.page));
         }
     }
 
@@ -3604,7 +4422,6 @@
             updateUIFromState();
             syncSongToEditor();
             renderSongList();
-            renderTagFilter();
             updateSpeakerCards();
             renderMiniPreview();
             renderPlaylist();
@@ -3621,6 +4438,14 @@
                 channel.onmessage = (e) => {
                     const d = e.data;
                     if (!d || typeof d !== "object") return;
+                    if (d.type === "projection_fs_active" && d.source === "display") {
+                        hideRestoreProjectionBanner();
+                        return;
+                    }
+                    if (d.type === "projection_attention" && d.source === "display") {
+                        showRestoreProjectionBanner();
+                        return;
+                    }
                     if (d.type === "request_state") {
                         respondCurrentState();
                         return;

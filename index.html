@@ -13,41 +13,51 @@
 <div id="app">
     <!-- 左侧诗歌库 -->
     <div id="song-library">
-        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
-            <h3 style="margin:0;">📚 诗歌库</h3>
-            <button id="new-song-btn" class="icon-btn" title="新建诗歌">+</button>
+        <div class="library-panel-heading editor-area-title">📚 诗歌库</div>
+        <div class="library-search-wrap library-search-wrap--top">
+            <span class="library-input-icon" aria-hidden="true">🔍</span>
+            <input type="text" id="search-input" class="library-search-input" placeholder="搜索我的诗歌..." autocomplete="off">
         </div>
-        <div style="position:relative; margin-bottom:10px;">
-            <span style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--text-secondary); font-size:0.9rem; z-index:1;">🔍</span>
-            <input type="text" id="search-input" placeholder="搜索我的诗歌..." style="width:100%; padding:8px 12px 8px 32px; border-radius:12px; border:1px solid var(--border-color); background:rgba(255,255,255,0.08); backdrop-filter:blur(5px); color:var(--text-primary);">
+        <div class="library-mode-row" role="tablist" aria-label="诗歌库视图">
+            <button type="button" id="library-view-all" class="library-mode-btn is-active" role="tab" aria-selected="true">全部</button>
+            <button type="button" id="library-view-category" class="library-mode-btn" role="tab" aria-selected="false">分类</button>
+            <button type="button" id="library-view-batch" class="library-mode-btn" role="tab" aria-selected="false">批量</button>
         </div>
-        <div style="position:relative; margin-bottom:10px;">
-            <span style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--text-secondary); font-size:0.9rem; z-index:1;">🌐</span>
-            <input type="text" id="online-search-input" placeholder="在线搜索诗歌..." style="width:100%; padding:8px 12px 8px 32px; border-radius:12px; border:1px solid var(--border-color); background:rgba(255,255,255,0.08); backdrop-filter:blur(5px); color:var(--text-primary);">
+        <div id="search-result-hint" class="hint-text library-hint"></div>
+        <div class="library-search-wrap">
+            <span class="library-input-icon" aria-hidden="true">🌐</span>
+            <input type="text" id="online-search-input" class="library-search-input" placeholder="在线搜索诗歌..." autocomplete="off">
         </div>
-        <div id="online-results" style="max-height:150px; overflow-y:auto; margin-bottom:10px;"></div>
-        <div id="tag-filter" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px;"></div>
-        <ul id="song-list"></ul>
-        <details id="playlist-panel" style="margin-top:8px;">
-            <summary style="cursor:pointer;padding:8px 10px;background:rgba(255,255,255,0.05);border-radius:10px;color:var(--text-secondary);font-size:0.9rem;list-style:none;user-select:none;">📋 播放列表</summary>
-            <div style="padding-top:8px;">
+        <div id="online-results" class="library-online-results"></div>
+        <div id="library-view-pane" class="library-view-pane">
+            <div id="library-view-inner" class="library-view-inner">
+                <div id="song-list" class="song-list-root library-song-scroll"></div>
+            </div>
+        </div>
+        <div id="song-batch-bar" class="song-batch-bar" style="display:none;">
+            <button type="button" id="batch-delete-btn" class="small-btn song-batch-action-btn">批量删除</button>
+            <button type="button" id="batch-export-btn" class="small-btn song-batch-action-btn">批量导出</button>
+        </div>
+        <details id="playlist-section" class="playlist-section" open>
+            <summary class="playlist-section-summary">📋 播放列表</summary>
+            <div class="playlist-section-body">
                 <ul id="playlist-list"></ul>
-                <div style="display:flex; align-items:center; gap:8px; margin-top:8px;">
-                    <button id="playlist-start-btn" class="small-btn" style="margin-top:0; flex:1;">▶ 开始播放</button>
-                    <label style="font-size:0.78rem; color:var(--text-secondary); display:flex; align-items:center; gap:4px; white-space:nowrap;">
+                <div class="playlist-controls">
+                    <button id="playlist-start-btn" class="small-btn playlist-start-full">▶ 开始播放</button>
+                    <label class="playlist-auto-label">
                         <input type="checkbox" id="playlist-auto-switch">
                         🔄 自动切换
                     </label>
                 </div>
             </div>
         </details>
-        <button id="add-song-btn" class="add-song-btn">➕ 新建诗歌</button>
+        <button type="button" id="add-song-btn" class="add-song-btn library-new-song-main">＋ 新建诗歌</button>
         <div class="file-import-export">
             <button id="export-data-btn" class="small-btn">📤 导出</button>
             <button id="import-data-btn" class="small-btn">📥 导入</button>
             <input type="file" id="import-file-input" accept=".worship,application/json" hidden>
         </div>
-        <button id="batch-import-btn" class="small-btn" style="margin-top:8px;">📋 批量导入歌词</button>
+        <button id="batch-import-btn" class="small-btn batch-import-margin">📋 批量导入歌词</button>
     </div>
 
     <div class="resize-handle" id="resize1"></div>
@@ -195,12 +205,16 @@
             <button id="open-leader-btn" class="btn btn-outline" style="flex:1; height:42px; display:flex; align-items:center; justify-content:center;">📱 主领视图</button>
             <button id="leader-qr-btn" class="btn btn-outline" style="width:42px; height:42px; display:flex; align-items:center; justify-content:center;" title="主领视图二维码">📱</button>
         </div>
+        <p class="open-display-hint">💡 投屏窗口打开后，请手动拖拽到投影仪屏幕，然后按 F 键或点击画面中央的全屏按钮。因浏览器安全策略限制，暂不支持一键自动投屏。</p>
         <p class="hint-text" style="margin-top:6px;">💡 首次使用需在浏览器中允许弹窗和多屏幕权限</p>
         <p class="hint-text">© 2026 敬拜投屏工具。基于 MIT 许可证开源，使用者须保留此版权声明。</p>
         <p class="hint-text">隐私说明：本网站不会收集用户个人信息，所有歌词数据仅保留在您的本地浏览器中。</p>
         <p class="hint-text">📝 用户反馈：<a href="https://docs.google.com/forms/d/e/1FAIpQLSf3XMyOfjcoV1MNWMmZZ0JEapXDnUfa3qWLjELN_YyqvcLQGw/viewform" target="_blank" rel="noopener noreferrer" style="color:var(--accent);text-decoration:underline;">点击提交反馈</a></p>
         <p class="hint-text">B=黑屏 W=白屏 F=全屏</p>
     </div>
+</div>
+<div id="restore-projection-overlay" class="restore-projection-overlay" hidden>
+    <button type="button" id="restore-projection-btn" class="restore-projection-btn">📺 恢复投屏</button>
 </div>
 <div id="toast"></div>
 <!-- 批量导入弹窗 -->
@@ -358,6 +372,12 @@
 </ul>
 <p style="text-align:center; color:var(--text-secondary); margin-top:20px;">© 2026 敬拜投屏工具 · 基于 MIT 许可证开源</p>
 </template>
+
+<div id="song-context-menu" class="song-context-menu" hidden role="menu" aria-label="诗歌操作">
+    <button type="button" class="song-context-menu-item" data-action="edit" role="menuitem">✏️ 编辑</button>
+    <button type="button" class="song-context-menu-item" data-action="copy" role="menuitem">📋 复制</button>
+    <button type="button" class="song-context-menu-item" data-action="delete" role="menuitem">🗑️ 删除</button>
+</div>
 
 </body>
 </html>

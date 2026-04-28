@@ -9,7 +9,19 @@
     };
     const THEME_BG_STORAGE = "worship.theme_bg.v1";
     const THEME_BG_OPACITY_STORAGE = "theme_bg_opacity";
+    /** 自定义主题背景：最多保留 4 张缩略图（localStorage JSON），超出丢弃最旧 */
+    const THEME_BG_SLOTS_STORAGE = "worship.theme_bg_slots.v1";
+    const THEME_BG_ACTIVE_ID_STORAGE = "worship.theme_bg_active.v1";
+    const THEME_BG_SLOTS_MAX = 4;
     const UPLOADED_BACKGROUNDS_STORAGE = "uploaded_backgrounds";
+    /** 「我的背景」本地槽位上限；超出时丢弃最旧（按 timestamp） */
+    const UPLOADED_BACKGROUNDS_MAX = 4;
+
+    function normalizeUploadedBackgroundsArray(arr) {
+        const list = Array.isArray(arr) ? arr.filter((x) => x && x.id && x.imageData) : [];
+        list.sort((a, b) => (Number(b.timestamp) || 0) - (Number(a.timestamp) || 0));
+        return list.slice(0, UPLOADED_BACKGROUNDS_MAX);
+    }
     const LEGACY_LYRIC_BGS_STORAGE = "worship.lyric_bgs.v1";
     /** 背景大图存 IndexedDB；以下为库名与运行时缓存（失败时回退 localStorage） */
     const IDB_NAME = "WorshipAppDB";
@@ -21,6 +33,8 @@
     let _bgUseIdbFallbackLs = false;
     let _idbThemeBgCache = "";
     let _idbUploadedCache = [];
+    let _themeBgSlotsCache = [];
+    let _themeBgActiveId = "";
 
     function promiseReq(req) {
         return new Promise((resolve, reject) => {
@@ -89,7 +103,7 @@
         const tx = db.transaction(IDB_STORE_UPLOADED, "readwrite");
         const store = tx.objectStore(IDB_STORE_UPLOADED);
         store.clear();
-        const arr = Array.isArray(list) ? list.slice(0, 40) : [];
+        const arr = normalizeUploadedBackgroundsArray(list);
         arr.forEach((item) => {
             if (item && item.id && item.imageData) store.put(item);
         });
@@ -121,7 +135,11 @@
             const db = await openWorshipBgDatabase();
             await migrateLocalStorageBackgroundsToIndexedDb(db);
             _idbThemeBgCache = await idbReadThemeBg(db);
-            _idbUploadedCache = await idbReadAllUploaded(db);
+            const rawUploaded = await idbReadAllUploaded(db);
+            _idbUploadedCache = normalizeUploadedBackgroundsArray(rawUploaded);
+            if (rawUploaded.filter((x) => x && x.id && x.imageData).length > UPLOADED_BACKGROUNDS_MAX) {
+                persistUploadedBackgroundsAsync(_idbUploadedCache);
+            }
             _bgUseIdbFallbackLs = false;
         } catch (e) {
             console.warn("IndexedDB unavailable, fallback localStorage for backgrounds", e);
@@ -131,12 +149,17 @@
             } catch (_e) {
                 _idbThemeBgCache = "";
             }
+            let parsedLs = [];
             try {
-                _idbUploadedCache = parseJSON(localStorage.getItem(UPLOADED_BACKGROUNDS_STORAGE), []);
+                parsedLs = parseJSON(localStorage.getItem(UPLOADED_BACKGROUNDS_STORAGE), []);
             } catch (_e2) {
-                _idbUploadedCache = [];
+                parsedLs = [];
             }
-            if (!Array.isArray(_idbUploadedCache)) _idbUploadedCache = [];
+            if (!Array.isArray(parsedLs)) parsedLs = [];
+            _idbUploadedCache = normalizeUploadedBackgroundsArray(parsedLs);
+            if (parsedLs.filter((x) => x && x.id && x.imageData).length > UPLOADED_BACKGROUNDS_MAX) {
+                persistUploadedBackgroundsAsync(_idbUploadedCache);
+            }
         }
     }
 
@@ -159,8 +182,148 @@
             .catch((err) => console.warn("persistThemeBgAsync", err));
     }
 
+    function themeBgSlotId() {
+        return "tbg_" + Date.now() + "_" + Math.random().toString(36).slice(2, 10);
+    }
+
+    function normalizeThemeBgSlots(arr) {
+        const list = Array.isArray(arr) ? arr.filter((x) => x && x.id && x.imageData) : [];
+        list.sort((a, b) => (Number(b.timestamp) || 0) - (Number(a.timestamp) || 0));
+        return list.slice(0, THEME_BG_SLOTS_MAX);
+    }
+
+    function persistThemeBgSlotsMetaOnly() {
+        try {
+            localStorage.setItem(THEME_BG_SLOTS_STORAGE, JSON.stringify(_themeBgSlotsCache));
+            localStorage.setItem(THEME_BG_ACTIVE_ID_STORAGE, _themeBgActiveId || "");
+        } catch (err) {
+            console.warn("persistThemeBgSlotsMetaOnly", err);
+        }
+    }
+
+    function syncActiveThemeBgCacheFromSlots() {
+        const slot = _themeBgSlotsCache.find((s) => s.id === _themeBgActiveId);
+        _idbThemeBgCache = slot ? String(slot.imageData) : "";
+    }
+
+    function persistFullThemeBgFromSlots() {
+        _themeBgSlotsCache = normalizeThemeBgSlots(_themeBgSlotsCache);
+        if (_themeBgActiveId && !_themeBgSlotsCache.some((s) => s.id === _themeBgActiveId)) {
+            _themeBgActiveId = _themeBgSlotsCache[0]?.id || "";
+        }
+        persistThemeBgSlotsMetaOnly();
+        syncActiveThemeBgCacheFromSlots();
+        persistThemeBgAsync(_idbThemeBgCache);
+    }
+
+    /** IndexedDB 已读出 `_idbThemeBgCache` 后再调用：合并本地槽位 JSON，并从旧版「单图」迁移 */
+    function loadThemeBgSlotsFromStorage() {
+        let parsed = [];
+        try {
+            parsed = parseJSON(localStorage.getItem(THEME_BG_SLOTS_STORAGE), []);
+        } catch (_e) {
+            parsed = [];
+        }
+        _themeBgSlotsCache = normalizeThemeBgSlots(parsed);
+        _themeBgActiveId = String(localStorage.getItem(THEME_BG_ACTIVE_ID_STORAGE) || "").trim();
+
+        if (!_themeBgSlotsCache.length && (_idbThemeBgCache || "").trim()) {
+            const id = themeBgSlotId();
+            _themeBgSlotsCache = [{ id, imageData: _idbThemeBgCache, timestamp: Date.now() }];
+            _themeBgActiveId = id;
+            persistThemeBgSlotsMetaOnly();
+            syncActiveThemeBgCacheFromSlots();
+            return;
+        }
+        if (_themeBgActiveId && !_themeBgSlotsCache.some((s) => s.id === _themeBgActiveId)) {
+            _themeBgActiveId = _themeBgSlotsCache[0]?.id || "";
+        }
+        const active =
+            (_themeBgActiveId && _themeBgSlotsCache.find((s) => s.id === _themeBgActiveId)) ||
+            _themeBgSlotsCache[0];
+        if (active) {
+            _themeBgActiveId = active.id;
+            _idbThemeBgCache = String(active.imageData || "");
+        } else {
+            _themeBgActiveId = "";
+            _idbThemeBgCache = "";
+        }
+    }
+
+    function removeThemeBgSlot(slotId) {
+        const id = String(slotId || "").trim();
+        if (!id) return;
+        _themeBgSlotsCache = _themeBgSlotsCache.filter((s) => s && s.id !== id);
+        persistFullThemeBgFromSlots();
+        applyThemeBackground();
+        showToast("已删除主题背景", $("theme-bg-grid"));
+    }
+
+    function renderThemeBgGrid() {
+        const grid = $("theme-bg-grid");
+        if (!grid) return;
+        grid.innerHTML = "";
+        const filled = _themeBgSlotsCache
+            .filter((x) => x && x.imageData)
+            .sort((a, b) => (Number(a.timestamp) || 0) - (Number(b.timestamp) || 0));
+
+        grid.classList.toggle("theme-bg-grid--empty-only", filled.length === 0);
+
+        filled.forEach((item) => {
+            const wrap = document.createElement("div");
+            wrap.className = "theme-bg-slot-wrap";
+
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "theme-bg-slot theme-bg-slot--filled";
+            if (item.id === _themeBgActiveId) btn.classList.add("theme-bg-slot--active");
+            btn.dataset.slotId = item.id;
+            const safe = String(item.imageData).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+            btn.style.backgroundImage = `url("${safe}")`;
+            btn.title = "点击切换为主题背景";
+            btn.addEventListener("click", (e) => {
+                e.preventDefault();
+                if (_themeBgActiveId === item.id) return;
+                _themeBgActiveId = item.id;
+                persistFullThemeBgFromSlots();
+                applyThemeBackground();
+                showToast("已切换主题背景", btn);
+            });
+
+            const del = document.createElement("button");
+            del.type = "button";
+            del.className = "theme-bg-slot-delete";
+            del.setAttribute("aria-label", "删除此背景");
+            del.title = "删除";
+            del.textContent = "✕";
+            del.addEventListener("click", (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                removeThemeBgSlot(item.id);
+            });
+
+            wrap.appendChild(btn);
+            wrap.appendChild(del);
+            grid.appendChild(wrap);
+        });
+
+        if (filled.length < THEME_BG_SLOTS_MAX) {
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "theme-bg-slot theme-bg-slot--empty";
+            btn.title = "上传主题背景";
+            btn.setAttribute("aria-label", "上传主题背景");
+            btn.innerHTML = '<span class="theme-bg-slot-plus" aria-hidden="true">+</span>';
+            btn.addEventListener("click", (e) => {
+                e.preventDefault();
+                $("theme-bg-input")?.click();
+            });
+            grid.appendChild(btn);
+        }
+    }
+
     function persistUploadedBackgroundsAsync(arr) {
-        _idbUploadedCache = Array.isArray(arr) ? arr.slice(0, 40) : [];
+        _idbUploadedCache = normalizeUploadedBackgroundsArray(arr);
         if (_bgUseIdbFallbackLs) {
             try {
                 setStore(UPLOADED_BACKGROUNDS_STORAGE, _idbUploadedCache);
@@ -470,24 +633,7 @@
         }
         body.style.backgroundImage = "";
         syncThemeBgOpacityControls();
-        updateThemeBgPreviewThumb();
-    }
-
-    function updateThemeBgPreviewThumb() {
-        const thumb = $("theme-bg-preview-thumb");
-        const empty = $("theme-bg-preview-empty");
-        if (!thumb) return;
-        const raw = (_idbThemeBgCache || "").trim();
-        if (raw) {
-            const safe = String(raw).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-            thumb.style.backgroundImage = `url("${safe}")`;
-            if (empty) empty.style.display = "none";
-            thumb.classList.add("theme-bg-preview-thumb--has-image");
-        } else {
-            thumb.style.backgroundImage = "";
-            if (empty) empty.style.display = "";
-            thumb.classList.remove("theme-bg-preview-thumb--has-image");
-        }
+        renderThemeBgGrid();
     }
 
     function bgItemId() {
@@ -525,7 +671,7 @@
                 timestamp: Date.now(),
                 shared: false
             };
-            saveUploadedBackgrounds([match, ...items].slice(0, 40));
+            saveUploadedBackgrounds([match, ...items]);
         }
         state.ui.bgImageId = match.id;
         saveSettings();
@@ -542,7 +688,7 @@
                 timestamp: Number(x.addedAt) || Number(x.timestamp) || Date.now(),
                 shared: !!x.shared
             })).filter((x) => x.imageData);
-            if (mapped.length) saveUploadedBackgrounds(mapped.slice(0, 40));
+            if (mapped.length) saveUploadedBackgrounds(mapped);
             return;
         }
     }
@@ -579,7 +725,7 @@
                 tags: [],
                 timestamp: Date.now(),
                 shared: false
-            }, ...arr].slice(0, 40);
+            }, ...arr];
             saveUploadedBackgrounds(arr);
         }
         state.ui.bgType = "image";
@@ -1956,14 +2102,12 @@
             };
             reader.readAsDataURL(file);
         });
-        on("theme-bg-preview-thumb", "click", () => $("theme-bg-input")?.click());
-        on("theme-bg-upload-btn", "click", () => $("theme-bg-input")?.click());
         on("theme-bg-input", "change", (e) => {
             const input = e.target;
             const file = input.files?.[0];
             if (!file) return;
             const reader = new FileReader();
-            const toastAnchor = $("theme-bg-upload-btn");
+            const toastAnchor = $("theme-bg-grid") || $("theme-bg-input");
             reader.onload = () => {
                 const dataUrl = String(reader.result || "").trim();
                 if (!dataUrl) {
@@ -1972,9 +2116,31 @@
                     return;
                 }
                 try {
-                    persistThemeBgAsync(dataUrl);
-                    applyThemeBackground();
-                    showToast("主题背景已设置", toastAnchor);
+                    const dup = _themeBgSlotsCache.find((x) => x && x.imageData === dataUrl);
+                    if (dup) {
+                        _themeBgActiveId = dup.id;
+                        persistFullThemeBgFromSlots();
+                        applyThemeBackground();
+                        showToast("已切换到该主题背景", toastAnchor);
+                    } else {
+                        if (
+                            _themeBgSlotsCache.filter((x) => x && x.imageData).length >=
+                            THEME_BG_SLOTS_MAX
+                        ) {
+                            showToast("已满 4 张，请先删除一张", toastAnchor);
+                            input.value = "";
+                            return;
+                        }
+                        const nid = themeBgSlotId();
+                        _themeBgSlotsCache = normalizeThemeBgSlots([
+                            { id: nid, imageData: dataUrl, timestamp: Date.now() },
+                            ..._themeBgSlotsCache
+                        ]);
+                        _themeBgActiveId = nid;
+                        persistFullThemeBgFromSlots();
+                        applyThemeBackground();
+                        showToast("主题背景已更新", toastAnchor);
+                    }
                 } catch (err) {
                     console.warn(err);
                     showToast("主题背景存储失败（空间不足）", toastAnchor);
@@ -2934,7 +3100,7 @@
                         return `<div class="leader-line">${escapeHtml(line)}${!noteEditMode && loadNote(gi) ? `<span class="leader-note-dot" data-line="${gi}"></span>` : ""}${noteEditMode ? `<span class="leader-plus-dot" data-line="${gi}" title="添加备注">⊕</span>` : ""}</div>`;
                     }).join("") || "<div class='leader-line'>...</div>"}</div></div>`;
                 }
-                const nextHtml = `<div class="leader-next">下句：${escapeHtml(nextLine)}</div>`;
+                const nextHtml = displayMode === "scroll" ? "" : `<div class="leader-next">下句：${escapeHtml(nextLine)}</div>`;
                 host.classList.toggle("leader-scroll-mode", displayMode === "scroll");
                 const mainClass = displayMode === "scroll" ? "leader-main leader-main-scroll" : "leader-main";
                 lyricLayer.innerHTML = `<div class="leader-page">${idx + 1}/${Math.max(1, pages.length)}</div><div class="${mainClass}">${content}</div>${nextHtml}`;
@@ -3277,7 +3443,8 @@
                     return `<div class="leader-line">${escapeHtml(line)}${note ? `<span class="leader-note-dot" data-line="${gi}"></span>` : ""}${noteEditMode ? `<span class="leader-plus-dot" data-line="${gi}">+</span>` : ""}</div>`;
                 }).join("") || "<div class='leader-line'>...</div>"}</div>`;
             }
-            layer.innerHTML = `<div class="leader-page">${idx + 1}/${Math.max(1, pages.length)}</div><div class="leader-main">${bodyHtml}</div><div class="leader-next">下句：${escapeHtml(nextLine)}</div>`;
+            const nextHtml = displayMode === "scroll" ? "" : `<div class="leader-next">下句：${escapeHtml(nextLine)}</div>`;
+            layer.innerHTML = `<div class="leader-page">${idx + 1}/${Math.max(1, pages.length)}</div><div class="leader-main">${bodyHtml}</div>${nextHtml}`;
             toolbar.querySelectorAll("[data-mode]").forEach((btn) => btn.classList.toggle("active", btn.getAttribute("data-mode") === displayMode));
             toolbar.querySelector('[data-action="note"]')?.classList.toggle("active", noteEditMode);
         }
@@ -3395,6 +3562,7 @@
     function initMain() {
         const boot = () => {
             loadState();
+            loadThemeBgSlotsFromStorage();
             normalizeLegacyBgImageReference();
             applyThemeBackground();
             const left = $("song-library");

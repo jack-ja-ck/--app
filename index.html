@@ -179,12 +179,8 @@
                 <option value="warm">暖色</option>
                 <option value="high-contrast">高对比</option>
             </select>
-            <div class="theme-bg-upload-row">
-                <button type="button" id="theme-bg-preview-thumb" class="theme-bg-preview-thumb" title="点击上传主题背景" aria-label="主题背景预览，点击上传">
-                    <span id="theme-bg-preview-empty" class="theme-bg-preview-empty">暂无背景<br><span class="theme-bg-preview-hint">点击上传</span></span>
-                </button>
-                <button type="button" id="theme-bg-upload-btn" class="btn-outline theme-bg-upload-btn-main">🖼️ 自定义主题背景</button>
-            </div>
+            <label class="theme-bg-subheading">自定义主题背景</label>
+            <div id="theme-bg-grid" class="theme-bg-grid" role="group" aria-label="自定义主题背景"></div>
             <input type="file" id="theme-bg-input" accept="image/png,image/jpeg,image/jpg,image/gif,image/bmp,image/webp,image/*" hidden>
             <div id="theme-bg-opacity-row" class="theme-bg-opacity-row is-disabled">
                 <label for="theme-bg-opacity-slider">背景透明度</label>
@@ -309,7 +305,7 @@
 <h4>1. 界面主题</h4>
 <ul>
 <li><b>预设主题</b>：深色（默认）、浅色、暖色、高对比度</li>
-<li><b>自定义主题背景</b>：点击「自定义主题背景」上传喜欢的图片，设为网站整体背景</li>
+<li><b>自定义主题背景</b>：点击虚线格内的「+」上传图片（最多 4 张），点击缩略图切换当前背景；悬停缩略图右上角可删除</li>
 <li><b>透明度调节</b>：拖动「背景透明度」滑块，让背景图更清晰或更柔和</li>
 <li><b>背景适配</b>：上传的图片会自动填满全屏并居中，无论尺寸大小</li>
 </ul>

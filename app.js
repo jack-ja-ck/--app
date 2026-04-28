@@ -1086,6 +1086,20 @@
         song.tags = ($("song-tags")?.value || "").trim();
     }
 
+    /** 投屏预览卡片固定高度 200px，上下各 10px 内边距 → 可用内容高度 180px；字号按行数独立计算，不受全局字体滑块影响 */
+    const SPEAKER_CARD_INNER_HEIGHT_PX = 180;
+
+    function speakerPreviewCardFontPx(lineCount) {
+        const n = Math.max(1, Math.floor(Number(lineCount)) || 1);
+        const inner =
+            typeof window !== "undefined" &&
+            window.matchMedia &&
+            window.matchMedia("(max-width: 768px)").matches
+                ? 130
+                : SPEAKER_CARD_INNER_HEIGHT_PX;
+        return Math.min(20, Math.max(10, (inner - n * 8) / n));
+    }
+
     function applyCardBackground(card) {
         clearCssDynamicBgClass(card);
         card.style.background = "#000";
@@ -1116,8 +1130,6 @@
         state.currentPage = clamp(state.currentPage, 0, pages.length - 1);
         container.innerHTML = "";
 
-        const scale = state.sizePreset === "S" ? 0.8 : state.sizePreset === "L" ? 1.2 : 1;
-        const size = Math.round(state.ui.fontSize * 0.34 * scale);
         let dragLineIndex = -1;
 
         const commitPageLineReorder = (fromIndex, toIndex) => {
@@ -1139,15 +1151,14 @@
             card.className = "card" + (idx === state.currentPage ? " active" : "");
             applyCardBackground(card);
             card.style.boxSizing = "border-box";
-            card.style.paddingLeft = "20px";
-            card.style.paddingRight = "20px";
-            card.style.paddingBottom = "20px";
-            card.style.paddingTop = `${lyricBlockTopPadPx(200, state.ui.posY)}px`;
+            card.style.padding = "10px 20px";
+            const cardFontPx = speakerPreviewCardFontPx(lines.length);
             lines.forEach((line, lineIndex) => {
                 const row = document.createElement("div");
                 row.className = "card-line";
                 row.draggable = true;
-                row.style.fontSize = size + "px";
+                row.style.fontSize = `${cardFontPx}px`;
+                row.style.lineHeight = "1.5";
                 row.style.color = state.ui.bgType === "solid-white" ? "#111" : state.ui.fontColor;
                 row.textContent = line;
                 row.addEventListener("dragstart", (e) => {

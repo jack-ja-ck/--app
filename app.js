@@ -38,8 +38,6 @@
     let _idbUploadedCache = [];
     let _themeBgSlotsCache = [];
     let _themeBgActiveId = "";
-    /** 「我的背景」缩略图：二次确认删除时处于待确认状态的条目 id */
-    let _lyricBgDeletePendingId = "";
 
     function promiseReq(req) {
         return new Promise((resolve, reject) => {
@@ -277,52 +275,113 @@
         showToast("已删除主题背景", $("theme-bg-grid"));
     }
 
-    function bindLyricBgDeleteOutsideDismiss() {
-        if (bindLyricBgDeleteOutsideDismiss._done) return;
-        bindLyricBgDeleteOutsideDismiss._done = true;
-        document.addEventListener(
-            "mousedown",
-            (e) => {
-                if (!_lyricBgDeletePendingId) return;
-                const root = $("my-backgrounds-container");
-                if (!root) {
-                    _lyricBgDeletePendingId = "";
-                    return;
-                }
-                let pendingWrap = null;
-                root.querySelectorAll(".lyric-bg-thumb-wrap").forEach((el) => {
-                    if (el.dataset.wrapItemId === String(_lyricBgDeletePendingId)) pendingWrap = el;
-                });
-                if (pendingWrap && pendingWrap.contains(e.target)) return;
-                _lyricBgDeletePendingId = "";
-                renderUploadedBackgrounds();
-            },
-            false
-        );
-    }
-
-    function deleteUploadedBackgroundItem(itemId) {
+    function deleteUploadedBackgroundItem(itemId, opts) {
+        const o = opts && typeof opts === "object" ? opts : {};
+        const skipRender = !!o.skipRender;
+        const skipToast = !!o.skipToast;
         const id = String(itemId || "").trim();
         if (!id) return;
-        const arr = getUploadedBackgrounds().filter((x) => x && x.id !== id);
-        const wasActive = state.ui.bgType === "image" && state.ui.bgImageId === id;
+        const itemsBefore = getUploadedBackgrounds();
+        const removed = itemsBefore.find((x) => x && x.id === id);
+        const arr = itemsBefore.filter((x) => x && x.id !== id);
+        const wasActive =
+            state.ui.bgType === "image" &&
+            removed &&
+            (state.ui.bgImageId === id || state.ui.bgImage === removed.imageData);
         saveUploadedBackgrounds(arr);
-        _lyricBgDeletePendingId = "";
         if (wasActive) {
-            if (arr.length && arr[0].imageData) {
-                state.ui.bgImageId = arr[0].id;
-                state.ui.bgImage = arr[0].imageData;
-            } else {
-                state.ui.bgType = "solid-black";
-                state.ui.bgImage = "";
-                state.ui.bgImageId = "";
-            }
+            setBackground("solid-black");
             saveSettings();
-            updateUIFromState();
-            updateAll();
         }
-        renderUploadedBackgrounds();
-        showToast("已删除背景", $("my-backgrounds-container"));
+        if (!skipRender) renderUploadedBackgrounds();
+        if (!skipToast) showToast("已删除背景", $("my-backgrounds-container"));
+    }
+
+    let _lyricBgDeletePopoverEl = null;
+    let _lyricBgDeleteOutsideHandler = null;
+
+    function removeLyricBgDeletePopover() {
+        if (_lyricBgDeleteOutsideHandler) {
+            document.removeEventListener("mousedown", _lyricBgDeleteOutsideHandler, false);
+            _lyricBgDeleteOutsideHandler = null;
+        }
+        if (_lyricBgDeletePopoverEl) {
+            _lyricBgDeletePopoverEl.remove();
+            _lyricBgDeletePopoverEl = null;
+        }
+    }
+
+    function openLyricBgDeletePopover(wrap, itemId) {
+        removeLyricBgDeletePopover();
+        const panel = document.createElement("div");
+        panel.className = "lyric-bg-delete-popover";
+        panel.setAttribute("role", "dialog");
+        const p = document.createElement("p");
+        p.className = "lyric-bg-delete-popover-text";
+        p.textContent = "确认删除此背景图？";
+        const actions = document.createElement("div");
+        actions.className = "lyric-bg-delete-popover-actions";
+        const btnDel = document.createElement("button");
+        btnDel.type = "button";
+        btnDel.className = "lyric-bg-delete-popover-confirm";
+        btnDel.textContent = "删除";
+        const btnCancel = document.createElement("button");
+        btnCancel.type = "button";
+        btnCancel.className = "lyric-bg-delete-popover-cancel";
+        btnCancel.textContent = "取消";
+        actions.appendChild(btnDel);
+        actions.appendChild(btnCancel);
+        panel.appendChild(p);
+        panel.appendChild(actions);
+        wrap.appendChild(panel);
+        _lyricBgDeletePopoverEl = panel;
+
+        const cancel = () => removeLyricBgDeletePopover();
+        btnCancel.addEventListener("click", (ev) => {
+            ev.preventDefault();
+            ev.stopPropagation();
+            cancel();
+        });
+        btnDel.addEventListener("click", (ev) => {
+            ev.preventDefault();
+            ev.stopPropagation();
+            removeLyricBgDeletePopover();
+            beginLyricBgDeleteSequence(wrap, itemId);
+        });
+
+        _lyricBgDeleteOutsideHandler = (e) => {
+            if (!panel.parentElement) return;
+            if (panel.contains(e.target)) return;
+            cancel();
+        };
+        document.addEventListener("mousedown", _lyricBgDeleteOutsideHandler, false);
+    }
+
+    function beginLyricBgDeleteSequence(wrap, itemId) {
+        deleteUploadedBackgroundItem(itemId, { skipRender: true, skipToast: true });
+        wrap.classList.add("lyric-bg-thumb-wrap--deleting");
+        wrap.querySelectorAll(".lyric-bg-thumb-delete, .bg-share-icon").forEach((el) => el.remove());
+
+        const bubble = document.createElement("div");
+        bubble.className = "lyric-bg-delete-success-bubble";
+        bubble.textContent = "✅ 已删除";
+        wrap.appendChild(bubble);
+
+        window.setTimeout(() => {
+            bubble.remove();
+            wrap.classList.remove("lyric-bg-thumb-wrap--deleting");
+            wrap.classList.add("lyric-bg-thumb-wrap--dissolving");
+            wrap.addEventListener(
+                "animationend",
+                (ev) => {
+                    if (ev.target !== wrap) return;
+                    if (!String(ev.animationName || "").includes("dissolve-particles")) return;
+                    wrap.remove();
+                    renderUploadedBackgrounds();
+                },
+                { once: true }
+            );
+        }, 1500);
     }
 
     function renderThemeBgGrid() {
@@ -887,7 +946,6 @@
     }
 
     function renderUploadedBackgrounds() {
-        bindLyricBgDeleteOutsideDismiss();
         const root = $("my-backgrounds-container");
         if (!root) return;
         const items = getUploadedBackgrounds();
@@ -912,9 +970,6 @@
             const wrap = document.createElement("div");
             wrap.className = "lyric-bg-thumb-wrap";
             wrap.dataset.wrapItemId = item.id;
-            if (String(_lyricBgDeletePendingId) === String(item.id)) {
-                wrap.classList.add("lyric-bg-thumb-wrap--delete-pending");
-            }
 
             const thumb = document.createElement("button");
             thumb.type = "button";
@@ -928,10 +983,6 @@
             thumb.addEventListener("click", (e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                if (String(_lyricBgDeletePendingId) === String(item.id)) {
-                    deleteUploadedBackgroundItem(item.id);
-                    return;
-                }
                 state.ui.bgType = "image";
                 state.ui.bgImageId = item.id;
                 state.ui.bgImage = item.imageData;
@@ -946,22 +997,13 @@
             const delBtn = document.createElement("button");
             delBtn.type = "button";
             delBtn.className = "lyric-bg-thumb-delete";
-            delBtn.setAttribute("aria-label", String(_lyricBgDeletePendingId) === String(item.id) ? "确认删除" : "删除此背景");
-            if (String(_lyricBgDeletePendingId) === String(item.id)) {
-                delBtn.classList.add("lyric-bg-thumb-delete--confirm");
-                delBtn.textContent = "确认删除？";
-            } else {
-                delBtn.textContent = "✕";
-            }
+            delBtn.setAttribute("aria-label", "删除此背景");
+            delBtn.textContent = "✕";
             delBtn.addEventListener("mousedown", (e) => e.stopPropagation());
             delBtn.addEventListener("click", (e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                if (String(_lyricBgDeletePendingId) === String(item.id)) {
-                    return;
-                }
-                _lyricBgDeletePendingId = item.id;
-                renderUploadedBackgrounds();
+                openLyricBgDeletePopover(wrap, item.id);
             });
 
             wrap.appendChild(thumb);
@@ -1097,9 +1139,6 @@
         });
         if (tabName === "shared") loadSharedBackgrounds();
         if (tabName === "mine") renderUploadedBackgrounds();
-        if (tabName !== "mine" && _lyricBgDeletePendingId) {
-            _lyricBgDeletePendingId = "";
-        }
     }
 
     function initBgTabs() {

@@ -1240,6 +1240,7 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
     grid-template-columns:repeat(4, 70px);
     gap:8px;
     justify-content:start;
+    overflow: visible;
 }
 .lyric-bg-thumb-wrap { position:relative; aspect-ratio:1; min-height:0; }
 .lyric-bg-thumb {
@@ -1268,6 +1269,7 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
     aspect-ratio:auto;
     width:70px;
     height:45px;
+    overflow: visible;
 }
 #my-backgrounds-container .lyric-bg-thumb-delete {
     position:absolute;
@@ -1294,28 +1296,123 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
     pointer-events:none;
     transition:opacity 0.2s ease, background 0.15s ease, color 0.15s ease;
 }
-#my-backgrounds-container .lyric-bg-thumb-wrap:hover .lyric-bg-thumb-delete,
-#my-backgrounds-container .lyric-bg-thumb-wrap.lyric-bg-thumb-wrap--delete-pending .lyric-bg-thumb-delete {
+#my-backgrounds-container .lyric-bg-thumb-wrap:hover .lyric-bg-thumb-delete {
     opacity:1;
     pointer-events:auto;
 }
-#my-backgrounds-container .lyric-bg-thumb-wrap.lyric-bg-thumb-wrap--delete-pending .lyric-bg-thumb {
-    border-color:#e53935 !important;
-    box-shadow:0 0 0 2px rgba(229,57,53,0.5);
+
+/* 「我的背景」删除确认浮层 */
+.lyric-bg-delete-popover {
+    position:absolute;
+    left:50%;
+    bottom:calc(100% + 6px);
+    transform:translateX(-50%);
+    z-index:20;
+    min-width:min(168px, 44vw);
+    padding:12px;
+    box-sizing:border-box;
+    border-radius:10px;
+    background:rgba(20,20,30,0.9);
+    border:1px solid rgba(255,255,255,0.1);
+    box-shadow:0 8px 24px rgba(0,0,0,0.45);
 }
-#my-backgrounds-container .lyric-bg-thumb-delete.lyric-bg-thumb-delete--confirm {
-    width:auto;
-    height:auto;
-    min-width:0;
-    min-height:0;
-    padding:2px 4px;
-    font-size:0.62rem;
+.lyric-bg-delete-popover-text {
+    margin:0 0 10px;
+    font-size:0.85rem;
+    color:#fff;
+    line-height:1.4;
+    text-align:center;
+}
+.lyric-bg-delete-popover-actions {
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:12px;
+    flex-wrap:wrap;
+}
+.lyric-bg-delete-popover-confirm,
+.lyric-bg-delete-popover-cancel {
+    padding:0;
+    border:none;
+    background:transparent;
+    font-size:0.82rem;
     font-weight:600;
-    line-height:1.2;
-    color:#ff5252;
-    background:rgba(0,0,0,0.55);
+    cursor:pointer;
+    transition:opacity 0.15s ease;
+}
+.lyric-bg-delete-popover-confirm {
+    color:#ff8a80;
+}
+.lyric-bg-delete-popover-cancel {
+    color:rgba(255,255,255,0.72);
+}
+.lyric-bg-delete-popover-confirm:hover { opacity:0.88; }
+.lyric-bg-delete-popover-cancel:hover { opacity:1; }
+
+/* 删除成功气泡 + 消散 */
+#my-backgrounds-container .lyric-bg-thumb-wrap--deleting {
+    pointer-events:none;
+}
+.lyric-bg-delete-success-bubble {
+    position:absolute;
+    left:50%;
+    top:50%;
+    transform:translate(-50%, -50%);
+    z-index:6;
+    padding:6px 12px;
+    border-radius:8px;
+    font-size:0.72rem;
+    color:#fff;
+    background:rgba(20,20,30,0.88);
+    border:1px solid rgba(255,255,255,0.1);
     white-space:nowrap;
     pointer-events:none;
+    animation:lyric-bg-success-bubble-fade 1.5s ease forwards;
+}
+@keyframes lyric-bg-success-bubble-fade {
+    0%, 72% { opacity:1; }
+    100% { opacity:0; }
+}
+
+@keyframes dissolve-particles {
+    0% {
+        opacity:1;
+        transform:scale(1);
+        box-shadow:
+            0 0 0 1px rgba(255,255,255,0.38),
+            6px -2px 0 0 rgba(255,248,240,0.48),
+            -5px 4px 0 0 rgba(255,255,255,0.42),
+            4px 6px 0 0 rgba(240,240,255,0.4),
+            -6px -3px 0 0 rgba(255,255,255,0.36),
+            2px -7px 0 0 rgba(255,250,245,0.44),
+            8px 3px 0 0 rgba(255,255,255,0.32),
+            -3px -6px 0 0 rgba(250,248,255,0.38),
+            7px 7px 0 0 rgba(255,255,255,0.3),
+            -8px 1px 0 0 rgba(255,245,240,0.34),
+            0 8px 0 0 rgba(255,255,255,0.32),
+            -1px -9px 0 0 rgba(248,250,255,0.36);
+    }
+    100% {
+        opacity:0;
+        transform:scale(0.3);
+        box-shadow:
+            0 0 0 0 rgba(255,255,255,0),
+            22px -8px 1px 0 rgba(255,248,240,0),
+            -20px 16px 1px 0 rgba(255,255,255,0),
+            18px 26px 1px 0 rgba(240,240,255,0),
+            -24px -14px 1px 0 rgba(255,255,255,0),
+            12px -28px 1px 0 rgba(255,250,245,0),
+            28px 14px 1px 0 rgba(255,255,255,0),
+            -16px -26px 1px 0 rgba(250,248,255,0),
+            26px 24px 1px 0 rgba(255,255,255,0),
+            -28px 10px 1px 0 rgba(255,245,240,0),
+            4px 30px 1px 0 rgba(255,255,255,0),
+            -8px -32px 1px 0 rgba(248,250,255,0);
+    }
+}
+#my-backgrounds-container .lyric-bg-thumb-wrap--dissolving {
+    pointer-events:none;
+    animation:dissolve-particles 0.72s ease-out forwards;
 }
 #my-backgrounds-container .lyric-bg-slot-empty {
     width:70px;

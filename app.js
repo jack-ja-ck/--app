@@ -20,8 +20,17 @@
     /** 「我的背景」本地槽位上限；超出时丢弃最旧（按 timestamp） */
     const UPLOADED_BACKGROUNDS_MAX = 4;
 
+    function inferMediaTypeFromDataUrl(dataUrl) {
+        return /^data:video\//i.test(String(dataUrl || "")) ? "video" : "image";
+    }
+
     function normalizeUploadedBackgroundsArray(arr) {
         const list = Array.isArray(arr) ? arr.filter((x) => x && x.id && x.imageData) : [];
+        list.forEach((x) => {
+            if (x.mediaType !== "video" && x.mediaType !== "image") {
+                x.mediaType = inferMediaTypeFromDataUrl(x.imageData);
+            }
+        });
         list.sort((a, b) => (Number(b.timestamp) || 0) - (Number(a.timestamp) || 0));
         return list.slice(0, UPLOADED_BACKGROUNDS_MAX);
     }
@@ -504,6 +513,10 @@
         ? new BroadcastChannel(CHANNEL_NAME)
         : null;
 
+    const WELCOME_DISMISS_SESSION_KEY = "worship.welcome_dismissed_day";
+    const PROJECTION_TIP_DISMISS_SESSION_KEY = "worship.projection_tip_dismissed";
+    let welcomeToastTimer = 0;
+
     /** 主窗口缓存的投屏窗口引用（?display=1），关闭或失效后置空 */
     let projectionDisplayWindowRef = null;
     /** 为 true 时表示翻页来自投屏窗口 BroadcastChannel，不向投屏窗口回发「控制台已翻页」提示 */
@@ -522,6 +535,7 @@
             bgType: "solid-black",
             bgImage: "",
             bgImageId: "",
+            bgMediaType: "image",
             lyricsBgShareToCloud: false,
             fontColor: "#ffffff"
         },
@@ -544,6 +558,16 @@
             viewMode: "all"
         }
     };
+
+    function isMainVideoBackground() {
+        return (
+            !isDisplay &&
+            !isLeader &&
+            state.ui.bgType === "image" &&
+            state.ui.bgMediaType === "video" &&
+            !!String(state.ui.bgImage || "").trim()
+        );
+    }
 
     /** 批量视图：勾选 id，与 state 分开避免污染 store */
     let libraryBatchSelected = new Set();
@@ -815,6 +839,173 @@
         return "bg_" + Date.now() + "_" + Math.random().toString(36).slice(2, 10);
     }
 
+    function isUploadedItemVideo(item) {
+        if (!item || !item.imageData) return false;
+        return item.mediaType === "video" || inferMediaTypeFromDataUrl(item.imageData) === "video";
+    }
+
+    /**
+     * 从视频 Data URL 截取一帧作为封面（JPEG Base64，质量 0.7）。
+     * hidden video + canvas，loadeddata → currentTime≈1s → seeked 后 drawImage，最后移除 video；canvas 仅丢弃引用。
+     */
+    function extractVideoCoverFromDataUrl(dataUrl) {
+        const src = String(dataUrl || "").trim();
+        if (!src || !/^data:video\//i.test(src)) return Promise.resolve("");
+
+        return new Promise((resolve) => {
+            let settled = false;
+            const video = document.createElement("video");
+            video.muted = true;
+            video.defaultMuted = true;
+            video.setAttribute("playsinline", "");
+            video.playsInline = true;
+            video.preload = "auto";
+            video.style.cssText =
+                "position:fixed;left:-9999px;top:0;width:320px;height:180px;opacity:0;pointer-events:none;";
+
+            const canvas = document.createElement("canvas");
+            let tid = 0;
+
+            const finish = (out) => {
+                if (settled) return;
+                settled = true;
+                if (tid) clearTimeout(tid);
+                try {
+                    video.pause();
+                    video.removeAttribute("src");
+                    video.load();
+                } catch (_e) {
+                    /* ignore */
+                }
+                try {
+                    video.remove();
+                } catch (_e2) {
+                    /* ignore */
+                }
+                canvas.width = 0;
+                canvas.height = 0;
+                resolve(String(out || "").trim());
+            };
+
+            const drawFrame = () => {
+                if (settled) return;
+                try {
+                    const w = video.videoWidth || 0;
+                    const h = video.videoHeight || 0;
+                    if (!w || !h) {
+                        finish("");
+                        return;
+                    }
+                    const maxSide = 400;
+                    let tw = w;
+                    let th = h;
+                    if (w > maxSide || h > maxSide) {
+                        if (w >= h) {
+                            tw = maxSide;
+                            th = Math.max(1, Math.round((h * maxSide) / w));
+                        } else {
+                            th = maxSide;
+                            tw = Math.max(1, Math.round((w * maxSide) / h));
+                        }
+                    }
+                    canvas.width = tw;
+                    canvas.height = th;
+                    const ctx = canvas.getContext("2d");
+                    if (!ctx) {
+                        finish("");
+                        return;
+                    }
+                    ctx.drawImage(video, 0, 0, tw, th);
+                    finish(canvas.toDataURL("image/jpeg", 0.7));
+                } catch (_err) {
+                    finish("");
+                }
+            };
+
+            video.addEventListener("error", () => finish(""), false);
+
+            video.addEventListener(
+                "loadeddata",
+                () => {
+                    const dur = Number(video.duration);
+                    let target = 1;
+                    if (!Number.isFinite(dur) || dur <= 0) target = 0;
+                    else if (dur <= 1) target = Math.max(0, dur * 0.25);
+                    else target = 1;
+
+                    const onSeeked = () => drawFrame();
+                    video.addEventListener("seeked", onSeeked, { once: true });
+                    try {
+                        video.currentTime = target;
+                    } catch (_e) {
+                        finish("");
+                    }
+                },
+                { once: true }
+            );
+
+            tid = window.setTimeout(() => {
+                if (settled) return;
+                if (video.readyState >= 2 && (video.videoWidth || 0) > 0) drawFrame();
+                else finish("");
+            }, 14000);
+
+            document.body.appendChild(video);
+            video.src = src;
+        });
+    }
+
+    const _videoThumbExtractingIds = new Set();
+    const _coverExtractPromises = new Map();
+
+    function extractAndPersistUploadedVideoCover(itemId) {
+        const id = String(itemId || "").trim();
+        if (!id) return Promise.resolve();
+        const existingP = _coverExtractPromises.get(id);
+        if (existingP) return existingP;
+
+        const snapshot = getUploadedBackgrounds().find((x) => x && x.id === id);
+        if (!snapshot || !isUploadedItemVideo(snapshot)) return Promise.resolve();
+        if (String(snapshot.coverImage || "").trim()) return Promise.resolve();
+
+        const p = (async () => {
+            _videoThumbExtractingIds.add(id);
+            renderUploadedBackgrounds();
+            try {
+                const cover = await extractVideoCoverFromDataUrl(snapshot.imageData);
+                if (!cover) return;
+                const next = getUploadedBackgrounds().map((x) =>
+                    x && x.id === id ? { ...x, coverImage: cover } : x
+                );
+                saveUploadedBackgrounds(next);
+            } finally {
+                _videoThumbExtractingIds.delete(id);
+                renderUploadedBackgrounds();
+            }
+        })().finally(() => {
+            _coverExtractPromises.delete(id);
+        });
+
+        _coverExtractPromises.set(id, p);
+        return p;
+    }
+
+    let _ensureUploadedVideoCoversChain = Promise.resolve();
+
+    function requestEnsureUploadedVideoCoversOnMineTab() {
+        if (isDisplay || isLeader) return;
+        _ensureUploadedVideoCoversChain = _ensureUploadedVideoCoversChain
+            .then(async () => {
+                const ids = getUploadedBackgrounds()
+                    .filter((x) => x && isUploadedItemVideo(x) && !String(x.coverImage || "").trim())
+                    .map((x) => x.id);
+                for (const vid of ids) {
+                    await extractAndPersistUploadedVideoCover(vid);
+                }
+            })
+            .catch(() => {});
+    }
+
     function getUploadedBackgrounds() {
         return Array.isArray(_idbUploadedCache) ? _idbUploadedCache : [];
     }
@@ -830,6 +1021,7 @@
             const it = items.find((x) => x && x.id === state.ui.bgImageId);
             if (it && it.imageData) {
                 state.ui.bgImage = it.imageData;
+                state.ui.bgMediaType = it.mediaType === "video" ? "video" : inferMediaTypeFromDataUrl(it.imageData);
                 saveSettings();
                 return;
             }
@@ -842,6 +1034,7 @@
             match = {
                 id: bgItemId(),
                 imageData: bg,
+                mediaType: inferMediaTypeFromDataUrl(bg),
                 tags: [],
                 timestamp: Date.now(),
                 shared: false
@@ -849,6 +1042,7 @@
             saveUploadedBackgrounds([match, ...items]);
         }
         state.ui.bgImageId = match.id;
+        state.ui.bgMediaType = match.mediaType === "video" ? "video" : inferMediaTypeFromDataUrl(match.imageData);
         saveSettings();
     }
 
@@ -859,6 +1053,7 @@
             const mapped = old.items.map((x) => ({
                 id: bgItemId(),
                 imageData: String(x.dataUrl || x.imageData || "").trim(),
+                mediaType: "image",
                 tags: Array.isArray(x.tags) ? x.tags : [],
                 timestamp: Number(x.addedAt) || Number(x.timestamp) || Date.now(),
                 shared: !!x.shared
@@ -875,6 +1070,7 @@
             saveUploadedBackgrounds([{
                 id: nid,
                 imageData: state.ui.bgImage,
+                mediaType: inferMediaTypeFromDataUrl(state.ui.bgImage),
                 tags: [],
                 timestamp: Date.now(),
                 shared: false
@@ -884,9 +1080,10 @@
         }
     }
 
-    function addUploadedBackgroundAndApply(imageData) {
+    function addUploadedBackgroundAndApply(imageData, mediaTypeHint) {
         const data = String(imageData || "").trim();
         if (!data) return;
+        const hinted = mediaTypeHint === "video" || mediaTypeHint === "image" ? mediaTypeHint : null;
         let arr = getUploadedBackgrounds().slice();
         let chosenId = "";
         const existing = arr.find((x) => x && x.imageData === data);
@@ -894,9 +1091,11 @@
             chosenId = existing.id;
         } else {
             chosenId = bgItemId();
+            const mt = hinted || inferMediaTypeFromDataUrl(data);
             arr = [{
                 id: chosenId,
                 imageData: data,
+                mediaType: mt,
                 tags: [],
                 timestamp: Date.now(),
                 shared: false
@@ -906,8 +1105,15 @@
         state.ui.bgType = "image";
         state.ui.bgImage = data;
         state.ui.bgImageId = chosenId;
+        state.ui.bgMediaType = existing
+            ? (existing.mediaType === "video" ? "video" : inferMediaTypeFromDataUrl(existing.imageData))
+            : (hinted || inferMediaTypeFromDataUrl(data));
         state.ui.lyricsBgShareToCloud = false;
         renderUploadedBackgrounds();
+        const row = getUploadedBackgrounds().find((x) => x && x.id === chosenId);
+        if (row && isUploadedItemVideo(row) && !String(row.coverImage || "").trim()) {
+            void extractAndPersistUploadedVideoCover(chosenId);
+        }
     }
 
     function confirmShareMyBackgroundModal() {
@@ -971,12 +1177,39 @@
             wrap.className = "lyric-bg-thumb-wrap";
             wrap.dataset.wrapItemId = item.id;
 
+            const isVid = item.mediaType === "video" || inferMediaTypeFromDataUrl(item.imageData) === "video";
             const thumb = document.createElement("button");
             thumb.type = "button";
-            thumb.className = "lyric-bg-thumb";
+            thumb.className = "lyric-bg-thumb" + (isVid ? " lyric-bg-thumb--video" : "");
             thumb.dataset.itemId = item.id;
-            thumb.style.backgroundImage = `url("${String(item.imageData).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}")`;
-            thumb.title = "设为当前歌词背景";
+            if (isVid) {
+                const cover = String(item.coverImage || "").trim();
+                const extracting = _videoThumbExtractingIds.has(item.id);
+                if (cover) {
+                    thumb.style.backgroundImage = `url("${cover.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}")`;
+                    thumb.style.background = "";
+                } else {
+                    thumb.style.backgroundImage = "none";
+                    thumb.style.background = "linear-gradient(145deg,#1e1e28,#12121a)";
+                }
+                if (extracting) {
+                    const spin = document.createElement("span");
+                    spin.className = "lyric-bg-thumb-cover-spinner";
+                    spin.setAttribute("aria-hidden", "true");
+                    thumb.appendChild(spin);
+                }
+                const badge = document.createElement("span");
+                badge.className = "lyric-bg-thumb-play-badge";
+                badge.setAttribute("aria-hidden", "true");
+                const playIc = document.createElement("span");
+                playIc.className = "lyric-bg-thumb-play-icon";
+                playIc.textContent = "▶";
+                badge.appendChild(playIc);
+                thumb.appendChild(badge);
+            } else {
+                thumb.style.backgroundImage = `url("${String(item.imageData).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}")`;
+            }
+            thumb.title = isVid ? "设为当前歌词背景（视频）" : "设为当前歌词背景";
             if (state.ui.bgType === "image" && state.ui.bgImage === item.imageData) {
                 thumb.classList.add("lyric-bg-thumb--active");
             }
@@ -986,6 +1219,7 @@
                 state.ui.bgType = "image";
                 state.ui.bgImageId = item.id;
                 state.ui.bgImage = item.imageData;
+                state.ui.bgMediaType = isVid ? "video" : "image";
                 state.ui.lyricsBgShareToCloud = false;
                 updateUIFromState();
                 updateAll();
@@ -1008,7 +1242,7 @@
 
             wrap.appendChild(thumb);
             wrap.appendChild(delBtn);
-            if (!item.shared) {
+            if (!item.shared && !isVid) {
                 const shareBtn = document.createElement("button");
                 shareBtn.type = "button";
                 shareBtn.className = "bg-share-icon";
@@ -1049,6 +1283,10 @@
         const arr = getUploadedBackgrounds();
         const item = arr.find((x) => x && x.id === itemId);
         if (!item || !item.imageData || item.shared) return;
+        if (item.mediaType === "video" || inferMediaTypeFromDataUrl(item.imageData) === "video") {
+            showToast("视频背景暂不支持共享到云端", triggerEl);
+            return;
+        }
         const agreed = await confirmShareMyBackgroundModal();
         if (!agreed) return;
         if (!supabase) {
@@ -1138,7 +1376,10 @@
             p.classList.toggle("active", p.id === `bg-tab-${tabName}`);
         });
         if (tabName === "shared") loadSharedBackgrounds();
-        if (tabName === "mine") renderUploadedBackgrounds();
+        if (tabName === "mine") {
+            renderUploadedBackgrounds();
+            requestEnsureUploadedVideoCoversOnMineTab();
+        }
     }
 
     function initBgTabs() {
@@ -1263,6 +1504,9 @@
                 state.ui = { ...state.ui, ...settings.ui };
             }
             if (!state.ui.bgImageId) state.ui.bgImageId = "";
+            if (state.ui.bgMediaType !== "video" && state.ui.bgMediaType !== "image") {
+                state.ui.bgMediaType = "image";
+            }
         } else {
             state.currentSongId = state.songs[0].id;
         }
@@ -1317,6 +1561,7 @@
     }
 
     function applyCardBackground(card) {
+        card.querySelector(".card-video-bg")?.remove();
         clearCssDynamicBgClass(card);
         card.style.background = "#000";
         card.style.backgroundImage = "none";
@@ -1331,10 +1576,29 @@
             card.style.background = "#444";
         } else if (state.ui.bgType === "gradient") {
             card.style.background = "linear-gradient(135deg,#1a2f59,#0a0f1d)";
-        } else         if (state.ui.bgType === "image" && state.ui.bgImage) {
-            card.style.backgroundImage = `url("${state.ui.bgImage}")`;
-            card.style.backgroundSize = "cover";
-            card.style.backgroundPosition = "center";
+        } else if (state.ui.bgType === "image" && state.ui.bgImage) {
+            if (state.ui.bgMediaType === "video") {
+                card.style.backgroundImage = "none";
+                card.style.background = "#000";
+                card.style.position = "relative";
+                card.style.overflow = "hidden";
+                const v = document.createElement("video");
+                v.className = "card-video-bg";
+                v.src = state.ui.bgImage;
+                v.muted = true;
+                v.loop = true;
+                v.playsInline = true;
+                v.setAttribute("playsinline", "");
+                v.setAttribute("autoplay", "");
+                v.style.cssText =
+                    "position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;z-index:1;pointer-events:none;";
+                card.insertBefore(v, card.firstChild);
+                void v.play().catch(() => {});
+            } else {
+                card.style.backgroundImage = `url("${state.ui.bgImage}")`;
+                card.style.backgroundSize = "cover";
+                card.style.backgroundPosition = "center";
+            }
         }
     }
 
@@ -1351,12 +1615,27 @@
         }
     }
 
-    function updateSpeakerCards() {
+    function updateSpeakerCards(options = {}) {
         const container = $("card-container");
         if (!container) return;
         const song = currentSong();
         const pages = splitPages(song?.lyrics || "", state.ui.defaultLines);
         state.currentPage = clamp(state.currentPage, 0, pages.length - 1);
+
+        if (options.linesOnly && isMainVideoBackground()) {
+            const cards = container.querySelectorAll(".card");
+            if (cards.length === pages.length && pages.length > 0) {
+                cards.forEach((card, idx) => {
+                    card.classList.toggle("active", idx === state.currentPage);
+                });
+                if ($("page-indicator")) $("page-indicator").textContent = `${state.currentPage + 1}/${pages.length}`;
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(scrollSpeakerPreviewCardIntoView);
+                });
+                return;
+            }
+        }
+
         container.innerHTML = "";
 
         let dragLineIndex = -1;
@@ -1418,7 +1697,7 @@
             });
             card.addEventListener("click", () => {
                 state.currentPage = idx;
-                updateAll();
+                updateAll({ linesOnly: isMainVideoBackground() });
             });
             container.appendChild(card);
         });
@@ -1824,17 +2103,55 @@ ${deleteBtnHtml}
         showToast("播放列表已开始", $("playlist-start-btn"));
     }
 
-    function renderMiniPreview() {
+    function bindMainMiniPreviewVideoVisibility() {
+        if (bindMainMiniPreviewVideoVisibility._done) return;
+        bindMainMiniPreviewVideoVisibility._done = true;
+        document.addEventListener("visibilitychange", () => {
+            const v = document.querySelector("#mini-preview .mini-preview-bg-video");
+            if (!v) return;
+            if (document.hidden) v.pause();
+            else void v.play().catch(() => {});
+        });
+    }
+
+    function renderMiniPreview(options) {
         const mini = $("mini-preview");
         if (!mini) return;
         const song = currentSong();
         const pages = splitPages(song?.lyrics || "", state.ui.defaultLines);
         const lines = pages[state.currentPage] || [];
 
+        if (options && options.linesOnly && isMainVideoBackground()) {
+            mini.querySelectorAll(".preview-line").forEach((n) => n.remove());
+            mini.style.display = "flex";
+            mini.style.flexDirection = "column";
+            mini.style.justifyContent = "flex-start";
+            mini.style.alignItems = "center";
+            mini.style.boxSizing = "border-box";
+            mini.style.paddingTop = `${lyricBlockTopPadPx(mini.clientHeight, state.ui.posY)}px`;
+            mini.style.paddingBottom = "12px";
+            mini.style.paddingLeft = "12px";
+            mini.style.paddingRight = "12px";
+            lines.forEach((line) => {
+                const row = document.createElement("div");
+                row.className = "preview-line";
+                row.style.fontFamily = state.ui.fontFamily;
+                row.style.fontSize = Math.round(state.ui.fontSize * 0.42) + "px";
+                row.style.color = state.ui.bgType === "solid-white" ? "#111" : state.ui.fontColor;
+                row.style.position = "relative";
+                row.style.zIndex = "1";
+                row.textContent = line;
+                mini.appendChild(row);
+            });
+            if ($("preview-line-counter")) $("preview-line-counter").textContent = `(${lines.length} 行)`;
+            return;
+        }
+
         mini.innerHTML = "";
         clearCssDynamicBgClass(mini);
         mini.style.background = "rgba(0, 0, 0, 0.55)";
         mini.style.backgroundImage = "none";
+        mini.style.position = "relative";
         if (CSS_DYNAMIC_BG_TYPES.has(state.ui.bgType)) {
             mini.style.background = "";
             mini.classList.add(`css-bg-${state.ui.bgType}`);
@@ -1842,8 +2159,21 @@ ${deleteBtnHtml}
         else if (state.ui.bgType === "solid-gray") mini.style.background = "rgba(68, 68, 68, 0.55)";
         else if (state.ui.bgType === "gradient") {
             mini.style.background = "linear-gradient(140deg, rgba(27, 47, 89, 0.55), rgba(10, 15, 29, 0.55))";
-        }
-        else if (state.ui.bgType === "image" && state.ui.bgImage) {
+        } else if (state.ui.bgType === "image" && state.ui.bgImage && state.ui.bgMediaType === "video") {
+            mini.style.background = "#000";
+            const v = document.createElement("video");
+            v.className = "mini-preview-bg-video";
+            v.src = state.ui.bgImage;
+            v.muted = true;
+            v.loop = true;
+            v.playsInline = true;
+            v.setAttribute("playsinline", "");
+            v.setAttribute("autoplay", "");
+            v.style.cssText =
+                "position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;pointer-events:none;";
+            mini.appendChild(v);
+            if (!document.hidden) void v.play().catch(() => {});
+        } else if (state.ui.bgType === "image" && state.ui.bgImage) {
             mini.style.backgroundImage = `url("${state.ui.bgImage}")`;
             mini.style.backgroundSize = "cover";
             mini.style.backgroundPosition = "center";
@@ -1865,6 +2195,8 @@ ${deleteBtnHtml}
             row.style.fontFamily = state.ui.fontFamily;
             row.style.fontSize = Math.round(state.ui.fontSize * 0.42) + "px";
             row.style.color = state.ui.bgType === "solid-white" ? "#111" : state.ui.fontColor;
+            row.style.position = "relative";
+            row.style.zIndex = "1";
             row.textContent = line;
             mini.appendChild(row);
         });
@@ -1971,12 +2303,23 @@ ${deleteBtnHtml}
     function updateBgImageThumb() {
         const imageOption = document.querySelector('.bg-option[data-bg="image"]');
         if (!imageOption) return;
-        if (state.ui.bgImage) {
+        if (state.ui.bgImage && state.ui.bgMediaType === "video") {
+            imageOption.style.backgroundImage = "none";
+            imageOption.style.background = "linear-gradient(145deg,#2a2a3c,#121218)";
+            imageOption.style.backgroundSize = "";
+            imageOption.style.backgroundPosition = "";
+            imageOption.style.borderStyle = "solid";
+            imageOption.title = "视频背景";
+        } else if (state.ui.bgImage) {
+            imageOption.style.background = "";
             imageOption.style.backgroundImage = `url("${state.ui.bgImage}")`;
             imageOption.style.backgroundSize = "cover";
             imageOption.style.backgroundPosition = "center";
             imageOption.style.borderStyle = "solid";
+            imageOption.title = "从文件上传";
         } else {
+            imageOption.style.background = "";
+            imageOption.style.backgroundImage = "";
             imageOption.style.borderStyle = "dashed";
         }
     }
@@ -2029,7 +2372,8 @@ ${deleteBtnHtml}
             },
             background: {
                 type: state.ui.bgType,
-                imageData: state.ui.bgImage
+                imageData: state.ui.bgImage,
+                mediaType: state.ui.bgType === "image" && state.ui.bgMediaType === "video" ? "video" : "image"
             }
         };
     }
@@ -2077,9 +2421,16 @@ ${deleteBtnHtml}
         [50, 200, 500, 1200].forEach((ms) => setTimeout(tryFocus, ms));
     }
 
-    function updateAll() {
-        updateSpeakerCards();
-        renderMiniPreview();
+    function updateAll(options) {
+        const o = options || {};
+        const lineOnlyFlip = !!(o.linesOnly && isMainVideoBackground());
+        if (lineOnlyFlip) {
+            updateSpeakerCards({ linesOnly: true });
+            renderMiniPreview({ linesOnly: true });
+        } else {
+            updateSpeakerCards();
+            renderMiniPreview();
+        }
         renderPlaylist();
         broadcastState();
     }
@@ -2090,6 +2441,7 @@ ${deleteBtnHtml}
             state.ui.lyricsBgShareToCloud = false;
             state.ui.bgImage = "";
             state.ui.bgImageId = "";
+            state.ui.bgMediaType = "image";
         }
         updateUIFromState();
         updateAll();
@@ -2268,6 +2620,110 @@ ${deleteBtnHtml}
         }
     }
 
+    function projectionTipDismissedThisSession() {
+        try {
+            return sessionStorage.getItem(PROJECTION_TIP_DISMISS_SESSION_KEY) === "1";
+        } catch (_) {
+            return false;
+        }
+    }
+
+    function dismissProjectionTipDialog(host) {
+        if (host && host.parentNode) {
+            try {
+                sessionStorage.setItem(PROJECTION_TIP_DISMISS_SESSION_KEY, "1");
+            } catch (_) {}
+            host.remove();
+        }
+    }
+
+    function showProjectionTipDialog() {
+        if (isDisplay || isLeader) return;
+        if (projectionTipDismissedThisSession()) return;
+        const app = $("app");
+        if (!app || app.querySelector("#projection-tip-dialog-host")) return;
+
+        const host = document.createElement("div");
+        host.id = "projection-tip-dialog-host";
+        host.className = "projection-tip-dialog";
+        host.setAttribute("role", "dialog");
+        host.setAttribute("aria-modal", "true");
+        host.setAttribute("aria-labelledby", "projection-tip-dialog-title");
+
+        const panel = document.createElement("div");
+        panel.className = "projection-tip-dialog-panel";
+
+        const closeBtn = document.createElement("button");
+        closeBtn.type = "button";
+        closeBtn.className = "projection-tip-close-btn";
+        closeBtn.setAttribute("aria-label", "关闭投屏操作提示");
+        closeBtn.textContent = "✕";
+        closeBtn.addEventListener("click", () => dismissProjectionTipDialog(host));
+
+        const title = document.createElement("h2");
+        title.id = "projection-tip-dialog-title";
+        title.className = "projection-tip-dialog-title";
+        title.textContent = "✨ 投屏操作提示";
+
+        const steps = document.createElement("div");
+        steps.className = "projection-tip-steps";
+        steps.innerHTML = ""
+            + "<div class=\"projection-tip-step\">"
+            + "<div class=\"projection-tip-step-title\">第一步：移动窗口到投影仪屏幕</div>"
+            + "<p><strong>Windows</strong>：按 <kbd>Win</kbd> + <kbd>Shift</kbd> + <kbd>→</kbd> 将窗口移动到投影仪，或直接用鼠标拖拽。</p>"
+            + "<p><strong>macOS</strong>：将鼠标移到窗口左上角，当光标变为 <code>Move</code> 后，将窗口直接拖拽到副屏。</p>"
+            + "<p class=\"projection-tip-step-sub\"><strong>Linux</strong>：请使用桌面环境的窗口管理快捷键，或将窗口拖拽到副屏（各发行版可能不同）。</p>"
+            + "</div>"
+            + "<div class=\"projection-tip-step\">"
+            + "<div class=\"projection-tip-step-title\">第二步：在投影仪上全屏</div>"
+            + "<p>按键盘的 <kbd>F</kbd> 键（或点击画面中央的 📺 按钮）。</p>"
+            + "</div>"
+            + "<div class=\"projection-tip-step\">"
+            + "<div class=\"projection-tip-step-title\">第三步：在控制台翻页</div>"
+            + "<p>在控制台页面，使用 <kbd>←</kbd> <kbd>→</kbd> 方向键或 <kbd>空格</kbd> 控制下一页/上一页。</p>"
+            + "</div>";
+
+        const footer = document.createElement("div");
+        footer.className = "projection-tip-footer";
+        const foot1 = document.createElement("p");
+        foot1.textContent = "此窗口仅您可见，投屏画面保持干净。";
+        const foot2 = document.createElement("p");
+        foot2.textContent = "因浏览器安全策略限制，暂不支持一键自动全屏。";
+        footer.appendChild(foot1);
+        footer.appendChild(foot2);
+
+        panel.appendChild(closeBtn);
+        panel.appendChild(title);
+        panel.appendChild(steps);
+        panel.appendChild(footer);
+        host.appendChild(panel);
+        app.appendChild(host);
+    }
+
+    function scheduleProjectionTipAfterDisplayOpen(newWin) {
+        if (isDisplay || isLeader) return;
+        if (projectionTipDismissedThisSession()) return;
+        let fired = false;
+        const tryShow = () => {
+            if (fired || !newWin || newWin.closed) return;
+            fired = true;
+            showProjectionTipDialog();
+        };
+        try {
+            const doc = newWin.document;
+            if (doc && doc.readyState === "complete") {
+                window.setTimeout(tryShow, 0);
+            } else {
+                newWin.addEventListener("load", tryShow, { once: true });
+            }
+        } catch (_) {
+            window.setTimeout(tryShow, 400);
+        }
+        window.setTimeout(() => {
+            if (!fired && newWin && !newWin.closed) tryShow();
+        }, 2800);
+    }
+
     function openLeaderQrModal() {
         let modal = $("leader-qr-modal");
         const leaderUrl = `${location.origin}${location.pathname}?leader=1`;
@@ -2404,7 +2860,12 @@ ${deleteBtnHtml}
     function openDisplayOnSecondScreen(url, windowName, toastAnchor) {
         const { left, top, width, height } = getDisplayWindowPlacement();
         const feats = `left=${left},top=${top},width=${width},height=${height}`;
-        const win = window.open("about:blank", windowName, feats);
+        const name =
+            String(windowName || "").trim() ||
+            "worship_proj_" + Date.now() + "_" + Math.random().toString(36).slice(2, 10);
+        const targetUrl = String(url || "").trim() || "./index.html";
+        /** 直接打开目标 URL，避免 about:blank 再 replace 在部分环境与策略下失败 */
+        let win = window.open(targetUrl, name, feats);
         if (!win) {
             if (toastAnchor) showToast("无法打开窗口，请允许弹窗", toastAnchor);
             return null;
@@ -2414,12 +2875,6 @@ ${deleteBtnHtml}
             win.resizeTo(width, height);
         } catch (e) {
             console.log("定位投屏窗口失败", e);
-        }
-
-        try {
-            win.location.replace(url);
-        } catch (e) {
-            win.location.href = url;
         }
         if (!isDisplay && !isLeader) refocusMainWindowForOperator();
         return win;
@@ -2441,15 +2896,22 @@ ${deleteBtnHtml}
                 projectionDisplayWindowRef = null;
             }
         }
-        const newWin = openDisplayOnSecondScreen("./index.html?display=1", "worship_projection_display", anchor);
-        if (newWin) attachProjectionDisplayWindow(newWin);
+        const displayWinName =
+            "worship_proj_" + Date.now() + "_" + Math.random().toString(36).slice(2, 10);
+        const newWin = openDisplayOnSecondScreen("./index.html?display=1", displayWinName, anchor);
+        if (newWin) {
+            attachProjectionDisplayWindow(newWin);
+            scheduleProjectionTipAfterDisplayOpen(newWin);
+        }
         hideRestoreProjectionBanner();
     }
 
     function openLeaderWindow() {
         broadcastState();
         refocusMainWindowForOperator();
-        void openDisplayOnSecondScreen("./index.html?leader=1", "worship_leader", $("open-leader-btn"));
+        const leaderWinName =
+            "worship_leader_" + Date.now() + "_" + Math.random().toString(36).slice(2, 10);
+        void openDisplayOnSecondScreen("./index.html?leader=1", leaderWinName, $("open-leader-btn"));
     }
 
     function initResizable() {
@@ -2746,6 +3208,10 @@ ${deleteBtnHtml}
             state.ui.bgType = "image";
             state.ui.bgImageId = pick.id;
             state.ui.bgImage = pick.imageData;
+            state.ui.bgMediaType =
+                pick.mediaType === "video" || inferMediaTypeFromDataUrl(pick.imageData) === "video"
+                    ? "video"
+                    : "image";
             state.ui.lyricsBgShareToCloud = false;
             updateUIFromState();
             updateAll();
@@ -2771,12 +3237,13 @@ ${deleteBtnHtml}
             reader.onload = () => {
                 const dataUrl = String(reader.result || "").trim();
                 if (!dataUrl) {
-                    showToast("未能读取图片", toastAnchor);
+                    showToast("未能读取文件", toastAnchor);
                     input.value = "";
                     return;
                 }
                 try {
-                    addUploadedBackgroundAndApply(dataUrl);
+                    const mt = file.type.startsWith("video/") ? "video" : "image";
+                    addUploadedBackgroundAndApply(dataUrl, mt);
                     updateUIFromState();
                     updateAll();
                     saveSettings();
@@ -2937,9 +3404,23 @@ ${deleteBtnHtml}
         host.style.cssText = "position:fixed;inset:0;background:#000;overflow:hidden;";
         document.body.appendChild(host);
 
+        if (mode === "display") {
+            const displayVid = document.createElement("video");
+            displayVid.id = "display-video-bg";
+            displayVid.setAttribute("loop", "");
+            displayVid.muted = true;
+            displayVid.defaultMuted = true;
+            displayVid.setAttribute("playsinline", "");
+            displayVid.playsInline = true;
+            displayVid.setAttribute("autoplay", "");
+            displayVid.style.cssText =
+                "position:fixed;top:0;left:0;width:100%;height:100%;object-fit:cover;z-index:0;display:none;pointer-events:none;";
+            host.appendChild(displayVid);
+        }
+
         const canvas = document.createElement("canvas");
         canvas.id = "projection-bg";
-        canvas.style.cssText = "position:absolute;inset:0;width:100%;height:100%;";
+        canvas.style.cssText = "position:absolute;inset:0;width:100%;height:100%;z-index:0;";
         host.appendChild(canvas);
         projectionCanvas = canvas;
         projectionCtx = canvas.getContext("2d");
@@ -2947,7 +3428,8 @@ ${deleteBtnHtml}
         const gifImg = document.createElement("img");
         gifImg.id = "projection-bg-image";
         gifImg.alt = "";
-        gifImg.style.cssText = "position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;display:none;pointer-events:none;";
+        gifImg.style.cssText =
+            "position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;display:none;pointer-events:none;z-index:2;";
         host.appendChild(gifImg);
 
         const lyric = document.createElement("div");
@@ -2962,15 +3444,17 @@ ${deleteBtnHtml}
             "line-height:1.45",
             "font-weight:700",
             "text-shadow:0 2px 10px rgba(0,0,0,.85)",
-            "z-index:2"
+            "z-index:10"
         ].join(";");
         if (mode === "leader") lyric.style.textAlign = "left";
         host.appendChild(lyric);
 
         if (mode === "leader") {
             const nav = document.createElement("div");
-            nav.style.cssText = "position:absolute;left:0;right:0;bottom:24px;display:flex;justify-content:center;gap:12px;z-index:3;";
-            nav.innerHTML = '<button id="projection-prev-btn" class="display-control-btn">上一页</button><button id="projection-next-btn" class="display-control-btn">下一页</button>';
+            nav.style.cssText =
+                "position:absolute;left:0;right:0;bottom:24px;display:flex;justify-content:center;gap:12px;z-index:12;";
+            nav.innerHTML =
+                '<button id="projection-prev-btn" class="display-control-btn">上一页</button><button id="projection-next-btn" class="display-control-btn">下一页</button>';
             host.appendChild(nav);
         }
     }
@@ -3051,13 +3535,42 @@ ${deleteBtnHtml}
         ctx.shadowBlur = 0;
     }
 
+    function projectionDisplayIsVideoBackground() {
+        if (!liveState) return false;
+        const bgState = liveState.background || {};
+        const type = bgState.type || "solid-black";
+        const mediaType =
+            bgState.mediaType === "video" || inferMediaTypeFromDataUrl(bgState.imageData || "") === "video"
+                ? "video"
+                : "image";
+        return type === "image" && mediaType === "video" && !!bgState.imageData;
+    }
+
+    function projectionLiveBackgroundSignature(bg) {
+        if (!bg || typeof bg !== "object") return "";
+        return [String(bg.type || ""), String(bg.mediaType || ""), String(bg.imageData || "").slice(0, 120)].join(
+            "\x1e"
+        );
+    }
+
     function drawBg(ts) {
         if (!projectionCtx || !liveState) return;
         const bgState = liveState.background || {};
         const type = bgState.type || "solid-black";
         const gifLayer = $("projection-bg-image");
+        const mediaType =
+            bgState.mediaType === "video" || inferMediaTypeFromDataUrl(bgState.imageData || "") === "video"
+                ? "video"
+                : "image";
+        const isVideoBg = type === "image" && mediaType === "video" && bgState.imageData;
+        const dispV = $("display-video-bg");
 
         if (CSS_DYNAMIC_BG_TYPES.has(type)) {
+            if (dispV) {
+                dispV.pause();
+                dispV.src = "";
+                dispV.style.display = "none";
+            }
             ensureProjectionCssBg(type);
             if (gifLayer) gifLayer.style.display = "none";
             if (projectionCanvas) projectionCanvas.style.display = "none";
@@ -3065,6 +3578,26 @@ ${deleteBtnHtml}
             projectionRaf = 0;
             return;
         }
+
+        if (isVideoBg && dispV && bgState.imageData) {
+            removeProjectionCssBg();
+            if (gifLayer) gifLayer.style.display = "none";
+            if (projectionCanvas) projectionCanvas.style.display = "none";
+            dispV.src = bgState.imageData;
+            dispV.style.display = "block";
+            if (document.hidden) dispV.pause();
+            else void dispV.play().catch(() => {});
+            projectionLastTs = ts;
+            projectionRaf = 0;
+            return;
+        }
+
+        if (dispV) {
+            dispV.pause();
+            dispV.src = "";
+            dispV.style.display = "none";
+        }
+
         removeProjectionCssBg();
         if (projectionCanvas) projectionCanvas.style.display = "block";
 
@@ -3087,8 +3620,9 @@ ${deleteBtnHtml}
             ctx.fillStyle = g;
             ctx.fillRect(0, 0, w, h);
         } else if (type === "image" && bgState.imageData) {
-            const isGif = /^data:image\/gif/i.test(bgState.imageData);
+            const isGif = mediaType !== "video" && /^data:image\/gif/i.test(bgState.imageData);
             if (isGif && gifLayer) {
+                if (projectionBgImage) projectionBgImage = null;
                 if (gifLayer.src !== bgState.imageData) gifLayer.src = bgState.imageData;
                 gifLayer.style.display = "block";
                 if (projectionCanvas) projectionCanvas.style.display = "none";
@@ -3118,8 +3652,17 @@ ${deleteBtnHtml}
             ctx.fillRect(0, 0, w, h);
         }
         projectionLastTs = ts;
-        const gifAnimating = type === "image" && typeof bgState.imageData === "string" && /^data:image\/gif/i.test(bgState.imageData);
-        const loop = type === "particles" || gifAnimating || (type === "image" && projectionBgImage && !projectionBgImage.complete);
+        const gifAnimating =
+            type === "image" &&
+            mediaType !== "video" &&
+            typeof bgState.imageData === "string" &&
+            /^data:image\/gif/i.test(bgState.imageData);
+        const imgRasterLoading =
+            type === "image" &&
+            !isVideoBg &&
+            projectionBgImage &&
+            !projectionBgImage.complete;
+        let loop = type === "particles" || gifAnimating || imgRasterLoading;
         if (loop) projectionRaf = requestAnimationFrame(drawBg);
         else projectionRaf = 0;
     }
@@ -3201,10 +3744,17 @@ ${deleteBtnHtml}
             mode = projectionMode || "display";
         }
         if (!payload || !payload.pages) return;
+        const prev = liveState;
         liveState = payload;
         if ((mode || projectionMode) === "display") renderDisplayLyric();
         else renderLeaderLyric();
-        restartBg();
+        const sigPrev = projectionLiveBackgroundSignature(prev?.background);
+        const sigNew = projectionLiveBackgroundSignature(liveState.background);
+        const skipRestart =
+            (mode || projectionMode) === "display" &&
+            projectionDisplayIsVideoBackground() &&
+            sigPrev === sigNew;
+        if (!skipRestart) restartBg();
     }
 
     function initDisplayMode() {
@@ -3299,28 +3849,77 @@ ${deleteBtnHtml}
         }
 
         /**
-         * 仅按 H 召唤等场景使用；投屏就绪后由主窗口通过 BroadcastChannel 通知整层移除。
+         * 投屏窗口：区分桌面平台用于单栏引导文案（非 Mac 按 Windows 文案处理，含 Linux）。
          */
-        function showFullscreenGuidePanel() {
+        function isMacLikePlatform() {
+            const p = navigator.platform || "";
+            const ua = navigator.userAgent || "";
+            if (/^Win/i.test(p)) return false;
+            if (/^Mac/i.test(p)) return true;
+            return /Mac OS X/i.test(ua);
+        }
+
+        /**
+         * @param {{ helpMode?: boolean }} [opts] helpMode 为 true 时展示 Windows/macOS 双栏帮助；否则为「投屏中」单栏引导。
+         */
+        function showFullscreenGuidePanel(opts) {
+            const helpMode = !!(opts && opts.helpMode);
             removeFullscreenGuide(true);
             if (document.fullscreenElement) return;
 
             const overlay = document.createElement("div");
             overlay.className = "display-fs-guide-overlay";
             overlay.style.opacity = "1";
-            overlay.innerHTML = `
+
+            if (helpMode) {
+                overlay.innerHTML = `
+                <div class="display-fs-guide-panel display-fs-guide-panel--help">
+                    <div class="display-fs-help-columns">
+                        <div class="display-fs-help-col">
+                            <div class="display-fs-help-col-title">Windows</div>
+                            <ul>
+                                <li><kbd>F</kbd> 全屏</li>
+                                <li><kbd>Win</kbd>+<kbd>P</kbd> 切换屏幕</li>
+                                <li><kbd>Win</kbd>+<kbd>Shift</kbd>+<kbd>→</kbd> 移动窗口</li>
+                                <li><kbd>Esc</kbd> 退出全屏</li>
+                                <li><kbd>B</kbd> 黑屏 · <kbd>W</kbd> 白屏</li>
+                            </ul>
+                        </div>
+                        <div class="display-fs-help-col">
+                            <div class="display-fs-help-col-title">macOS</div>
+                            <ul>
+                                <li><kbd>Control</kbd>+<kbd>Command</kbd>+<kbd>F</kbd> 全屏</li>
+                                <li><kbd>Option</kbd>+<kbd>F1</kbd> 切换屏幕</li>
+                                <li><kbd>Shift</kbd>+<kbd>Option</kbd>+<kbd>Command</kbd>+<kbd>→</kbd> 移动窗口</li>
+                                <li><kbd>Esc</kbd> 退出全屏</li>
+                                <li><kbd>B</kbd> 黑屏 · <kbd>W</kbd> 白屏</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <p class="display-fs-guide-note">因浏览器安全策略限制，暂不支持一键自动投屏</p>
+                    <p id="display-fs-guide-auto-msg" class="display-fs-guide-timer">（10 秒内无操作将自动关闭）</p>
+                </div>`;
+            } else {
+                const isMac = isMacLikePlatform();
+                const fsHint = isMac ? "或按 Control+Command+F 全屏" : "或按 F 键全屏";
+                const moveHint = isMac
+                    ? "或按 Shift+Option+Command+→ 移到投影仪"
+                    : "或按 Win+Shift+→ 移到投影仪";
+                overlay.innerHTML = `
                 <div class="display-fs-guide-panel">
                     <div id="display-fs-zone-fs" class="display-fs-zone-fs">
                         <button type="button" id="display-fs-guide-fs-btn" class="display-fs-guide-big-btn">📺 点击此处全屏</button>
-                        <p class="display-fs-guide-sub">或按 F 键全屏</p>
-                        <p class="display-fs-guide-note">ℹ️ 浏览器安全策略暂不支持一键自动投屏，敬请谅解</p>
+                        <p class="display-fs-guide-sub">${escapeHtml(fsHint)}</p>
+                        <p class="display-fs-guide-note">因浏览器安全策略暂不支持一键自动投屏，敬请谅解</p>
                     </div>
                     <div id="display-fs-zone-move" class="display-fs-zone-move">
-                        <p class="display-fs-guide-sub">或按 Win+Shift+→ 移到投影仪</p>
+                        <p class="display-fs-guide-sub">${escapeHtml(moveHint)}</p>
                     </div>
                     <p id="display-fs-guide-auto-msg" class="display-fs-guide-timer">（10 秒内无投屏相关操作将自动关闭）</p>
-                    <p class="display-fs-guide-timer" style="margin-top:10px;opacity:.88;">按 H 键随时查看操作提示</p>
+                    <p class="display-fs-guide-timer" style="margin-top:10px;opacity:.88;">按 H 键打开 Windows / macOS 快捷键一览</p>
                 </div>`;
+            }
+
             document.body.appendChild(overlay);
             fullscreenGuideOverlay = overlay;
 
@@ -3332,32 +3931,37 @@ ${deleteBtnHtml}
                 e.stopPropagation();
             });
 
-            overlay.querySelector("#display-fs-guide-fs-btn")?.addEventListener("click", async (e) => {
-                e.preventDefault();
-                try {
-                    await document.documentElement.requestFullscreen({ navigationUI: "hide" });
-                    hideFullscreenGuideFsZone();
-                    resetGuideIdleTimer();
-                } catch (_) {
-                    /* ignore */
-                }
-            });
-
-            startGuideMovePoll();
+            if (!helpMode) {
+                overlay.querySelector("#display-fs-guide-fs-btn")?.addEventListener("click", async (e) => {
+                    e.preventDefault();
+                    try {
+                        await document.documentElement.requestFullscreen({ navigationUI: "hide" });
+                        hideFullscreenGuideFsZone();
+                        resetGuideIdleTimer();
+                    } catch (_) {
+                        /* ignore */
+                    }
+                });
+                startGuideMovePoll();
+            } else {
+                stopGuideMovePoll();
+            }
             resetGuideIdleTimer();
         }
 
         function showDisplayReadyToast() {
             const el = document.createElement("div");
             el.className = "display-ready-toast";
-            el.textContent = "✅ 投屏已就绪 · 请在控制台翻页";
+            el.innerHTML =
+                '<div class="display-ready-toast-title">✅ 投屏已就绪</div>' +
+                '<div class="display-ready-toast-sub">请在控制台操作翻页</div>';
             document.body.appendChild(el);
             requestAnimationFrame(() => {
                 el.style.opacity = "1";
             });
             window.setTimeout(() => {
                 el.style.opacity = "0";
-                window.setTimeout(() => el.remove(), 400);
+                window.setTimeout(() => el.remove(), 500);
             }, 2000);
         }
 
@@ -3371,7 +3975,7 @@ ${deleteBtnHtml}
                     showDisplayReadyToast();
                     if (channel) channel.postMessage({ type: "projection_fs_active", source: "display" });
                 } else if (displayHadFullscreenSession) {
-                    showFullscreenGuidePanel();
+                    showFullscreenGuidePanel({});
                     if (channel) channel.postMessage({ type: "projection_attention", reason: "fs_exit", source: "display" });
                 }
             },
@@ -3412,7 +4016,7 @@ ${deleteBtnHtml}
         /** 静默尝试一次自动全屏；若仍非全屏则在延迟后展示引导面板（多数浏览器会因用户手势策略拦截） */
         requestAnimationFrame(() => requestAnimationFrame(() => tryProjectionFullscreenOnce()));
         window.setTimeout(() => {
-            if (!document.fullscreenElement) showFullscreenGuidePanel();
+            if (!document.fullscreenElement) showFullscreenGuidePanel({});
         }, 750);
 
         document.addEventListener("mousemove", onProjectionPointerActivity, { passive: true });
@@ -3476,7 +4080,7 @@ ${deleteBtnHtml}
             const isArrowRight = k === "ArrowRight" || e.code === "ArrowRight";
             if (k === "h" || k === "H") {
                 e.preventDefault();
-                showFullscreenGuidePanel();
+                showFullscreenGuidePanel({ helpMode: true });
                 bumpCursorIdle();
                 return;
             }
@@ -3536,6 +4140,10 @@ ${deleteBtnHtml}
         });
         window.addEventListener("resize", () => {
             restartBg();
+        });
+
+        document.addEventListener("visibilitychange", () => {
+            if (!document.hidden) restartBg();
         });
 
         bumpCursorIdle();
@@ -4543,10 +5151,7 @@ ${deleteBtnHtml}
         if (d < 0) {
             if (cur <= 0) return;
             state.currentPage = cur + d;
-            updateSpeakerCards();
-            renderMiniPreview();
-            renderPlaylist();
-            broadcastState();
+            updateAll({ linesOnly: isMainVideoBackground() });
             notifyProjectionConsoleReadyForGuide();
             return;
         }
@@ -4564,10 +5169,7 @@ ${deleteBtnHtml}
         }
 
         state.currentPage = Math.min(cur + d, maxIdx);
-        updateSpeakerCards();
-        renderMiniPreview();
-        renderPlaylist();
-        broadcastState();
+        updateAll({ linesOnly: isMainVideoBackground() });
         notifyProjectionConsoleReadyForGuide();
     }
 
@@ -4582,7 +5184,7 @@ ${deleteBtnHtml}
     function jumpToPage(pageIndex) {
         const pages = splitPages(currentSong()?.lyrics || "", state.ui.defaultLines);
         state.currentPage = clamp(Number(pageIndex) || 0, 0, Math.max(0, pages.length - 1));
-        updateAll();
+        updateAll({ linesOnly: isMainVideoBackground() });
     }
 
     function handleControlMessage(msg) {
@@ -4599,6 +5201,78 @@ ${deleteBtnHtml}
             suppressProjectionConsoleNotify = false;
             return;
         }
+    }
+
+    function welcomeTodayKey() {
+        const d = new Date();
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, "0");
+        const day = String(d.getDate()).padStart(2, "0");
+        return `${y}-${m}-${day}`;
+    }
+
+    function welcomeToastDismissedToday() {
+        try {
+            return sessionStorage.getItem(WELCOME_DISMISS_SESSION_KEY) === welcomeTodayKey();
+        } catch (_) {
+            return false;
+        }
+    }
+
+    function dismissWelcomeToast(overlayEl, options) {
+        const o = options && typeof options === "object" ? options : {};
+        const remember = !!o.remember;
+        if (welcomeToastTimer) {
+            clearTimeout(welcomeToastTimer);
+            welcomeToastTimer = 0;
+        }
+        if (!overlayEl || !overlayEl.parentNode) return;
+        if (remember) {
+            try {
+                sessionStorage.setItem(WELCOME_DISMISS_SESSION_KEY, welcomeTodayKey());
+            } catch (_) {}
+        }
+        const box = overlayEl.querySelector(".welcome-toast-box");
+        const fadeTarget = box || overlayEl;
+        fadeTarget.style.transition = "opacity 0.3s ease";
+        fadeTarget.style.opacity = "0";
+        window.setTimeout(() => {
+            overlayEl.remove();
+        }, 300);
+    }
+
+    function maybeShowWelcomeToast() {
+        if (isDisplay || isLeader) return;
+        if (welcomeToastDismissedToday()) return;
+        const wrap = document.createElement("div");
+        wrap.className = "welcome-toast-overlay";
+        const box = document.createElement("div");
+        box.className = "welcome-toast-box";
+        box.id = "welcome-toast";
+        box.style.opacity = "0";
+        box.style.transition = "opacity 0.35s ease";
+        const p = document.createElement("p");
+        p.className = "welcome-toast-text";
+        p.textContent = "✨ 尊贵的用户，欢迎您使用 😊";
+        const closeBtn = document.createElement("button");
+        closeBtn.type = "button";
+        closeBtn.className = "welcome-toast-close";
+        closeBtn.setAttribute("aria-label", "关闭欢迎提示");
+        closeBtn.textContent = "✕";
+        closeBtn.addEventListener("click", () => dismissWelcomeToast(wrap, { remember: true }));
+        box.appendChild(p);
+        box.appendChild(closeBtn);
+        wrap.appendChild(box);
+        document.body.appendChild(wrap);
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                box.style.opacity = "1";
+            });
+        });
+        welcomeToastTimer = window.setTimeout(() => {
+            welcomeToastTimer = 0;
+            dismissWelcomeToast(wrap, { remember: false });
+        }, 3500);
     }
 
     function initMain() {
@@ -4622,6 +5296,7 @@ ${deleteBtnHtml}
             renderPlaylist();
             if ($("playlist-auto-switch")) $("playlist-auto-switch").checked = !!state.playlist.autoSwitch;
             bindEvents();
+            bindMainMiniPreviewVideoVisibility();
             initResizable();
             initPreviewResize();
             migrateLegacyUploadedBackgrounds();
@@ -4655,6 +5330,8 @@ ${deleteBtnHtml}
                 };
             }
             broadcastState();
+            maybeShowWelcomeToast();
+            requestEnsureUploadedVideoCoversOnMineTab();
         };
         initBackgroundImageIndexedDb().then(boot).catch((err) => {
             console.error(err);

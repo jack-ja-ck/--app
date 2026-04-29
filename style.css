@@ -1315,6 +1315,7 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
     color:#ff5252;
     background:rgba(0,0,0,0.55);
     white-space:nowrap;
+    pointer-events:none;
 }
 #my-backgrounds-container .lyric-bg-slot-empty {
     width:70px;

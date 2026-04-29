@@ -289,7 +289,10 @@
                     _lyricBgDeletePendingId = "";
                     return;
                 }
-                const pendingWrap = root.querySelector(`[data-wrap-item-id="${_lyricBgDeletePendingId}"]`);
+                let pendingWrap = null;
+                root.querySelectorAll(".lyric-bg-thumb-wrap").forEach((el) => {
+                    if (el.dataset.wrapItemId === String(_lyricBgDeletePendingId)) pendingWrap = el;
+                });
                 if (pendingWrap && pendingWrap.contains(e.target)) return;
                 _lyricBgDeletePendingId = "";
                 renderUploadedBackgrounds();
@@ -909,7 +912,7 @@
             const wrap = document.createElement("div");
             wrap.className = "lyric-bg-thumb-wrap";
             wrap.dataset.wrapItemId = item.id;
-            if (_lyricBgDeletePendingId === item.id) {
+            if (String(_lyricBgDeletePendingId) === String(item.id)) {
                 wrap.classList.add("lyric-bg-thumb-wrap--delete-pending");
             }
 
@@ -925,7 +928,7 @@
             thumb.addEventListener("click", (e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                if (_lyricBgDeletePendingId === item.id) {
+                if (String(_lyricBgDeletePendingId) === String(item.id)) {
                     deleteUploadedBackgroundItem(item.id);
                     return;
                 }
@@ -943,8 +946,8 @@
             const delBtn = document.createElement("button");
             delBtn.type = "button";
             delBtn.className = "lyric-bg-thumb-delete";
-            delBtn.setAttribute("aria-label", _lyricBgDeletePendingId === item.id ? "确认删除" : "删除此背景");
-            if (_lyricBgDeletePendingId === item.id) {
+            delBtn.setAttribute("aria-label", String(_lyricBgDeletePendingId) === String(item.id) ? "确认删除" : "删除此背景");
+            if (String(_lyricBgDeletePendingId) === String(item.id)) {
                 delBtn.classList.add("lyric-bg-thumb-delete--confirm");
                 delBtn.textContent = "确认删除？";
             } else {
@@ -954,7 +957,7 @@
             delBtn.addEventListener("click", (e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                if (_lyricBgDeletePendingId === item.id) {
+                if (String(_lyricBgDeletePendingId) === String(item.id)) {
                     return;
                 }
                 _lyricBgDeletePendingId = item.id;

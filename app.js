@@ -38,6 +38,8 @@
     let _idbUploadedCache = [];
     let _themeBgSlotsCache = [];
     let _themeBgActiveId = "";
+    /** 「我的背景」缩略图：二次确认删除时处于待确认状态的条目 id */
+    let _lyricBgDeletePendingId = "";
 
     function promiseReq(req) {
         return new Promise((resolve, reject) => {
@@ -273,6 +275,51 @@
         persistFullThemeBgFromSlots();
         applyThemeBackground();
         showToast("已删除主题背景", $("theme-bg-grid"));
+    }
+
+    function bindLyricBgDeleteOutsideDismiss() {
+        if (bindLyricBgDeleteOutsideDismiss._done) return;
+        bindLyricBgDeleteOutsideDismiss._done = true;
+        document.addEventListener(
+            "mousedown",
+            (e) => {
+                if (!_lyricBgDeletePendingId) return;
+                const root = $("my-backgrounds-container");
+                if (!root) {
+                    _lyricBgDeletePendingId = "";
+                    return;
+                }
+                const pendingWrap = root.querySelector(`[data-wrap-item-id="${_lyricBgDeletePendingId}"]`);
+                if (pendingWrap && pendingWrap.contains(e.target)) return;
+                _lyricBgDeletePendingId = "";
+                renderUploadedBackgrounds();
+            },
+            false
+        );
+    }
+
+    function deleteUploadedBackgroundItem(itemId) {
+        const id = String(itemId || "").trim();
+        if (!id) return;
+        const arr = getUploadedBackgrounds().filter((x) => x && x.id !== id);
+        const wasActive = state.ui.bgType === "image" && state.ui.bgImageId === id;
+        saveUploadedBackgrounds(arr);
+        _lyricBgDeletePendingId = "";
+        if (wasActive) {
+            if (arr.length && arr[0].imageData) {
+                state.ui.bgImageId = arr[0].id;
+                state.ui.bgImage = arr[0].imageData;
+            } else {
+                state.ui.bgType = "solid-black";
+                state.ui.bgImage = "";
+                state.ui.bgImageId = "";
+            }
+            saveSettings();
+            updateUIFromState();
+            updateAll();
+        }
+        renderUploadedBackgrounds();
+        showToast("已删除背景", $("my-backgrounds-container"));
     }
 
     function renderThemeBgGrid() {
@@ -837,18 +884,35 @@
     }
 
     function renderUploadedBackgrounds() {
+        bindLyricBgDeleteOutsideDismiss();
         const root = $("my-backgrounds-container");
         if (!root) return;
         const items = getUploadedBackgrounds();
         root.innerHTML = "";
         if (!items.length) {
             root.innerHTML = '<div class="hint-text" style="grid-column:1/-1;">暂无已上传背景，请在「预设背景」中上传图片</div>';
+            const emptyAdd = document.createElement("button");
+            emptyAdd.type = "button";
+            emptyAdd.className = "lyric-bg-slot-empty";
+            emptyAdd.title = "上传背景";
+            emptyAdd.setAttribute("aria-label", "上传背景");
+            emptyAdd.innerHTML = '<span class="lyric-bg-slot-empty-plus" aria-hidden="true">+</span>';
+            emptyAdd.addEventListener("click", (e) => {
+                e.preventDefault();
+                $("bg-image-input")?.click();
+            });
+            root.appendChild(emptyAdd);
             return;
         }
         items.forEach((item) => {
             if (!item || !item.imageData) return;
             const wrap = document.createElement("div");
             wrap.className = "lyric-bg-thumb-wrap";
+            wrap.dataset.wrapItemId = item.id;
+            if (_lyricBgDeletePendingId === item.id) {
+                wrap.classList.add("lyric-bg-thumb-wrap--delete-pending");
+            }
+
             const thumb = document.createElement("button");
             thumb.type = "button";
             thumb.className = "lyric-bg-thumb";
@@ -861,6 +925,10 @@
             thumb.addEventListener("click", (e) => {
                 e.preventDefault();
                 e.stopPropagation();
+                if (_lyricBgDeletePendingId === item.id) {
+                    deleteUploadedBackgroundItem(item.id);
+                    return;
+                }
                 state.ui.bgType = "image";
                 state.ui.bgImageId = item.id;
                 state.ui.bgImage = item.imageData;
@@ -871,7 +939,30 @@
                 renderUploadedBackgrounds();
                 showToast("已切换背景", thumb);
             });
+
+            const delBtn = document.createElement("button");
+            delBtn.type = "button";
+            delBtn.className = "lyric-bg-thumb-delete";
+            delBtn.setAttribute("aria-label", _lyricBgDeletePendingId === item.id ? "确认删除" : "删除此背景");
+            if (_lyricBgDeletePendingId === item.id) {
+                delBtn.classList.add("lyric-bg-thumb-delete--confirm");
+                delBtn.textContent = "确认删除？";
+            } else {
+                delBtn.textContent = "✕";
+            }
+            delBtn.addEventListener("mousedown", (e) => e.stopPropagation());
+            delBtn.addEventListener("click", (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (_lyricBgDeletePendingId === item.id) {
+                    return;
+                }
+                _lyricBgDeletePendingId = item.id;
+                renderUploadedBackgrounds();
+            });
+
             wrap.appendChild(thumb);
+            wrap.appendChild(delBtn);
             if (!item.shared) {
                 const shareBtn = document.createElement("button");
                 shareBtn.type = "button";
@@ -893,6 +984,20 @@
             }
             root.appendChild(wrap);
         });
+
+        if (items.length < UPLOADED_BACKGROUNDS_MAX) {
+            const slot = document.createElement("button");
+            slot.type = "button";
+            slot.className = "lyric-bg-slot-empty";
+            slot.title = "上传背景";
+            slot.setAttribute("aria-label", "上传背景");
+            slot.innerHTML = '<span class="lyric-bg-slot-empty-plus" aria-hidden="true">+</span>';
+            slot.addEventListener("click", (e) => {
+                e.preventDefault();
+                $("bg-image-input")?.click();
+            });
+            root.appendChild(slot);
+        }
     }
 
     async function shareMyBackgroundItem(itemId, triggerEl) {
@@ -989,6 +1094,9 @@
         });
         if (tabName === "shared") loadSharedBackgrounds();
         if (tabName === "mine") renderUploadedBackgrounds();
+        if (tabName !== "mine" && _lyricBgDeletePendingId) {
+            _lyricBgDeletePendingId = "";
+        }
     }
 
     function initBgTabs() {

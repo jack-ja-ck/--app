@@ -3546,10 +3546,12 @@ ${deleteBtnHtml}
         return type === "image" && mediaType === "video" && !!bgState.imageData;
     }
 
-    function projectionLiveBackgroundSignature(bg) {
-        if (!bg || typeof bg !== "object") return "";
-        return [String(bg.type || ""), String(bg.mediaType || ""), String(bg.imageData || "").slice(0, 120)].join(
-            "\x1e"
+    function projectionLiveBackgroundMatches(a, b) {
+        if (!a || !b || typeof a !== "object" || typeof b !== "object") return false;
+        return (
+            String(a.type || "") === String(b.type || "") &&
+            String(a.mediaType || "") === String(b.mediaType || "") &&
+            String(a.imageData || "") === String(b.imageData || "")
         );
     }
 
@@ -3748,12 +3750,10 @@ ${deleteBtnHtml}
         liveState = payload;
         if ((mode || projectionMode) === "display") renderDisplayLyric();
         else renderLeaderLyric();
-        const sigPrev = projectionLiveBackgroundSignature(prev?.background);
-        const sigNew = projectionLiveBackgroundSignature(liveState.background);
         const skipRestart =
             (mode || projectionMode) === "display" &&
             projectionDisplayIsVideoBackground() &&
-            sigPrev === sigNew;
+            projectionLiveBackgroundMatches(prev?.background, liveState.background);
         if (!skipRestart) restartBg();
     }
 

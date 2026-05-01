@@ -725,6 +725,12 @@
             .replace(/>/g, "&gt;");
     }
 
+    function escapeAttr(text) {
+        return escapeHtml(text)
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#39;");
+    }
+
     function escapeRegExp(str) {
         return String(str).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     }
@@ -1817,9 +1823,10 @@
         const pageCount = splitPages(song.lyrics, state.ui.defaultLines).length;
         const tagLine = String(song.tags || "").trim() || "—";
         const tagsHtml = highlightSearchHtml(tagLine, keyLower);
+        const songIdAttr = escapeAttr(song.id);
 
         const cbHtml = showBatchCb
-            ? `<input type="checkbox" class="song-batch-cb" aria-label="选择" data-song-id="${song.id}" ${libraryBatchSelected.has(song.id) ? "checked" : ""}>`
+            ? `<input type="checkbox" class="song-batch-cb" aria-label="选择" data-song-id="${songIdAttr}" ${libraryBatchSelected.has(song.id) ? "checked" : ""}>`
             : "";
 
         const handleHtml = showDragHandle
@@ -1827,8 +1834,8 @@
             : `<span class="song-drag-spacer" aria-hidden="true"></span>`;
 
         const deleteBtnHtml = pendingDelete
-            ? `<button type="button" class="song-delete-btn song-delete-btn--pending" data-song-id="${song.id}">确认删除？</button>`
-            : `<button type="button" class="song-delete-btn" title="删除" data-song-id="${song.id}">✕</button>`;
+            ? `<button type="button" class="song-delete-btn song-delete-btn--pending" data-song-id="${songIdAttr}">确认删除？</button>`
+            : `<button type="button" class="song-delete-btn" title="删除" data-song-id="${songIdAttr}">✕</button>`;
 
         row.innerHTML = `${cbHtml}${handleHtml}
 <div class="song-item-main">
@@ -1838,7 +1845,7 @@
   </div>
 </div>
 ${deleteBtnHtml}
-<button type="button" class="song-add-btn" title="加入播放列表" data-song-id="${song.id}">+</button>`;
+<button type="button" class="song-add-btn" title="加入播放列表" data-song-id="${songIdAttr}">+</button>`;
 
         const openSong = () => {
             switchSong(song.id);

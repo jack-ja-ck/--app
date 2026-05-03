@@ -928,32 +928,17 @@
         }
     }
 
-    function buildCloudUploadSettingsSnapshot() {
-        let uiClone;
-        try {
-            uiClone = JSON.parse(JSON.stringify(state.ui));
-        } catch {
-            uiClone = { ...state.ui };
-        }
-        const song = currentSong();
-        return {
-            ui: uiClone,
-            songVisual: song
-                ? {
-                      posY: Number.isFinite(Number(song.posY)) ? song.posY : state.ui.posY,
-                      overlayOpacityPct: song.overlayOpacityPct,
-                      fontOpacityPct: song.fontOpacityPct
-                  }
-                : {},
-            advPreview: {
-                miniOverlayPct: readLocalStorageString(ADV_MINI_OVERLAY_PCT_LS),
-                miniBlurPx: readLocalStorageString(ADV_MINI_BLUR_PX_LS),
-                previewLineHeight: readLocalStorageString(ADV_PREVIEW_LINE_HEIGHT_LS)
-            },
-            themeBgOpacity: getThemeBgOpacity(),
-            currentPage: state.currentPage,
-            sizePreset: state.sizePreset
-        };
+    /** 从歌词文本中移除内嵌 data:*;base64，避免 POST 体积过大 */
+    function stripBase64DataUrlsFromLyrics(text) {
+        return String(text || "").replace(/data:[^;\s]+;base64,[A-Za-z0-9+/=\s]+/gi, "");
+    }
+
+    function readCloudShareUserNickname() {
+        const a = readLocalStorageString("worship.user_nickname").trim();
+        if (a) return a;
+        const b = readLocalStorageString("user_nickname").trim();
+        if (b) return b;
+        return "佚名";
     }
 
     function canUploadSongToCloud() {
@@ -1441,17 +1426,16 @@
             return;
         }
         const title = chk.title;
-        const lyrics = chk.lyrics;
+        const lyrics = stripBase64DataUrlsFromLyrics(chk.lyrics);
         const authorRaw = song.author;
         const author =
-            typeof authorRaw === "string" && authorRaw.trim() ? authorRaw.trim() : "";
-        const settings = buildCloudUploadSettingsSnapshot();
+            typeof authorRaw === "string" && authorRaw.trim() ? authorRaw.trim() : "佚名";
+        const user_nickname = readCloudShareUserNickname();
         const payload = {
-            type: "song",
             title,
-            lyrics,
             author,
-            settings
+            lyrics,
+            user_nickname
         };
         cloudUploadInFlight = true;
         updateCloudUploadBtnState();

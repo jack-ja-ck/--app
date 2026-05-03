@@ -1,0 +1,32 @@
+    function initDisplayMode() {
+        projectionMode = "display";
+        installProjectionUI("display");
+        const initState = getStore(STORAGE.LIVE, null);
+        if (initState) applyLive("display", initState);
+        const onPrev = () => channel && channel.postMessage({ type: "flip", delta: -1 });
+        const onNext = () => channel && channel.postMessage({ type: "flip", delta: 1 });
+        $("projection-prev-btn")?.addEventListener("click", onPrev);
+        $("projection-next-btn")?.addEventListener("click", onNext);
+        document.addEventListener("keydown", (e) => {
+            if (e.key === "ArrowLeft") onPrev();
+            if (e.key === "ArrowRight") onNext();
+        });
+
+        if (channel) {
+            channel.onmessage = (e) => {
+                const d = e.data;
+                if (d && d.type === "update" && d.payload && d.payload.pages) {
+                    applyLive("display", d.payload);
+                }
+            };
+            channel.postMessage({ type: "request_state" });
+        }
+
+        window.addEventListener("storage", (e) => {
+            if (e.key === STORAGE.LIVE && e.newValue) applyLive("display", parseJSON(e.newValue, null));
+        });
+        window.addEventListener("resize", () => {
+            restartBg();
+            updateDisplayCardPreview();
+        });
+    }

@@ -7,116 +7,144 @@
     <link rel="stylesheet" href="style.css">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js" defer></script>
+    <script src="js/utils.js"></script>
+    <script src="js/state.js"></script>
+    <script src="js/router.js"></script>
+    <script src="js/ui.js"></script>
     <script src="app.js" defer></script>
 </head>
 <body data-theme="dark">
 <div id="app">
-    <!-- 左侧诗歌库 -->
-    <div id="song-library">
-        <div class="library-panel-heading editor-area-title">📚 诗歌库</div>
-        <div class="library-search-wrap library-search-wrap--top">
-            <span class="library-input-icon" aria-hidden="true">🔍</span>
-            <input type="text" id="search-input" class="library-search-input" placeholder="搜索我的诗歌..." autocomplete="off">
-        </div>
-        <div class="library-mode-row" role="tablist" aria-label="诗歌库视图">
-            <button type="button" id="library-view-all" class="library-mode-btn is-active" role="tab" aria-selected="true">全部</button>
-            <button type="button" id="library-view-category" class="library-mode-btn" role="tab" aria-selected="false">分类</button>
-            <button type="button" id="library-view-batch" class="library-mode-btn" role="tab" aria-selected="false">批量</button>
-        </div>
-        <div id="search-result-hint" class="hint-text library-hint"></div>
-        <div class="library-search-wrap">
-            <span class="library-input-icon" aria-hidden="true">🌐</span>
-            <input type="text" id="online-search-input" class="library-search-input" placeholder="在线搜索诗歌..." autocomplete="off">
-        </div>
-        <div id="online-results" class="library-online-results"></div>
-        <div id="library-view-pane" class="library-view-pane">
-            <div id="library-view-inner" class="library-view-inner">
-                <div id="song-list" class="song-list-root library-song-scroll"></div>
+    <!-- 左侧：诗歌管理区 -->
+    <div id="song-library" class="console-zone console-zone--library">
+        <p class="console-zone-label">诗歌管理</p>
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+            <h3 style="margin:0;">📚 诗歌库</h3>
+            <div class="song-library-header-actions">
+                <button id="new-song-btn" class="icon-btn" title="新建诗歌">+</button>
+                <button type="button" id="new-from-template-btn" class="icon-btn icon-btn--text" title="从模板新建诗歌">📄</button>
             </div>
         </div>
-        <div id="song-batch-bar" class="song-batch-bar" style="display:none;">
-            <button type="button" id="batch-delete-btn" class="small-btn song-batch-action-btn">批量删除</button>
-            <button type="button" id="batch-export-btn" class="small-btn song-batch-action-btn">批量导出</button>
+        <div style="position:relative; margin-bottom:10px;">
+            <span style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--text-secondary); font-size:0.9rem; z-index:1;">🔍</span>
+            <input type="text" id="search-input" placeholder="搜索我的诗歌..." style="width:100%; padding:8px 12px 8px 32px; border-radius:12px; border:1px solid var(--border-color); background:rgba(255,255,255,0.08); backdrop-filter:blur(5px); color:var(--text-primary);">
         </div>
-        <details id="playlist-section" class="playlist-section" open>
-            <summary class="playlist-section-summary">📋 播放列表</summary>
-            <div class="playlist-section-body">
-                <ul id="playlist-list"></ul>
-                <div class="playlist-controls">
-                    <button id="playlist-start-btn" class="small-btn playlist-start-full">▶ 开始播放</button>
-                    <label class="playlist-auto-label">
-                        <input type="checkbox" id="playlist-auto-switch">
-                        🔄 自动切换
-                    </label>
-                </div>
-            </div>
-        </details>
-        <button type="button" id="add-song-btn" class="add-song-btn library-new-song-main">＋ 新建诗歌</button>
+        <div style="position:relative; margin-bottom:10px;">
+            <span style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--text-secondary); font-size:0.9rem; z-index:1;">🌐</span>
+            <input type="text" id="online-search-input" placeholder="在线搜索诗歌..." style="width:100%; padding:8px 12px 8px 32px; border-radius:12px; border:1px solid var(--border-color); background:rgba(255,255,255,0.08); backdrop-filter:blur(5px); color:var(--text-primary);">
+        </div>
+        <div id="online-results" style="max-height:150px; overflow-y:auto; margin-bottom:10px;"></div>
+        <div id="tag-filter" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px;"></div>
+        <ul id="song-list"></ul>
+        <button id="add-song-btn" class="add-song-btn">➕ 新建诗歌</button>
         <div class="file-import-export">
             <button id="export-data-btn" class="small-btn">📤 导出</button>
             <button id="import-data-btn" class="small-btn">📥 导入</button>
             <input type="file" id="import-file-input" accept=".worship,application/json" hidden>
         </div>
-        <button id="batch-import-btn" class="small-btn batch-import-margin">📋 批量导入歌词</button>
+        <button id="batch-import-btn" class="small-btn" style="margin-top:8px;">📋 批量导入歌词</button>
     </div>
 
     <div class="resize-handle" id="resize1"></div>
 
-    <!-- 中间编辑区 -->
-    <div id="editor-area">
-        <div id="current-song-title">
-            <input type="text" id="song-title-input" placeholder="诗歌标题" value="奇异恩典">
-            <div class="editor-area-title" style="font-size:0.8rem; color:var(--text-secondary); margin-right:12px; vertical-align:middle; background:transparent; font-weight:normal;">✍️ 诗歌编辑区</div>
-            <button id="save-song-btn" class="btn">保存歌词</button>
-            <button id="publish-song-btn" class="btn btn-outline">☁️ 发布到云端</button>
-            <span style="font-size:0.75rem;color:var(--text-secondary);max-width:220px;line-height:1.35;">发布后，其他用户将可以搜索和使用这首诗歌。</span>
+    <!-- 中间：编辑与预览区 -->
+    <div id="editor-area" class="console-zone console-zone--editor">
+        <p class="console-zone-label">编辑与预览</p>
+        <div id="editor-workspace-header" class="editor-workspace-header">
+            <input type="text" id="song-title-input" class="editor-song-title-input" placeholder="请输入歌名..." value="奇异恩典" aria-label="歌名">
         </div>
-        <textarea id="lyric-editor-large" placeholder="输入歌词，一行一句。用空行或 [page] 分隔页面。第一页若为单行将作为歌名。"></textarea>
-        <details id="song-meta-details" style="margin-bottom:10px;">
-            <summary style="cursor:pointer;padding:8px 12px;background:rgba(255,255,255,0.05);border-radius:10px;color:var(--text-secondary);font-size:0.9rem;list-style:none;user-select:none;">🎵 更多歌曲信息</summary>
-            <div id="song-meta" style="padding:12px;display:flex;gap:15px;align-items:center;flex-wrap:wrap;">
+        <div id="editor-action-bar" class="editor-action-bar" role="toolbar" aria-label="歌词编辑操作">
+            <button type="button" id="save-song-btn" class="editor-action-bar-btn" title="保存当前歌词到曲库"><span class="editor-action-bar-btn__icon" aria-hidden="true">💾</span><span class="editor-action-bar-btn__text">保存</span></button>
+            <button type="button" id="save-as-template-btn" class="editor-action-bar-btn" title="将当前歌词存为可复用模板"><span class="editor-action-bar-btn__icon" aria-hidden="true">📄</span><span class="editor-action-bar-btn__text">存为模板</span></button>
+            <div id="upload-cloud-action-wrap" style="position:relative;display:inline-flex;align-items:center;gap:6px;flex-wrap:nowrap;">
+                <button type="button" id="upload-cloud-btn" class="editor-action-bar-btn" title="将当前诗歌与高级编辑设置上传到云端，生成分享链接" disabled><span class="editor-action-bar-btn__icon" aria-hidden="true">☁️</span><span class="editor-action-bar-btn__text" id="upload-cloud-btn-label">上传云端</span></button>
+                <button type="button" id="upload-history-toggle-btn" class="editor-action-bar-btn" title="查看最近 5 条上传记录" aria-expanded="false" aria-controls="upload-history-dropdown"><span class="editor-action-bar-btn__icon" aria-hidden="true">📋</span><span class="editor-action-bar-btn__text">历史</span></button>
+                <div id="upload-history-dropdown" role="region" aria-label="上传历史" hidden style="position:absolute;top:100%;left:0;margin-top:6px;z-index:16000;padding:12px;border-radius:12px;border:1px solid rgba(212,175,55,0.28);background:rgba(14,16,24,0.94);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:0 12px 40px rgba(0,0,0,0.45);min-width:min(300px,88vw);max-width:min(400px,94vw);max-height:min(70vh,520px);overflow-y:auto;box-sizing:border-box;">
+                    <div id="upload-history-dropdown-list" style="display:flex;flex-direction:column;gap:10px;"></div>
+                </div>
+            </div>
+            <button type="button" id="apply-to-display" class="editor-action-bar-btn" title="将当前样式与歌词同步到演示屏"><span class="editor-action-bar-btn__icon" aria-hidden="true">📺</span><span class="editor-action-bar-btn__text">应用到演示屏</span></button>
+            <button type="button" id="reset-current-song" class="editor-action-bar-btn" title="恢复本首诗歌的示例内容"><span class="editor-action-bar-btn__icon" aria-hidden="true">🔄</span><span class="editor-action-bar-btn__text">重置示例</span></button>
+            <button type="button" id="ocr-btn" class="editor-action-bar-btn" title="从照片识别歌词"><span class="editor-action-bar-btn__icon" aria-hidden="true">📷</span><span class="editor-action-bar-btn__text">拍照识歌词</span></button>
+            <button type="button" id="help-btn" class="editor-action-bar-btn" title="查看使用说明与快捷键"><span class="editor-action-bar-btn__icon" aria-hidden="true">❓</span><span class="editor-action-bar-btn__text">使用帮助</span></button>
+            <input type="file" id="ocr-file-input" accept="image/*" capture="environment" hidden>
+        </div>
+        <div class="editor-hidden-controls" hidden aria-hidden="true">
+            <button type="button" id="publish-song-btn" class="btn btn-outline">☁️ 发布到云端</button>
+        </div>
+        <details id="song-meta-details" class="song-meta-details" hidden>
+            <summary class="song-meta-details-summary">🎵 更多歌曲信息</summary>
+            <div id="song-meta" class="song-meta-details-body">
                 <span class="meta-field"><label>🎵 调性</label><input type="text" id="song-key" placeholder="C"></span>
                 <span class="meta-field"><label>⏱️ 速度</label><input type="text" id="song-tempo" placeholder="72"></span>
                 <span class="meta-field" style="flex:1; min-width:180px; max-width:300px;"><label>📝 备注</label><input type="text" id="song-notes" placeholder="如：副歌反复" style="width:100%;"></span>
                 <span class="meta-field"><label>🏷️ 标签</label><input type="text" id="song-tags" placeholder="敬拜,感恩" style="width:120px;"></span>
             </div>
         </details>
-        <div class="editor-toolbar">
-            <button id="apply-to-display" class="btn">应用到演示屏</button>
-            <button id="reset-current-song" class="btn btn-outline">重置示例</button>
-            <button id="ocr-btn" class="btn btn-outline">📷 拍照识歌词</button>
-            <button id="help-btn" class="btn btn-outline" title="使用帮助">❓ 使用帮助</button>
-            <input type="file" id="ocr-file-input" accept="image/*" capture="environment" hidden>
-        </div>
-        <!-- 投屏预览 -->
-        <div id="speaker-view">
-            <div id="speaker-resize-handle"></div>
-            <div class="speaker-view-label">投屏预览 - 可左右滑动预览各页</div>
-            <h4>
-                <span>🖥️ 投屏预览：横滑预览各页</span>
-                <span>
-                    <span class="size-btn-group">
-                        <button id="size-s" class="size-btn">S</button>
-                        <button id="size-m" class="size-btn active">M</button>
-                        <button id="size-l" class="size-btn">L</button>
+        <div class="editor-main-body">
+            <div class="editor-lyric-preview-row" id="editor-lyric-preview-row">
+                <div class="editor-lyric-column">
+                    <textarea id="lyric-editor-large" placeholder="在此粘贴歌词，一行一句，用空行分段"></textarea>
+                </div>
+                <div class="editor-col-resizer" id="editor-col-resizer" role="separator" aria-orientation="vertical" aria-label="调整歌词编辑区与快速预览区宽度" tabindex="0"></div>
+                <div class="editor-quick-preview-column">
+                    <h3 class="quick-preview-heading">👁️ 快速预览 <span id="preview-line-counter"></span></h3>
+                    <div id="first-visit-onboarding" class="first-visit-onboarding" hidden>
+                        <div class="first-visit-onboarding-inner">
+                            <p class="first-visit-onboarding-title">欢迎使用</p>
+                            <ol class="first-visit-onboarding-steps">
+                                <li><span class="first-visit-step-emoji" aria-hidden="true">📝</span> 在此粘贴歌词，一行一句</li>
+                                <li><span class="first-visit-step-emoji" aria-hidden="true">✂️</span> 用空行或 <code>[page]</code> 分段</li>
+                                <li><span class="first-visit-step-emoji" aria-hidden="true">📺</span> 点击「开启投屏」放映</li>
+                            </ol>
+                            <button type="button" id="first-visit-onboarding-dismiss" class="first-visit-onboarding-dismiss">知道了</button>
+                        </div>
+                    </div>
+                    <div id="mini-preview-wrapper">
+                        <div id="mini-preview"></div>
+                        <div id="preview-resize-handle">⋮⋮</div>
+                    </div>
+                </div>
+            </div>
+            <!-- 投屏预览：分页卡片，独立于右侧快速预览 -->
+            <div id="speaker-view">
+                <div id="speaker-resize-handle"></div>
+                <div class="speaker-view-label">投屏预览 - 可左右滑动预览各页</div>
+                <h4>
+                    <span>🖥️ 投屏预览：横滑预览各页</span>
+                    <span>
+                        <span class="size-btn-group">
+                            <button id="size-s" class="size-btn">S</button>
+                            <button id="size-m" class="size-btn active">M</button>
+                            <button id="size-l" class="size-btn">L</button>
+                        </span>
+                        <span class="page-indicator-wrap" title="输入页码后按回车跳转">
+                            <input type="text" inputmode="numeric" pattern="[0-9]*" id="page-indicator-input" class="page-indicator-input" value="1" aria-label="当前页码">
+                            <span id="page-indicator-total" class="page-indicator-total">/1</span>
+                        </span>
                     </span>
-                    <span id="page-indicator">1/1</span>
-                </span>
-            </h4>
-            <div id="card-container"></div>
-            <div class="hint-text">← 左右滑动卡片浏览页面</div>
+                </h4>
+                <details id="all-pages-strip" class="all-pages-strip">
+                    <summary class="all-pages-strip-summary">📋 全部页面</summary>
+                    <div id="all-pages-thumbs" class="all-pages-thumbs" role="list"></div>
+                </details>
+                <div id="card-container"></div>
+                <div class="hint-text">← 左右滑动卡片浏览页面</div>
+            </div>
         </div>
     </div>
 
     <div class="resize-handle" id="resize2"></div>
 
-    <!-- 右侧预览与设置 -->
-    <div id="preview-panel">
-        <h3>👁️ 快速预览 <span id="preview-line-counter"></span></h3>
-        <div id="mini-preview-wrapper">
-            <div id="mini-preview"></div>
-            <div id="preview-resize-handle">⋮⋮</div>
-        </div>
+    <!-- 右侧：投屏控制区 -->
+    <div id="preview-panel" class="console-zone console-zone--projection">
+        <input type="checkbox" id="adv-drawer-toggle" class="adv-drawer-checkbox" aria-hidden="true" tabindex="-1">
+        <p class="console-zone-label">投屏控制</p>
+        <button type="button" class="adv-drawer-open-btn" onclick="var d=document.getElementById('adv-drawer-toggle');if(d){d.checked=true;}" title="打开高级编辑">
+            <span class="adv-drawer-open-icon" aria-hidden="true">🎨</span>
+            <span class="adv-drawer-open-text">高级编辑</span>
+        </button>
+        <div class="projection-settings-flex-fill">
         <div class="setting-group bg-panel-group">
             <label>🎨 背景</label>
             <div class="bg-tabs" role="tablist">
@@ -135,7 +163,7 @@
                     <div class="bg-option" data-bg="cross-glow" title="十字光晕"></div>
                     <div class="bg-option" data-bg="gradient" title="渐变"></div>
                     <div class="bg-option" data-bg="image" id="upload-bg-trigger" title="从文件上传"></div>
-                    <input type="file" id="bg-image-input" accept="image/png,image/jpeg,image/jpg,image/gif,image/bmp,image/webp,video/mp4,video/webm,video/ogg" hidden>
+                    <input type="file" id="bg-image-input" accept="image/png,image/jpeg,image/jpg,image/gif,image/bmp,image/webp" hidden>
                 </div>
                 <button type="button" id="upload-bg-btn" class="btn-outline" style="width:100%; margin-top:8px;">🖼️ 上传背景图片</button>
                 <p class="bg-privacy-hint">您上传的背景默认为私密，可在「我的背景」中共享到云端。</p>
@@ -150,29 +178,6 @@
             <button type="button" id="free-bg-link" class="btn-outline" style="width:100%; margin-top:10px;">🎨 免费背景素材</button>
         </div>
         <div class="setting-group">
-            <label>🅰️ 字体选择</label>
-            <select id="font-family-selector">
-                <option value="'Microsoft YaHei','PingFang SC',sans-serif" selected>微软雅黑</option>
-                <option value="'SimSun','Songti SC',serif">宋体</option>
-                <option value="'SimHei','Heiti SC',sans-serif">黑体</option>
-                <option value="'KaiTi','Kaiti SC',serif">楷体</option>
-                <option value="'FangSong','STFangsong',serif">仿宋</option>
-                <option value="'Noto Sans SC','Source Han Sans SC',sans-serif">思源黑体</option>
-            </select>
-        </div>
-        <div class="setting-group">
-            <label>🔤 字体大小 <span id="font-val">56</span>px</label>
-            <input type="range" id="font-slider" min="24" max="120" value="56" step="2">
-        </div>
-        <div class="setting-group">
-            <label>📏 默认行数 <input type="number" id="default-lines-input" min="1" max="20" value="4"> 行</label>
-            <div class="setting-tip">💡 用空行或 [page] 可自定义每页行数</div>
-        </div>
-        <div class="setting-group">
-            <label>📍 垂直位置 <span id="pos-val">45</span>%</label>
-            <input type="range" id="pos-slider" min="20" max="70" value="45">
-        </div>
-        <div class="setting-group">
             <label>⏱️ 自动播放</label>
             <div>
                 <input type="number" id="autoplay-interval" min="1" max="30" value="5"> 秒
@@ -181,49 +186,161 @@
             </div>
             <div class="progress-bar"><div class="progress-fill" id="autoplay-progress"></div></div>
         </div>
-        <div class="setting-group">
-            <label>🎭 界面主题</label>
-            <select id="theme-selector">
-                <option value="dark" selected>深色</option>
-                <option value="light">浅色</option>
-                <option value="warm">暖色</option>
-                <option value="high-contrast">高对比</option>
-            </select>
-            <label class="theme-bg-subheading">自定义主题背景</label>
-            <div id="theme-bg-grid" class="theme-bg-grid" role="group" aria-label="自定义主题背景"></div>
-            <input type="file" id="theme-bg-input" accept="image/png,image/jpeg,image/jpg,image/gif,image/bmp,image/webp,image/*" hidden>
-            <div id="theme-bg-opacity-row" class="theme-bg-opacity-row is-disabled">
-                <label for="theme-bg-opacity-slider">背景透明度</label>
-                <div class="theme-bg-opacity-inner">
-                    <input type="range" id="theme-bg-opacity-slider" min="0.05" max="1" step="0.05" value="0.65" disabled>
-                    <span id="theme-bg-opacity-value">65%</span>
+        <details id="playlist-panel" class="projection-playlist-panel">
+            <summary class="projection-playlist-summary">📋 播放列表</summary>
+            <div class="projection-playlist-body">
+                <ul id="playlist-list"></ul>
+                <div class="playlist-controls projection-playlist-controls">
+                    <button id="playlist-start-btn" class="small-btn playlist-start-full">▶ 开始播放</button>
+                    <label class="playlist-auto-label">
+                        <input type="checkbox" id="playlist-auto-switch">
+                        🔄 自动切换
+                    </label>
                 </div>
             </div>
+        </details>
         </div>
-        <div style="display:flex;gap:8px;margin-top:8px;">
+        <div class="projection-actions-row" style="display:flex;gap:8px;margin-top:8px;">
             <button id="open-display-btn" class="btn" style="background:#2e7d32; flex:1; height:42px; display:flex; align-items:center; justify-content:center;">📺 开启投屏</button>
             <button id="open-leader-btn" class="btn btn-outline" style="flex:1; height:42px; display:flex; align-items:center; justify-content:center;">📱 主领视图</button>
             <button id="leader-qr-btn" class="btn btn-outline" style="width:42px; height:42px; display:flex; align-items:center; justify-content:center;" title="主领视图二维码">📱</button>
         </div>
-        <p class="open-display-hint">因浏览器限制暂不支持一键投屏，点击后请按系统提示操作</p>
-        <p class="hint-text" style="margin-top:6px;">💡 首次使用需在浏览器中允许弹窗和多屏幕权限</p>
+        <p class="hint-text hint-text--footer-inline" style="margin-top:6px;">B=黑屏 W=白屏 F=全屏 &nbsp;|&nbsp; 💡 首次使用需在浏览器中允许弹窗和多屏幕权限</p>
         <p class="hint-text">© 2026 敬拜投屏工具。基于 MIT 许可证开源，使用者须保留此版权声明。</p>
         <p class="hint-text">隐私说明：本网站不会收集用户个人信息，所有歌词数据仅保留在您的本地浏览器中。</p>
         <p class="hint-text">📝 用户反馈：<a href="https://docs.google.com/forms/d/e/1FAIpQLSf3XMyOfjcoV1MNWMmZZ0JEapXDnUfa3qWLjELN_YyqvcLQGw/viewform" target="_blank" rel="noopener noreferrer" style="color:var(--accent);text-decoration:underline;">点击提交反馈</a></p>
-        <p class="hint-text">B=黑屏 W=白屏 F=全屏</p>
-    </div>
-</div>
-<div id="restore-projection-overlay" class="restore-projection-overlay" hidden>
-    <div class="restore-projection-card" role="dialog" aria-modal="true" aria-labelledby="restore-projection-title">
-        <div id="restore-projection-title" class="restore-projection-title">📺 投屏已丢失或退出全屏</div>
-        <div class="restore-projection-actions">
-            <button type="button" id="restore-projection-btn" class="restore-projection-primary">恢复投屏</button>
-            <button type="button" id="restore-projection-dismiss" class="restore-projection-secondary">关闭</button>
-        </div>
-        <p class="restore-projection-foot">💡 按 H 键查看操作提示</p>
+        <label class="adv-drawer-scrim" for="adv-drawer-toggle" aria-hidden="true"></label>
+        <aside class="adv-drawer-panel" aria-label="高级编辑抽屉" id="adv-drawer-panel">
+            <div class="adv-drawer-width-handle" id="adv-drawer-width-handle" title="拖动调节面板宽度" aria-hidden="true"></div>
+            <div class="adv-drawer-panel-inner">
+                <header class="adv-drawer-header">
+                    <span class="adv-drawer-panel-title">🎨 高级编辑</span>
+                    <label class="adv-drawer-close" for="adv-drawer-toggle" title="关闭">✕</label>
+                </header>
+                <div class="adv-drawer-scroll">
+                    <div class="adv-drawer-accordion" id="adv-drawer-accordion">
+                        <section class="adv-drawer-acc-item is-open" data-adv-acc data-adv-acc-id="font">
+                            <button type="button" class="adv-drawer-acc-trigger" aria-expanded="true"><span>✍️ 文字样式</span><span class="adv-drawer-acc-chevron" aria-hidden="true"></span></button>
+                            <div class="adv-drawer-acc-panel">
+                                <div class="adv-drawer-acc-panel-inner adv-drawer-card-body">
+                                    <label class="adv-drawer-field-label" for="font-family-selector">字体选择</label>
+                                    <select id="font-family-selector" class="adv-font-family-select">
+                                        <option value="'Microsoft YaHei','PingFang SC',sans-serif" selected style="font-family:'Microsoft YaHei','PingFang SC',sans-serif">微软雅黑</option>
+                                        <option value="'SimSun','Songti SC',serif" style="font-family:'SimSun','Songti SC',serif">宋体</option>
+                                        <option value="'KaiTi','Kaiti SC',serif" style="font-family:'KaiTi','Kaiti SC',serif">楷体</option>
+                                        <option value="'SimHei','Heiti SC',sans-serif" style="font-family:'SimHei','Heiti SC',sans-serif">黑体</option>
+                                        <option value="'FangSong','STFangsong',serif" style="font-family:'FangSong','STFangsong',serif">仿宋</option>
+                                        <option value="'Noto Sans SC','Source Han Sans SC',sans-serif" style="font-family:'Noto Sans SC','Source Han Sans SC',sans-serif">思源黑体</option>
+                                    </select>
+                                    <label class="adv-drawer-field-label" for="font-slider">字号 <span id="font-val">56</span> px</label>
+                                    <input type="range" id="font-slider" class="adv-range" min="24" max="120" value="56" step="2">
+                                    <div id="adv-font-color-slot"></div>
+                                    <label class="adv-drawer-field-label" for="text-stroke-slider">描边 <span id="text-stroke-val">0</span> px</label>
+                                    <input type="range" id="text-stroke-slider" class="adv-range" min="0" max="6" value="0" step="1" title="歌词描边粗细">
+                                </div>
+                            </div>
+                        </section>
+                        <section class="adv-drawer-acc-item is-open" data-adv-acc data-adv-acc-id="bgfine">
+                            <button type="button" class="adv-drawer-acc-trigger" aria-expanded="true"><span>🖼️ 背景微调</span><span class="adv-drawer-acc-chevron" aria-hidden="true"></span></button>
+                            <div class="adv-drawer-acc-panel">
+                                <div class="adv-drawer-acc-panel-inner adv-drawer-card-body" id="adv-bg-fine-body">
+                                    <div id="theme-bg-opacity-row" class="theme-bg-opacity-row is-disabled">
+                                        <label for="theme-bg-opacity-slider">主题壁纸透明度</label>
+                                        <div class="theme-bg-opacity-inner">
+                                            <span id="theme-bg-opacity-swatch" class="adv-slider-swatch adv-slider-swatch--theme-bg" aria-hidden="true"></span>
+                                            <input type="range" id="theme-bg-opacity-slider" class="adv-range" min="0.3" max="1" step="0.05" value="0.75" disabled>
+                                            <span id="theme-bg-opacity-value">75%</span>
+                                        </div>
+                                    </div>
+                                    <div id="adv-projection-mask-slot"></div>
+                                    <label class="adv-drawer-field-label" for="vignette-shape-select">局部亮度 · 渐变形状</label>
+                                    <select id="vignette-shape-select">
+                                        <option value="circle" selected>圆形</option>
+                                        <option value="ellipse">椭圆形</option>
+                                    </select>
+                                    <label class="adv-drawer-field-label" for="vignette-center-slider">中心亮度偏移 <span id="vignette-center-val">0</span> %</label>
+                                    <input type="range" id="vignette-center-slider" class="adv-range" min="-50" max="50" value="0" step="1" title="负值压暗中心，正值提亮中心">
+                                    <label class="adv-drawer-field-label" for="vignette-edge-slider">边缘暗度 <span id="vignette-edge-val">0</span> %</label>
+                                    <input type="range" id="vignette-edge-slider" class="adv-range" min="0" max="90" value="0" step="1" title="四周压暗强度">
+                                    <label class="adv-drawer-field-label" for="adv-lyric-overlay-opacity">快速预览暗角浓度</label>
+                                    <input type="range" id="adv-lyric-overlay-opacity" class="adv-range" min="0" max="55" value="0" step="1" title="叠在预览上的半透明层">
+                                    <label class="adv-drawer-field-label" for="adv-lyric-layer-blur">快速预览毛玻璃模糊</label>
+                                    <input type="range" id="adv-lyric-layer-blur" class="adv-range" min="0" max="20" value="0" step="1" title="作用于预览区叠层">
+                                </div>
+                            </div>
+                        </section>
+                        <section class="adv-drawer-acc-item is-open" data-adv-acc data-adv-acc-id="margin">
+                            <button type="button" class="adv-drawer-acc-trigger" aria-expanded="true"><span>📐 布局边距</span><span class="adv-drawer-acc-chevron" aria-hidden="true"></span></button>
+                            <div class="adv-drawer-acc-panel">
+                                <div class="adv-drawer-acc-panel-inner adv-drawer-card-body">
+                                    <label class="adv-drawer-field-label" for="pos-slider">垂直位置 <span id="pos-val">45</span> %</label>
+                                    <input type="range" id="pos-slider" class="adv-range" min="20" max="70" value="45">
+                                    <label class="adv-drawer-field-label" for="adv-preview-line-height">行间距</label>
+                                    <input type="range" id="adv-preview-line-height" class="adv-range" min="1.2" max="2.4" value="1.65" step="0.05">
+                                    <label class="adv-drawer-field-label" for="default-lines-input">默认行数（分页）</label>
+                                    <div class="adv-drawer-inline-field">
+                                        <input type="number" id="default-lines-input" min="1" max="20" value="4" style="width:4rem;">
+                                        <span class="adv-drawer-suffix">行</span>
+                                    </div>
+                                    <div class="setting-tip adv-drawer-tip">💡 用空行或 [page] 可自定义每页行数</div>
+                                </div>
+                            </div>
+                        </section>
+                        <section class="adv-drawer-acc-item is-open" data-adv-acc data-adv-acc-id="transition">
+                            <button type="button" class="adv-drawer-acc-trigger" aria-expanded="true"><span>✨ 转场特效</span><span class="adv-drawer-acc-chevron" aria-hidden="true"></span></button>
+                            <div class="adv-drawer-acc-panel">
+                                <div class="adv-drawer-acc-panel-inner adv-drawer-card-body">
+                                    <label class="adv-drawer-field-label" for="page-transition-select">翻页动画</label>
+                                    <select id="page-transition-select">
+                                        <option value="none" selected>无过渡</option>
+                                        <option value="fade">淡入淡出</option>
+                                        <option value="slide">平滑滑动</option>
+                                        <option value="scale">缩放</option>
+                                    </select>
+                                    <label class="adv-drawer-field-label" for="page-transition-speed-slider">动画速度 <span id="page-transition-speed-val">0.6</span> 秒</label>
+                                    <input type="range" id="page-transition-speed-slider" class="adv-range" min="0.3" max="1.5" value="0.6" step="0.05" title="翻页过渡时长">
+                                </div>
+                            </div>
+                        </section>
+                        <section class="adv-drawer-acc-item adv-drawer-acc-item--theme is-open" data-adv-acc data-adv-acc-id="theme">
+                            <button type="button" class="adv-drawer-acc-trigger" aria-expanded="true"><span>🎭 界面主题</span><span class="adv-drawer-acc-chevron" aria-hidden="true"></span></button>
+                            <div class="adv-drawer-acc-panel">
+                                <div class="adv-drawer-acc-panel-inner">
+                                    <div class="setting-group adv-drawer-theme-setting-group">
+                                        <label>🎭 界面主题</label>
+                                        <select id="theme-selector">
+                                            <option value="dark" selected>深色</option>
+                                            <option value="light">浅色</option>
+                                            <option value="warm">暖色</option>
+                                            <option value="high-contrast">高对比</option>
+                                        </select>
+                                        <label class="theme-bg-subheading">自定义主题背景</label>
+                                        <div id="theme-bg-grid" class="theme-bg-grid" role="group" aria-label="自定义主题背景"></div>
+                                        <input type="file" id="theme-bg-input" accept="image/png,image/jpeg,image/jpg,image/gif,image/bmp,image/webp,image/*" hidden>
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+                    </div>
+                </div>
+            </div>
+        </aside>
     </div>
 </div>
 <div id="toast"></div>
+<div id="corner-success-toast" class="corner-success-toast" role="status" aria-live="polite" hidden></div>
+<div id="corner-cloud-upload-toast" class="corner-success-toast" role="status" aria-live="polite" aria-atomic="true" hidden style="z-index:100051;pointer-events:auto;">
+    <div id="corner-cloud-upload-msg"></div>
+    <div id="corner-cloud-upload-link-wrap" hidden style="margin-top:10px;font-size:0.82rem;font-weight:500;line-height:1.5;word-break:break-all;border-top:1px solid rgba(200,245,212,0.22);padding-top:8px;">
+        <span style="opacity:0.88;display:block;margin-bottom:4px;">分享链接（可复制或点击打开）</span>
+        <a id="corner-cloud-upload-link" href="#" target="_blank" rel="noopener noreferrer" style="color:#9feabd;text-decoration:underline;"></a>
+    </div>
+</div>
+<div id="popup-blocked-banner" class="popup-blocked-banner" hidden>
+    <span class="popup-blocked-banner__icon" aria-hidden="true">⚠️</span>
+    <p class="popup-blocked-banner__text">弹窗已被浏览器拦截，请点击浏览器地址栏的拦截图标并选择「始终允许」，然后重新点击按钮。</p>
+    <button type="button" class="popup-blocked-banner__close" aria-label="关闭">✕</button>
+</div>
 <!-- 批量导入弹窗 -->
 <div id="batch-import-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); z-index:2000; justify-content:center; align-items:center;">
   <div style="background:var(--bg-secondary); border-radius:20px; padding:30px; width:600px; max-width:90vw; max-height:80vh; overflow-y:auto;">
@@ -242,10 +359,10 @@
 
 <h3>一、界面概览</h3>
 <table>
-<tr><td><b>诗歌库</b></td><td>左侧</td><td>管理所有诗歌：新建、搜索、标签筛选、播放列表</td></tr>
-<tr><td><b>编辑区</b></td><td>中间</td><td>编辑当前诗歌歌词、调性、速度、备注</td></tr>
-<tr><td><b>设置面板</b></td><td>右侧</td><td>调整背景、字体、行数、位置、自动播放、主题外观</td></tr>
-<tr><td><b>快速预览</b></td><td>右侧上部</td><td>实时预览当前页歌词</td></tr>
+<tr><td><b>诗歌库</b></td><td>左侧</td><td>管理所有诗歌：新建、搜索、标签筛选、导入导出</td></tr>
+<tr><td><b>编辑与预览</b></td><td>中间</td><td>歌词编辑与右侧快速预览并排；下方为投屏分页预览卡片</td></tr>
+<tr><td><b>投屏控制</b></td><td>右侧</td><td>背景与字体、行数位置、自动播放、主题、播放列表、开启投屏</td></tr>
+<tr><td><b>快速预览</b></td><td>中间右侧</td><td>与歌词编辑器同高并排，实时预览当前页</td></tr>
 </table>
 
 <h3>二、诗歌管理</h3>
@@ -380,15 +497,148 @@
 <p style="text-align:center; color:var(--text-secondary); margin-top:20px;">© 2026 敬拜投屏工具 · 基于 MIT 许可证开源</p>
 </template>
 
-<div id="song-context-menu" class="song-context-menu" hidden role="menu" aria-label="诗歌操作">
-    <button type="button" class="song-context-menu-item" data-action="edit" role="menuitem">✏️ 编辑</button>
-    <button type="button" class="song-context-menu-item" data-action="copy" role="menuitem">📋 复制</button>
-    <button type="button" class="song-context-menu-item" data-action="delete" role="menuitem">🗑️ 删除</button>
-</div>
+<script>
+(function () {
+    var SPLIT_KEY = 'worship-editor-split-pct';
+    var DRAWER_W_KEY = 'worship-adv-drawer-width-px';
+    var root = document.documentElement;
+    var row = document.getElementById('editor-lyric-preview-row');
+    var colResizer = document.getElementById('editor-col-resizer');
+    var drawerPanel = document.getElementById('adv-drawer-panel');
+    var drawerHandle = document.getElementById('adv-drawer-width-handle');
+    var drawerToggle = document.getElementById('adv-drawer-toggle');
 
-<!-- Cloudflare Web Analytics -->
-<script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "c7c201b5719843eaba515c1453b4ed34"}'></script>
-<!-- End Cloudflare Web Analytics -->
+    function clamp(n, lo, hi) {
+        return Math.max(lo, Math.min(hi, n));
+    }
+
+    var storedSplit = parseFloat(localStorage.getItem(SPLIT_KEY));
+    if (!isNaN(storedSplit) && storedSplit >= 20 && storedSplit <= 80) {
+        root.style.setProperty('--editor-split-pct', String(storedSplit));
+    }
+    var storedDrawerW = parseInt(localStorage.getItem(DRAWER_W_KEY), 10);
+    if (!isNaN(storedDrawerW) && storedDrawerW >= 280 && storedDrawerW <= 600) {
+        root.style.setProperty('--adv-drawer-user-width', storedDrawerW + 'px');
+    }
+
+    var dragEditor = null;
+    var rafEditor = 0;
+    function applyEditorSplit(clientX) {
+        if (!row) return;
+        var rect = row.getBoundingClientRect();
+        var w = rect.width;
+        if (w < 40) return;
+        var pct = ((clientX - rect.left) / w) * 100;
+        pct = clamp(pct, 20, 80);
+        root.style.setProperty('--editor-split-pct', String(pct));
+    }
+    function onEditorMove(e) {
+        if (!dragEditor) return;
+        if (rafEditor) cancelAnimationFrame(rafEditor);
+        var cx = e.clientX;
+        rafEditor = requestAnimationFrame(function () {
+            rafEditor = 0;
+            applyEditorSplit(cx);
+        });
+    }
+    function endEditorDrag() {
+        if (!dragEditor) return;
+        dragEditor = false;
+        document.body.classList.remove('is-col-resizing');
+        window.removeEventListener('mousemove', onEditorMove);
+        window.removeEventListener('mouseup', endEditorDrag);
+        window.removeEventListener('touchmove', onEditorTouchMove);
+        window.removeEventListener('touchend', endEditorDrag);
+        window.removeEventListener('touchcancel', endEditorDrag);
+        var v = parseFloat(getComputedStyle(root).getPropertyValue('--editor-split-pct'));
+        if (!isNaN(v)) localStorage.setItem(SPLIT_KEY, String(Math.round(v * 10) / 10));
+    }
+    function onEditorTouchMove(e) {
+        if (!e.touches || !e.touches[0]) return;
+        onEditorMove(e.touches[0]);
+    }
+    function startEditorDrag(e) {
+        if (!row || window.matchMedia('(max-width: 960px)').matches) return;
+        dragEditor = true;
+        document.body.classList.add('is-col-resizing');
+        if (e.type === 'touchstart') {
+            applyEditorSplit(e.touches[0].clientX);
+            window.addEventListener('touchmove', onEditorTouchMove, { passive: true });
+            window.addEventListener('touchend', endEditorDrag);
+            window.addEventListener('touchcancel', endEditorDrag);
+        } else {
+            applyEditorSplit(e.clientX);
+            window.addEventListener('mousemove', onEditorMove);
+            window.addEventListener('mouseup', endEditorDrag);
+        }
+        e.preventDefault();
+    }
+    if (colResizer) {
+        colResizer.addEventListener('mousedown', startEditorDrag);
+        colResizer.addEventListener('touchstart', startEditorDrag, { passive: false });
+        colResizer.addEventListener('keydown', function (e) {
+            if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+            var cur = parseFloat(getComputedStyle(root).getPropertyValue('--editor-split-pct'));
+            if (isNaN(cur)) cur = 58;
+            var step = e.shiftKey ? 5 : 1;
+            var next = e.key === 'ArrowLeft' ? cur - step : cur + step;
+            root.style.setProperty('--editor-split-pct', String(clamp(next, 20, 80)));
+            e.preventDefault();
+        });
+    }
+
+    var dragDrawer = null;
+    var rafDrawer = 0;
+    function drawerWidthFromClientX(clientX) {
+        return clamp(window.innerWidth - clientX, 280, 600);
+    }
+    function onDrawerMove(e) {
+        if (!dragDrawer) return;
+        var cx = e.clientX;
+        if (rafDrawer) cancelAnimationFrame(rafDrawer);
+        rafDrawer = requestAnimationFrame(function () {
+            rafDrawer = 0;
+            root.style.setProperty('--adv-drawer-user-width', drawerWidthFromClientX(cx) + 'px');
+        });
+    }
+    function endDrawerDrag() {
+        if (!dragDrawer) return;
+        dragDrawer = false;
+        document.body.classList.remove('is-adv-drawer-resizing');
+        window.removeEventListener('mousemove', onDrawerMove);
+        window.removeEventListener('mouseup', endDrawerDrag);
+        window.removeEventListener('touchmove', onDrawerTouchMove);
+        window.removeEventListener('touchend', endDrawerDrag);
+        window.removeEventListener('touchcancel', endDrawerDrag);
+        var m = getComputedStyle(root).getPropertyValue('--adv-drawer-user-width').match(/([\d.]+)/);
+        if (m) localStorage.setItem(DRAWER_W_KEY, String(Math.round(parseFloat(m[1]))));
+    }
+    function onDrawerTouchMove(e) {
+        if (!e.touches || !e.touches[0]) return;
+        onDrawerMove(e.touches[0]);
+    }
+    function startDrawerDrag(e) {
+        if (!drawerToggle || !drawerToggle.checked) return;
+        dragDrawer = true;
+        document.body.classList.add('is-adv-drawer-resizing');
+        if (e.type === 'touchstart') {
+            onDrawerMove(e.touches[0]);
+            window.addEventListener('touchmove', onDrawerTouchMove, { passive: true });
+            window.addEventListener('touchend', endDrawerDrag);
+            window.addEventListener('touchcancel', endDrawerDrag);
+        } else {
+            onDrawerMove(e);
+            window.addEventListener('mousemove', onDrawerMove);
+            window.addEventListener('mouseup', endDrawerDrag);
+        }
+        e.preventDefault();
+    }
+    if (drawerHandle) {
+        drawerHandle.addEventListener('mousedown', startDrawerDrag);
+        drawerHandle.addEventListener('touchstart', startDrawerDrag, { passive: false });
+    }
+})();
+</script>
 
 </body>
 </html>

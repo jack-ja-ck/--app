@@ -3,8 +3,7 @@
 const STORAGE_SONGS = "worship.songs.v5";
 const STORAGE_SETTINGS = "worship.settings.v5";
 
-const DEFAULT_LYRICS =
-    "奇异恩典\n何等甘甜\n我罪已得赦免\n\n前我失丧\n今被寻回\n瞎眼得看见";
+/** 默认歌词与 state.js 中 DEFAULT_LYRICS 一致；此处不重复声明 const，避免与全局冲突 */
 
 function clamp(n, min, max) {
     const x = Number(n);
@@ -130,7 +129,12 @@ const UI = {
 
     resetCurrentSong() {
         const ta = document.getElementById("lyric-editor-large");
-        if (ta) ta.value = DEFAULT_LYRICS;
+        if (ta) {
+            ta.value =
+                typeof DEFAULT_LYRICS !== "undefined"
+                    ? DEFAULT_LYRICS
+                    : "奇异恩典\n何等甘甜\n我罪已得赦免\n\n前我失丧\n今被寻回\n瞎眼得看见";
+        }
         UI.saveCurrentLyrics();
     },
 
@@ -2380,5 +2384,6 @@ function initLeaderView() {
 
 
 
-const root = typeof globalThis !== "undefined" ? globalThis : typeof window !== "undefined" ? window : self;
-root.UI = UI;
+const uiRoot =
+    typeof globalThis !== "undefined" ? globalThis : typeof window !== "undefined" ? window : self;
+uiRoot.UI = UI;

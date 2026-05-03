@@ -49,8 +49,9 @@ const AppRouter = {
     },
 
     broadcastState() {
-        const root = typeof globalThis !== "undefined" ? globalThis : typeof window !== "undefined" ? window : self;
-        const as = root.AppState;
+        const routerGlobal =
+            typeof globalThis !== "undefined" ? globalThis : typeof window !== "undefined" ? window : self;
+        const as = routerGlobal.AppState;
         let snapshot = null;
         if (as && typeof as === "object") {
             try {
@@ -110,19 +111,20 @@ const STORAGE_LIVE = "worship.live.v5";
  * 仅使用全局 songs、currentSongId、currentPages、currentPageIndex（及可选的 parsePages / setStore / saveSongs / saveSettings）。
  */
 function broadcastState() {
-    const root = typeof globalThis !== "undefined" ? globalThis : typeof window !== "undefined" ? window : self;
+    const routerGlobal =
+        typeof globalThis !== "undefined" ? globalThis : typeof window !== "undefined" ? window : self;
 
-    const songList = Array.isArray(root.songs) ? root.songs : [];
-    const sid = root.currentSongId;
+    const songList = Array.isArray(routerGlobal.songs) ? routerGlobal.songs : [];
+    const sid = routerGlobal.currentSongId;
     const song =
         songList.find((s) => s && String(s.id) === String(sid)) || songList[0] || null;
 
-    let pages = Array.isArray(root.currentPages) ? root.currentPages : [];
-    if ((!pages || pages.length === 0) && song && typeof root.parsePages === "function") {
-        pages = root.parsePages(String(song.lyrics || ""), 4);
+    let pages = Array.isArray(routerGlobal.currentPages) ? routerGlobal.currentPages : [];
+    if ((!pages || pages.length === 0) && song && typeof routerGlobal.parsePages === "function") {
+        pages = routerGlobal.parsePages(String(song.lyrics || ""), 4);
     }
 
-    let pageIndex = Math.floor(Number(root.currentPageIndex));
+    let pageIndex = Math.floor(Number(routerGlobal.currentPageIndex));
     if (!Number.isFinite(pageIndex)) pageIndex = 0;
     const maxIdx = Math.max(0, pages.length - 1);
     pageIndex = Math.max(0, Math.min(pageIndex, maxIdx));
@@ -154,8 +156,8 @@ function broadcastState() {
         }
     };
 
-    if (typeof root.setStore === "function") {
-        root.setStore(STORAGE_LIVE, liveState);
+    if (typeof routerGlobal.setStore === "function") {
+        routerGlobal.setStore(STORAGE_LIVE, liveState);
     }
 
     if (!AppRouter.channel && typeof AppRouter.init === "function") {
@@ -172,10 +174,11 @@ function broadcastState() {
         }
     }
 
-    if (typeof root.saveSongs === "function") root.saveSongs();
-    if (typeof root.saveSettings === "function") root.saveSettings();
+    if (typeof routerGlobal.saveSongs === "function") routerGlobal.saveSongs();
+    if (typeof routerGlobal.saveSettings === "function") routerGlobal.saveSettings();
 }
 
-const root = typeof globalThis !== "undefined" ? globalThis : typeof window !== "undefined" ? window : self;
-root.AppRouter = AppRouter;
-root.broadcastState = broadcastState;
+const routerRoot =
+    typeof globalThis !== "undefined" ? globalThis : typeof window !== "undefined" ? window : self;
+routerRoot.AppRouter = AppRouter;
+routerRoot.broadcastState = broadcastState;

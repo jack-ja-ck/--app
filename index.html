@@ -5,12 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>敬拜投屏 · 专业版</title>
     <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Long+Cang&family=Ma+Shan+Zheng&family=Noto+Sans+SC:wght@400;700&family=Noto+Serif+SC:wght@400;700&family=Zhi+Mang+Xing&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-webfont@1.7.0/style.css" crossorigin>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/harmonyos-sans-sc-webfont-splitted@1.1.0/dist/index.min.css" crossorigin>
+    <link rel="stylesheet" href="https://fontsapi.zeoseven.com/446/main/result.css" crossorigin>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js" defer></script>
     <script src="js/utils.js"></script>
     <script src="js/state.js"></script>
     <script src="js/router.js"></script>
     <script src="js/ui.js"></script>
+    <script src="js/fonts.js"></script>
     <script src="app.js" defer></script>
 </head>
 <body data-theme="dark">
@@ -224,14 +231,8 @@
                             <div class="adv-drawer-acc-panel">
                                 <div class="adv-drawer-acc-panel-inner adv-drawer-card-body">
                                     <label class="adv-drawer-field-label" for="font-family-selector">字体选择</label>
-                                    <select id="font-family-selector" class="adv-font-family-select">
-                                        <option value="'Microsoft YaHei','PingFang SC',sans-serif" selected style="font-family:'Microsoft YaHei','PingFang SC',sans-serif">微软雅黑</option>
-                                        <option value="'SimSun','Songti SC',serif" style="font-family:'SimSun','Songti SC',serif">宋体</option>
-                                        <option value="'KaiTi','Kaiti SC',serif" style="font-family:'KaiTi','Kaiti SC',serif">楷体</option>
-                                        <option value="'SimHei','Heiti SC',sans-serif" style="font-family:'SimHei','Heiti SC',sans-serif">黑体</option>
-                                        <option value="'FangSong','STFangsong',serif" style="font-family:'FangSong','STFangsong',serif">仿宋</option>
-                                        <option value="'Noto Sans SC','Source Han Sans SC',sans-serif" style="font-family:'Noto Sans SC','Source Han Sans SC',sans-serif">思源黑体</option>
-                                    </select>
+                                    <select id="font-family-selector" class="adv-font-family-select adv-font-family-select--lyrics" aria-label="歌词字体"></select>
+                                    <p class="adv-font-license-hint" role="note">字体均采用开源免费商用授权，无版权风险</p>
                                     <label class="adv-drawer-field-label" for="font-slider">字号 <span id="font-val">56</span> px</label>
                                     <input type="range" id="font-slider" class="adv-range" min="24" max="120" value="56" step="2">
                                     <div id="adv-font-color-slot"></div>

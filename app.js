@@ -1114,12 +1114,13 @@
         const fontOp = clamp(Number(fontOpacityPct ?? 100), 20, 100) / 100;
         const dur = clamp(Number(durSec), 0.3, 1.5);
         const ease = "cubic-bezier(0.4, 0, 0.2, 1)";
-        if (!ly || trans === "none" || !renderFn) {
-            renderFn();
+        if (!ly || trans === "none" || typeof renderFn !== "function") {
+            if (typeof renderFn === "function") renderFn();
             return;
         }
-        const finish = () => {
-            renderFn();
+        const midSwap = { pageTransitionMidSwap: true };
+        const afterExit = () => {
+            renderFn(midSwap);
             ly.style.transition = "none";
             if (trans === "slide") ly.style.transform = "translateX(28px)";
             else if (trans === "scale") ly.style.transform = "scale(1.08)";
@@ -1141,30 +1142,24 @@
             ly.style.transform = "scale(0.9)";
             ly.style.opacity = "0.12";
         } else {
-            finish();
+            afterExit();
             return;
         }
-        window.setTimeout(finish, Math.round(dur * 1000));
+        window.setTimeout(afterExit, Math.round(dur * 1000));
     }
 
-    /** 在任意元素上播放与投屏一致的翻页过渡（用于快速预览区） */
-    function runMiniPageTransitionPreviewOnElement(el, trans, durSec, fontOpacityPct) {
-        const fontOp = clamp(Number(fontOpacityPct ?? 100), 20, 100) / 100;
+    /** 迷你预览：仅离场（当前页歌词），结束后由回调替换 DOM */
+    function runMiniPageTransitionExitThen(el, trans, durSec, onExitComplete) {
         const dur = clamp(Number(durSec), 0.3, 1.5);
         const ease = "cubic-bezier(0.4, 0, 0.2, 1)";
-        if (!el || trans === "none") return;
-        const finish = () => {
-            el.style.transition = "none";
-            if (trans === "slide") el.style.transform = "translateX(28px)";
-            else if (trans === "scale") el.style.transform = "scale(1.08)";
-            else el.style.transform = "";
-            el.style.opacity = "0.01";
-            requestAnimationFrame(() => {
-                el.style.transition = `opacity ${dur}s ${ease}, transform ${dur}s ${ease}`;
-                el.style.opacity = String(fontOp);
-                el.style.transform = "";
-            });
-        };
+        if (!el || !onExitComplete) {
+            onExitComplete?.();
+            return;
+        }
+        if (trans === "none") {
+            onExitComplete();
+            return;
+        }
         el.style.transition = `opacity ${dur}s ${ease}, transform ${dur}s ${ease}`;
         if (trans === "fade") {
             el.style.opacity = "0";
@@ -1175,10 +1170,52 @@
             el.style.transform = "scale(0.9)";
             el.style.opacity = "0.12";
         } else {
-            finish();
+            onExitComplete();
             return;
         }
-        window.setTimeout(finish, Math.round(dur * 1000));
+        window.setTimeout(onExitComplete, Math.round(dur * 1000));
+    }
+
+    /** 迷你预览：入场（新歌词已挂载后调用） */
+    function runMiniPageTransitionEnter(el, trans, durSec, fontOpacityPct) {
+        const fontOp = clamp(Number(fontOpacityPct ?? 100), 20, 100) / 100;
+        const dur = clamp(Number(durSec), 0.3, 1.5);
+        const ease = "cubic-bezier(0.4, 0, 0.2, 1)";
+        if (!el || trans === "none") return;
+        el.style.transition = "none";
+        if (trans === "slide") el.style.transform = "translateX(28px)";
+        else if (trans === "scale") el.style.transform = "scale(1.08)";
+        else el.style.transform = "";
+        el.style.opacity = "0.01";
+        requestAnimationFrame(() => {
+            el.style.transition = `opacity ${dur}s ${ease}, transform ${dur}s ${ease}`;
+            el.style.opacity = String(fontOp);
+            el.style.transform = "";
+        });
+    }
+
+    /** 离场 → 回调重建内容 → 入场（快速预览翻页） */
+    function runMiniPageTransitionThenRender(el, trans, durSec, fontOpacityPct, afterExitCb) {
+        if (!afterExitCb) return;
+        if (!el || trans === "none") {
+            afterExitCb();
+            return;
+        }
+        runMiniPageTransitionExitThen(el, trans, durSec, () => {
+            afterExitCb();
+            const mini = $("mini-preview");
+            const st = mini?.querySelector(".mini-preview-lyric-stage");
+            if (st) runMiniPageTransitionEnter(st, trans, durSec, fontOpacityPct);
+        });
+    }
+
+    /** 设置面板演示：同一段内容先离场再入场（不涉及换词） */
+    function runMiniPageTransitionPreviewOnElement(el, trans, durSec, fontOpacityPct) {
+        const dur = clamp(Number(durSec), 0.3, 1.5);
+        if (!el || trans === "none") return;
+        runMiniPageTransitionExitThen(el, trans, dur, () => {
+            runMiniPageTransitionEnter(el, trans, dur, fontOpacityPct);
+        });
     }
 
     let miniPreviewTransitionDemoTimer = 0;
@@ -4459,6 +4496,26 @@ ${deleteBtnHtml}
         const lines = pages[state.currentPage] || [];
 
         if (options && options.linesOnly && isMainVideoBackground()) {
+            const transLo = ["fade", "slide", "scale"].includes(String(state.ui.pageTransition || ""))
+                ? state.ui.pageTransition
+                : "none";
+            const durLo = clamp(Number(state.ui.pageTransitionSpeed ?? 0.6), 0.3, 1.5);
+            const prevPLo = mini.dataset._miniTransPage;
+            const pageChangedLo = prevPLo !== undefined && prevPLo !== String(state.currentPage);
+            const stageLo0 = mini.querySelector(".mini-preview-lyric-stage");
+            if (
+                !(options && options.skipPageTransition) &&
+                pageChangedLo &&
+                transLo !== "none" &&
+                stageLo0 &&
+                stageLo0.isConnected
+            ) {
+                mini.dataset._miniTransPage = String(state.currentPage);
+                runMiniPageTransitionThenRender(stageLo0, transLo, durLo, state.ui.fontOpacityPct, () => {
+                    renderMiniPreview({ ...options, skipPageTransition: true });
+                });
+                return;
+            }
             mini.querySelectorAll(".mini-preview-lyric-stage").forEach((n) => n.remove());
             mini.querySelectorAll(".preview-line").forEach((n) => n.remove());
             mini.querySelectorAll(".mini-preview-projection-mask").forEach((n) => n.remove());
@@ -4496,11 +4553,28 @@ ${deleteBtnHtml}
                 stageLo.appendChild(row);
             });
             if ($("preview-line-counter")) $("preview-line-counter").textContent = `(${lines.length} 行)`;
-            const prevP = mini.dataset._miniTransPage;
             mini.dataset._miniTransPage = String(state.currentPage);
-            if (prevP !== undefined && prevP !== String(state.currentPage)) {
-                scheduleMiniPreviewTransitionDemo();
-            }
+            return;
+        }
+
+        const prevPage = mini.dataset._miniTransPage;
+        const pageChanged = prevPage !== undefined && prevPage !== String(state.currentPage);
+        const transUi = ["fade", "slide", "scale"].includes(String(state.ui.pageTransition || ""))
+            ? state.ui.pageTransition
+            : "none";
+        const durUi = clamp(Number(state.ui.pageTransitionSpeed ?? 0.6), 0.3, 1.5);
+        const stageExist = mini.querySelector(".mini-preview-lyric-stage");
+        if (
+            !(options && options.skipPageTransition) &&
+            pageChanged &&
+            transUi !== "none" &&
+            stageExist &&
+            stageExist.isConnected
+        ) {
+            mini.dataset._miniTransPage = String(state.currentPage);
+            runMiniPageTransitionThenRender(stageExist, transUi, durUi, state.ui.fontOpacityPct, () => {
+                renderMiniPreview({ ...options, skipPageTransition: true });
+            });
             return;
         }
 
@@ -4574,11 +4648,7 @@ ${deleteBtnHtml}
             stage.appendChild(row);
         });
         if ($("preview-line-counter")) $("preview-line-counter").textContent = `(${lines.length} 行)`;
-        const prevPage = mini.dataset._miniTransPage;
         mini.dataset._miniTransPage = String(state.currentPage);
-        if (prevPage !== undefined && prevPage !== String(state.currentPage)) {
-            scheduleMiniPreviewTransitionDemo();
-        }
     }
 
     /** 从 Worker 行数据拼出完整歌词：优先 lines 用 \n 拼接，其次 lyrics / content */
@@ -5074,6 +5144,22 @@ ${deleteBtnHtml}
         const el = $("adv-font-style-preset");
         if (!el) return;
         el.value = fontStylePresetMatchingId() || "";
+    }
+
+    function initFontFamilySelector() {
+        const sel = $("font-family-selector");
+        if (!sel || !globalThis.WorshipFontData || typeof globalThis.WorshipFontData.populateFontFamilySelect !== "function") {
+            return;
+        }
+        let fixed = false;
+        globalThis.WorshipFontData.populateFontFamilySelect(sel, {
+            currentValue: state.ui.fontFamily,
+            onMissing: (resolved) => {
+                state.ui.fontFamily = resolved;
+                fixed = true;
+            }
+        });
+        if (fixed) saveSettings();
     }
 
     function ensureFontStylePresetSelect() {
@@ -7639,9 +7725,10 @@ ${deleteBtnHtml}
         applyRadialVignetteToLayer($("projection-vignette-radial"), liveState);
     }
 
-    function renderDisplayLyric() {
+    function renderDisplayLyric(opts) {
         const layer = $("projection-lyric");
         if (!layer || !liveState) return;
+        const skipOT = !!(opts && opts.pageTransitionMidSwap);
         const pages = liveState.pages || [];
         const idx = clamp(liveState.pageIndex || 0, 0, Math.max(0, pages.length - 1));
         const lines = pages[idx] || [];
@@ -7662,27 +7749,30 @@ ${deleteBtnHtml}
                 ? String(t.fontWeight)
                 : String(state.ui.fontWeight || "700");
         layer.style.color = fontColor;
-        const applyFade = !!liveState.playlistFade;
+        const applyFade = !!liveState.playlistFade && !skipOT;
         if (applyFade) layer.style.transition = "opacity 300ms ease";
-        else layer.style.transition = "";
+        else if (!skipOT) layer.style.transition = "";
         if (applyFade) layer.style.opacity = "0";
         layer.innerHTML = lines
             .map((line) => `<div${strokeAttr}>${escapeHtml(line)}</div>`)
             .join("");
-        if (applyFade) {
-            requestAnimationFrame(() => {
+        if (!skipOT) {
+            if (applyFade) {
+                requestAnimationFrame(() => {
+                    layer.style.opacity = String(fontOp);
+                });
+            } else {
                 layer.style.opacity = String(fontOp);
-            });
-        } else {
-            layer.style.opacity = String(fontOp);
+            }
         }
         updateDisplayCardPreview();
         applyProjectionVignetteFromLiveState();
     }
 
-    function renderLeaderLyric() {
+    function renderLeaderLyric(opts) {
         const layer = $("projection-lyric");
         if (!layer || !liveState) return;
+        const skipOT = !!(opts && opts.pageTransitionMidSwap);
         const pages = liveState.pages || [];
         const idx = clamp(liveState.pageIndex || 0, 0, Math.max(0, pages.length - 1));
         const current = pages[idx] || [];
@@ -7698,9 +7788,9 @@ ${deleteBtnHtml}
                 : String(state.ui.fontWeight || "700");
         layer.style.color = fontColor;
         layer.style.fontSize = "44px";
-        const applyFade = !!liveState.playlistFade;
+        const applyFade = !!liveState.playlistFade && !skipOT;
         if (applyFade) layer.style.transition = "opacity 300ms ease";
-        else layer.style.transition = "";
+        else if (!skipOT) layer.style.transition = "";
         if (applyFade) layer.style.opacity = "0";
         const sp = clamp(Number(t.strokePx ?? liveState.textStrokePx ?? 0), 0, 6);
         layer.style.webkitTextStroke =
@@ -7710,12 +7800,14 @@ ${deleteBtnHtml}
             `<div style="line-height:1.35;margin-bottom:20px;">${current.map((x) => escapeHtml(x)).join("<br>") || "..."}</div>`,
             `<div style="font-size:22px;opacity:.75;">下页：${next.length ? next.map((x) => escapeHtml(x)).join(" / ") : "（无）"}</div>`
         ].join("");
-        if (applyFade) {
-            requestAnimationFrame(() => {
+        if (!skipOT) {
+            if (applyFade) {
+                requestAnimationFrame(() => {
+                    layer.style.opacity = String(fontOp);
+                });
+            } else {
                 layer.style.opacity = String(fontOp);
-            });
-        } else {
-            layer.style.opacity = String(fontOp);
+            }
         }
         applyProjectionVignetteFromLiveState();
     }
@@ -7764,9 +7856,9 @@ ${deleteBtnHtml}
         const doAnim = isDisp && prev && pageChanged && !liveState.playlistFade && trans !== "none";
         const fontOpForAnim = clamp(Number(liveState.fontOpacityPct ?? 100), 20, 100);
 
-        const rerenderLyrics = () => {
-            if (isDisp) renderDisplayLyric();
-            else renderLeaderLyric();
+        const rerenderLyrics = (animOpts) => {
+            if (isDisp) renderDisplayLyric(animOpts);
+            else renderLeaderLyric(animOpts);
             applyProjectionMaskFromLiveState();
             applyProjectionVignetteFromLiveState();
         };
@@ -9585,6 +9677,7 @@ ${deleteBtnHtml}
             const right = $("preview-panel");
             if (left && !left.style.width) left.style.width = "260px";
             if (right && !right.style.width) right.style.width = "300px";
+            initFontFamilySelector();
             ensureFontStylePresetSelect();
             ensureFontColorControls();
             ensureProjectionOverlayOpacitySlider();

@@ -7,6 +7,13 @@
         LIVE: "worship.live.v5",
         PLAYLIST: "playlist"
     };
+    /** 歌词编辑区自动草稿（localStorage JSON） */
+    const WORSHIP_DRAFT_LS = "worship_draft";
+    const WORSHIP_BACKUP_FORMAT = "worship-backup";
+    const WORSHIP_APP_VERSION = "v2.1.0";
+    const WORSHIP_ERROR_LOG_LS = "worship_error_log";
+    const WORSHIP_ERROR_LOG_MAX = 50;
+    const WORSHIP_ERROR_LOG_COPY_LAST = 10;
     const LYRIC_TEMPLATES_KEY = "worship.lyric_templates.v1";
     const THEME_BG_STORAGE = "worship.theme_bg.v1";
     const THEME_BG_OPACITY_STORAGE = "theme_bg_opacity";
@@ -17,6 +24,17 @@
     /** 自定义主题背景：最多保留 4 张缩略图（localStorage JSON），超出丢弃最旧 */
     const THEME_BG_SLOTS_STORAGE = "worship.theme_bg_slots.v1";
     const THEME_BG_ACTIVE_ID_STORAGE = "worship.theme_bg_active.v1";
+    /** 控制台主题背景视频（Data URL，localStorage；与壁纸槽位并存，播放时优先于壁纸） */
+    const WORSHIP_THEME_VIDEO_LS = "worship_theme_video";
+
+    /** 部分浏览器对 .mov/.mp4 会生成 data:application/octet-stream，需与 data:video/* 同等对待 */
+    function isLikelyThemeConsoleVideoDataUrl(s) {
+        const t = String(s || "").trim();
+        if (!t.startsWith("data:") || t.length < 80) return false;
+        if (/^data:video\//i.test(t)) return true;
+        if (/^data:application\/octet-stream[;,]/i.test(t)) return true;
+        return false;
+    }
     const THEME_BG_SLOTS_MAX = 4;
     /** 无自定义主题背景时的默认壁纸（相对路径，置于项目根目录） */
     const DEFAULT_THEME_BG_REL_PATH = "./cross.jpg";
@@ -24,6 +42,42 @@
     const UPLOADED_BACKGROUNDS_STORAGE = "uploaded_backgrounds";
     /** 「我的背景」本地槽位上限；超出时丢弃最旧（按 timestamp） */
     const UPLOADED_BACKGROUNDS_MAX = 4;
+
+    function appendWorshipErrorLogEntry(info) {
+        try {
+            const message = String(info?.message || "error").slice(0, 4000);
+            const stack = String(info?.stack || "").slice(0, 16000);
+            let arr = [];
+            try {
+                arr = JSON.parse(localStorage.getItem(WORSHIP_ERROR_LOG_LS) || "[]");
+            } catch (_e) {
+                arr = [];
+            }
+            if (!Array.isArray(arr)) arr = [];
+            arr.push({ message, stack, ts: Date.now() });
+            while (arr.length > WORSHIP_ERROR_LOG_MAX) arr.shift();
+            localStorage.setItem(WORSHIP_ERROR_LOG_LS, JSON.stringify(arr));
+        } catch (_e) {
+            /* ignore */
+        }
+    }
+
+    window.addEventListener("error", (ev) => {
+        const st = ev.error && typeof ev.error.stack === "string" ? ev.error.stack : "";
+        appendWorshipErrorLogEntry({
+            message: String(ev.message || "window.error"),
+            stack: st
+        });
+    });
+    window.addEventListener("unhandledrejection", (ev) => {
+        const r = ev.reason;
+        const msg =
+            r && typeof r === "object" && r.message != null
+                ? String(r.message)
+                : String(r || "unhandledrejection");
+        const stack = r && typeof r === "object" && typeof r.stack === "string" ? String(r.stack) : "";
+        appendWorshipErrorLogEntry({ message: msg, stack });
+    });
 
     function inferMediaTypeFromDataUrl(dataUrl) {
         return /^data:video\//i.test(String(dataUrl || "")) ? "video" : "image";
@@ -52,6 +106,7 @@
     let _idbUploadedCache = [];
     let _themeBgSlotsCache = [];
     let _themeBgActiveId = "";
+    let _themeConsoleVideoDataUrl = "";
 
     function promiseReq(req) {
         return new Promise((resolve, reject) => {
@@ -286,7 +341,7 @@
         _themeBgSlotsCache = _themeBgSlotsCache.filter((s) => s && s.id !== id);
         persistFullThemeBgFromSlots();
         applyThemeBackground();
-        showToast("已删除主题背景", $("theme-bg-grid"));
+        showToast("已删除主题背景", $("worship-console-wallpaper-preview") || $("theme-bg-grid"));
     }
 
     function deleteUploadedBackgroundItem(itemId, opts) {
@@ -399,24 +454,338 @@
         }, 1500);
     }
 
+    function themeBgSlotUploadToastAnchor() {
+        return (
+            $("worship-console-wallpaper-preview") ||
+            $("worship-console-theme-video-upload-btn") ||
+            $("theme-bg-grid") ||
+            $("worship-console-wallpaper-input") ||
+            $("theme-bg-input")
+        );
+    }
+
+    function handleThemeBgSlotFileInputChange(e) {
+        const input = e.target;
+        const file = input?.files?.[0];
+        if (!file) return;
+        if (input.id === "worship-console-wallpaper-input" && file.type && !/^image\//i.test(String(file.type))) {
+            showToast("请选择图片文件", themeBgSlotUploadToastAnchor());
+            input.value = "";
+            return;
+        }
+        const reader = new FileReader();
+        const toastAnchor = themeBgSlotUploadToastAnchor();
+        reader.onload = () => {
+            const dataUrl = String(reader.result || "").trim();
+            if (!dataUrl) {
+                showToast("未能读取图片", toastAnchor);
+                input.value = "";
+                return;
+            }
+            try {
+                const dup = _themeBgSlotsCache.find((x) => x && x.imageData === dataUrl);
+                if (dup) {
+                    _themeBgActiveId = dup.id;
+                    persistFullThemeBgFromSlots();
+                    applyThemeBackground();
+                    showToast("已切换到该主题背景", toastAnchor);
+                } else {
+                    if (
+                        _themeBgSlotsCache.filter((x) => x && x.imageData).length >=
+                        THEME_BG_SLOTS_MAX
+                    ) {
+                        showToast("已满 4 张，请先删除一张", toastAnchor);
+                        input.value = "";
+                        return;
+                    }
+                    const nid = themeBgSlotId();
+                    _themeBgSlotsCache = normalizeThemeBgSlots([
+                        { id: nid, imageData: dataUrl, timestamp: Date.now() },
+                        ..._themeBgSlotsCache
+                    ]);
+                    _themeBgActiveId = nid;
+                    persistFullThemeBgFromSlots();
+                    applyThemeBackground();
+                    showToast("主题背景已更新", toastAnchor);
+                }
+            } catch (err) {
+                console.warn(err);
+                showToast("主题背景存储失败（空间不足）", toastAnchor);
+            } finally {
+                input.value = "";
+            }
+        };
+        reader.onerror = () => {
+            showToast("读取文件失败", toastAnchor);
+            input.value = "";
+        };
+        reader.readAsDataURL(file);
+    }
+
+    function resetWorshipConsoleThemeBackgrounds() {
+        try {
+            localStorage.removeItem("worship_theme_wallpaper");
+        } catch (_e) {
+            /* ignore */
+        }
+        try {
+            localStorage.removeItem(WORSHIP_THEME_VIDEO_LS);
+        } catch (_e) {
+            /* ignore */
+        }
+        _themeConsoleVideoDataUrl = "";
+        _themeBgSlotsCache = [];
+        _themeBgActiveId = "";
+        persistFullThemeBgFromSlots();
+        ensureDefaultThemeBackgroundAtBoot();
+        persistFullThemeBgFromSlots();
+        applyThemeBackground();
+        showToast("已恢复默认主题背景", $("worship-console-wallpaper-preview") || $("worship-console-wallpaper-reset"));
+    }
+
+    function loadThemeConsoleVideoFromStorage() {
+        try {
+            const s = String(localStorage.getItem(WORSHIP_THEME_VIDEO_LS) || "").trim();
+            _themeConsoleVideoDataUrl = isLikelyThemeConsoleVideoDataUrl(s) ? s : "";
+            if (s && !_themeConsoleVideoDataUrl) {
+                localStorage.removeItem(WORSHIP_THEME_VIDEO_LS);
+            }
+        } catch (_e) {
+            _themeConsoleVideoDataUrl = "";
+        }
+    }
+
+    function persistThemeConsoleVideo(dataUrl) {
+        const s = String(dataUrl || "").trim();
+        _themeConsoleVideoDataUrl = isLikelyThemeConsoleVideoDataUrl(s) ? s : "";
+        try {
+            if (_themeConsoleVideoDataUrl) localStorage.setItem(WORSHIP_THEME_VIDEO_LS, _themeConsoleVideoDataUrl);
+            else localStorage.removeItem(WORSHIP_THEME_VIDEO_LS);
+        } catch (err) {
+            console.warn(err);
+            _themeConsoleVideoDataUrl = "";
+            try {
+                localStorage.removeItem(WORSHIP_THEME_VIDEO_LS);
+            } catch (_e2) {
+                /* ignore */
+            }
+            showToast(
+                "视频过大无法保存（空间不足）",
+                $("worship-console-theme-video-upload-btn") || themeBgSlotUploadToastAnchor()
+            );
+        }
+    }
+
+    function isThemeConsoleVideoActive() {
+        return isLikelyThemeConsoleVideoDataUrl(_themeConsoleVideoDataUrl);
+    }
+
+    function clearThemeConsoleVideoOnly() {
+        persistThemeConsoleVideo("");
+        applyThemeBackground();
+        showToast("已移除主题背景视频", $("worship-console-theme-video-upload-btn") || themeBgSlotUploadToastAnchor());
+    }
+
+    function ensureThemeConsoleVideoElement() {
+        let el = document.getElementById("worship-console-theme-bg-video");
+        if (!el) {
+            el = document.createElement("video");
+            el.id = "worship-console-theme-bg-video";
+            el.setAttribute("playsinline", "");
+            el.setAttribute("webkit-playsinline", "true");
+            el.setAttribute("muted", "true");
+            el.muted = true;
+            el.loop = true;
+            el.autoplay = true;
+            el.controls = false;
+            el.setAttribute("controlsList", "nodownload nofullscreen noremoteplayback");
+            el.disablePictureInPicture = true;
+            el.setAttribute("preload", "auto");
+            el.setAttribute("aria-hidden", "true");
+            el.setAttribute("tabindex", "-1");
+            el.style.cssText =
+                "position:fixed;top:0;left:0;width:100%;height:100%;object-fit:cover;object-position:center;z-index:0;pointer-events:none;display:none;";
+            document.body.insertBefore(el, document.body.firstChild);
+        }
+        return el;
+    }
+
+    function syncThemeConsoleVideoElementOpacity() {
+        const vid = document.getElementById("worship-console-theme-bg-video");
+        if (!vid || vid.style.display === "none") return;
+        vid.style.opacity = String(getThemeBgOpacity());
+    }
+
+    function handleThemeConsoleVideoFileChange(e) {
+        const input = e.target;
+        const file = input?.files?.[0];
+        if (!file) return;
+        const name = String(file.name || "").toLowerCase();
+        const okExt = /\.(mp4|webm|mov)$/i.test(name);
+        const mime = String(file.type || "").toLowerCase();
+        const okMime =
+            mime === "video/mp4" ||
+            mime === "video/webm" ||
+            mime === "video/quicktime" ||
+            /^video\/(mp4|webm|quicktime)$/i.test(mime);
+        if (!okExt && !okMime) {
+            showToast(
+                "请上传 .mp4、.webm 或 .mov 视频",
+                $("worship-console-theme-video-upload-btn") || themeBgSlotUploadToastAnchor()
+            );
+            input.value = "";
+            return;
+        }
+        const reader = new FileReader();
+        const ta = $("worship-console-theme-video-upload-btn") || themeBgSlotUploadToastAnchor();
+        reader.onload = () => {
+            const dataUrl = String(reader.result || "").trim();
+            if (!dataUrl || !isLikelyThemeConsoleVideoDataUrl(dataUrl)) {
+                showToast("未能读取视频", ta);
+                input.value = "";
+                return;
+            }
+            persistThemeConsoleVideo(dataUrl);
+            applyThemeBackground();
+            showToast("主题背景视频已更新", ta);
+            input.value = "";
+        };
+        reader.onerror = () => {
+            showToast("读取视频失败", ta);
+            input.value = "";
+        };
+        reader.readAsDataURL(file);
+    }
+
+    function appendThemeVideoSlotToGrid(grid) {
+        if (!isThemeConsoleVideoActive()) return;
+        const wrap = document.createElement("div");
+        wrap.className = "theme-bg-slot-wrap";
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "theme-bg-slot theme-bg-slot--filled theme-bg-slot--active";
+        btn.dataset.slotType = "theme-console-video";
+        btn.style.backgroundImage = "none";
+        btn.style.background =
+            "linear-gradient(160deg, rgba(10,12,20,0.98) 0%, rgba(22,28,42,0.98) 50%, rgba(12,14,22,0.98) 100%)";
+        btn.style.boxShadow = "inset 0 0 0 1px rgba(255,255,255,0.1)";
+        btn.title = "当前主题背景为视频（优先于壁纸）";
+        const playMark = document.createElement("span");
+        playMark.setAttribute("aria-hidden", "true");
+        playMark.textContent = "▶";
+        playMark.style.cssText =
+            "display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:0.95rem;line-height:1;opacity:0.9;color:rgba(230,235,248,0.92);pointer-events:none;";
+        btn.appendChild(playMark);
+        btn.addEventListener("click", (ev) => {
+            ev.preventDefault();
+            showToast("当前已使用视频背景", btn);
+        });
+        const del = document.createElement("button");
+        del.type = "button";
+        del.className = "theme-bg-slot-delete";
+        del.setAttribute("aria-label", "删除主题背景视频");
+        del.title = "删除视频";
+        del.textContent = "✕";
+        del.addEventListener("click", (ev) => {
+            ev.preventDefault();
+            ev.stopPropagation();
+            clearThemeConsoleVideoOnly();
+        });
+        wrap.appendChild(btn);
+        wrap.appendChild(del);
+        grid.insertBefore(wrap, grid.firstChild);
+    }
+
     function renderThemeBgGrid() {
-        const grid = $("theme-bg-grid");
-        if (!grid) return;
-        grid.innerHTML = "";
-        const filled = _themeBgSlotsCache
-            .filter((x) => x && x.imageData)
+        const host = $("worship-console-wallpaper-preview") || $("theme-bg-grid");
+        if (!host) return;
+        host.innerHTML = "";
+
+        const userSlots = _themeBgSlotsCache
+            .filter((x) => x && x.imageData && x.id !== DEFAULT_THEME_BG_SLOT_ID)
             .sort((a, b) => (Number(a.timestamp) || 0) - (Number(b.timestamp) || 0));
 
-        grid.classList.toggle("theme-bg-grid--empty-only", filled.length === 0);
+        const totalFilled = _themeBgSlotsCache.filter((x) => x && x.imageData).length;
+        const canAddMore = totalFilled < THEME_BG_SLOTS_MAX;
 
-        filled.forEach((item) => {
+        host.style.flexDirection = "column";
+        host.style.alignItems = "stretch";
+        host.style.width = "100%";
+        host.style.gap = "10px";
+        host.style.boxSizing = "border-box";
+
+        const triggerFilePick = () => {
+            const inp = $("worship-console-wallpaper-input") || $("theme-bg-input");
+            inp?.click();
+        };
+
+        const hasVideo = isThemeConsoleVideoActive();
+
+        if (userSlots.length === 0 && !hasVideo) {
+            const emptyHint = document.createElement("p");
+            emptyHint.className = "worship-console-wallpaper-empty";
+            emptyHint.textContent = "暂未上传自定义壁纸";
+            host.appendChild(emptyHint);
+
+            const grid = document.createElement("div");
+            grid.className = "theme-bg-grid theme-bg-grid--empty-only";
+            grid.setAttribute("role", "group");
+            grid.setAttribute("aria-label", "自定义主题背景");
+            if (canAddMore) {
+                const btn = document.createElement("button");
+                btn.type = "button";
+                btn.className = "theme-bg-slot theme-bg-slot--empty";
+                btn.title = "上传主题背景";
+                btn.setAttribute("aria-label", "上传主题背景");
+                btn.innerHTML = '<span class="theme-bg-slot-plus" aria-hidden="true">+</span>';
+                btn.addEventListener("click", (ev) => {
+                    ev.preventDefault();
+                    triggerFilePick();
+                });
+                grid.appendChild(btn);
+            }
+            host.appendChild(grid);
+            return;
+        }
+
+        if (userSlots.length === 0 && hasVideo) {
+            const grid = document.createElement("div");
+            grid.className = "theme-bg-grid theme-bg-grid--empty-only";
+            grid.setAttribute("role", "group");
+            grid.setAttribute("aria-label", "自定义主题背景");
+            appendThemeVideoSlotToGrid(grid);
+            if (canAddMore) {
+                const btn = document.createElement("button");
+                btn.type = "button";
+                btn.className = "theme-bg-slot theme-bg-slot--empty";
+                btn.title = "上传主题背景";
+                btn.setAttribute("aria-label", "上传主题背景");
+                btn.innerHTML = '<span class="theme-bg-slot-plus" aria-hidden="true">+</span>';
+                btn.addEventListener("click", (ev) => {
+                    ev.preventDefault();
+                    triggerFilePick();
+                });
+                grid.appendChild(btn);
+            }
+            host.appendChild(grid);
+            return;
+        }
+
+        const grid = document.createElement("div");
+        grid.className = "theme-bg-grid";
+        grid.setAttribute("role", "group");
+        grid.setAttribute("aria-label", "自定义主题背景");
+
+        appendThemeVideoSlotToGrid(grid);
+
+        userSlots.forEach((item) => {
             const wrap = document.createElement("div");
             wrap.className = "theme-bg-slot-wrap";
 
             const btn = document.createElement("button");
             btn.type = "button";
             btn.className = "theme-bg-slot theme-bg-slot--filled";
-            if (item.id === _themeBgActiveId) btn.classList.add("theme-bg-slot--active");
+            if (item.id === _themeBgActiveId && !hasVideo) btn.classList.add("theme-bg-slot--active");
             btn.dataset.slotId = item.id;
             const safe = String(item.imageData).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
             btn.style.backgroundImage = `url("${safe}")`;
@@ -447,7 +816,7 @@
             grid.appendChild(wrap);
         });
 
-        if (filled.length < THEME_BG_SLOTS_MAX) {
+        if (canAddMore) {
             const btn = document.createElement("button");
             btn.type = "button";
             btn.className = "theme-bg-slot theme-bg-slot--empty";
@@ -456,10 +825,12 @@
             btn.innerHTML = '<span class="theme-bg-slot-plus" aria-hidden="true">+</span>';
             btn.addEventListener("click", (e) => {
                 e.preventDefault();
-                $("theme-bg-input")?.click();
+                triggerFilePick();
             });
             grid.appendChild(btn);
         }
+
+        host.appendChild(grid);
     }
 
     function persistUploadedBackgroundsAsync(arr) {
@@ -522,7 +893,7 @@
         : null;
 
     /** 在线诗歌搜索 / 云端上传（Cloudflare Worker） */
-    const ONLINE_HYMN_SEARCH_WORKER_URL = "https://spring-bush-d415.cuirenjie123456789.workers.dev";
+    const ONLINE_HYMN_SEARCH_WORKER_URL = "https://holy-snow-ebc5.cuirenjie123456789.workers.dev";
     let onlineHymnSearchDebounceTimer = 0;
     let onlineHymnSearchAbort = null;
 
@@ -537,6 +908,39 @@
 
     const WELCOME_DISMISS_SESSION_KEY = "worship.welcome_dismissed_day";
     let welcomeToastTimer = 0;
+
+    /** 高级编辑「字体风格」预设（不改字号、字体透明度） */
+    const FONT_STYLE_PRESETS = [
+        {
+            id: "solemn-song",
+            label: "庄重宋体",
+            fontFamily: "'Source Han Serif SC','Noto Serif SC','SimSun','Songti SC',serif",
+            fontColor: "#d4af37",
+            fontWeight: "700"
+        },
+        {
+            id: "modern-sans",
+            label: "现代黑体",
+            fontFamily: "'Microsoft YaHei','PingFang SC',sans-serif",
+            fontColor: "#ffffff",
+            fontWeight: "400"
+        },
+        {
+            id: "handwritten",
+            label: "手写体",
+            fontFamily: "'KaiTi','Kaiti SC','STKaiti',serif",
+            fontColor: "#ffe4a8",
+            fontWeight: "400"
+        },
+        {
+            id: "classical-serif",
+            label: "古典衬线",
+            fontFamily: "'SimSun','Songti SC','NSimSun',serif",
+            fontColor: "#e8dcc4",
+            fontWeight: "700"
+        }
+    ];
+    const FONT_STYLE_PRESET_BY_ID = Object.fromEntries(FONT_STYLE_PRESETS.map((p) => [p.id, p]));
 
     /** 主窗口缓存的投屏窗口引用（?display=1），关闭或失效后置空 */
     let projectionDisplayWindowRef = null;
@@ -561,6 +965,7 @@
             bgMediaType: "image",
             lyricsBgShareToCloud: false,
             fontColor: "#ffffff",
+            fontWeight: "700",
             overlayOpacityPct: 30,
             fontOpacityPct: 100,
             textStrokePx: 0,
@@ -672,6 +1077,9 @@
         if (!row) return;
         const u = readUiLike(ctx);
         const fontOp = clamp(Number(u.fontOpacityPct ?? 100), 20, 100) / 100;
+        const fwRaw = u.fontWeight != null ? u.fontWeight : state.ui.fontWeight;
+        const fw = fwRaw == null || fwRaw === "" ? "700" : String(fwRaw);
+        row.style.fontWeight = /^(400|normal)$/i.test(fw) ? "400" : fw;
         row.style.fontFamily = u.fontFamily || state.ui.fontFamily;
         row.style.color = u.lightBg ? "#111" : (u.fontColor || state.ui.fontColor || "#ffffff");
         row.style.opacity = String(fontOp);
@@ -774,7 +1182,8 @@
     }
 
     let miniPreviewTransitionDemoTimer = 0;
-    function scheduleMiniPreviewTransitionDemo() {
+    /** @param {number|undefined} speedOverrideSec 拖动翻页速度滑块时传入，避免在未提交 state 前读旧值 */
+    function scheduleMiniPreviewTransitionDemo(speedOverrideSec) {
         if (miniPreviewTransitionDemoTimer) window.clearTimeout(miniPreviewTransitionDemoTimer);
         miniPreviewTransitionDemoTimer = window.setTimeout(() => {
             miniPreviewTransitionDemoTimer = 0;
@@ -786,9 +1195,69 @@
                 ? state.ui.pageTransition
                 : "none";
             if (trans === "none") return;
-            const dur = clamp(Number(state.ui.pageTransitionSpeed ?? 0.6), 0.3, 1.5);
+            const dur =
+                speedOverrideSec != null && Number.isFinite(Number(speedOverrideSec))
+                    ? clamp(Number(speedOverrideSec), 0.3, 1.5)
+                    : clamp(Number(state.ui.pageTransitionSpeed ?? 0.6), 0.3, 1.5);
             runMiniPageTransitionPreviewOnElement(stage, trans, dur, state.ui.fontOpacityPct);
         }, 60);
+    }
+
+    /** 高级面板滑块拖动时合并到单帧的轻量 DOM 更新，减轻卡顿 */
+    let miniSliderDomRaf = 0;
+    let miniSliderDomRafFn = null;
+    function scheduleMiniSliderDomPreview(fn) {
+        miniSliderDomRafFn = fn;
+        if (miniSliderDomRaf) return;
+        miniSliderDomRaf = requestAnimationFrame(() => {
+            miniSliderDomRaf = 0;
+            const f = miniSliderDomRafFn;
+            miniSliderDomRafFn = null;
+            if (f) f();
+        });
+    }
+
+    /** 拖动垂直位置时仅用 GPU transform 偏移歌词舞台，避免反复改 paddingTop */
+    function applyMiniPreviewPosDragTransform(posY) {
+        const mini = $("mini-preview");
+        if (!mini) return;
+        const stage = mini.querySelector(".mini-preview-lyric-stage");
+        if (!stage) return;
+        const h = mini.clientHeight;
+        const targetPad = lyricBlockTopPadPx(h, posY);
+        const committed = Number(mini.dataset.miniLyricPadCommitted);
+        const base = Number.isFinite(committed) ? committed : targetPad;
+        stage.style.transform = `translateY(${targetPad - base}px)`;
+        stage.style.willChange = "transform";
+    }
+
+    function clearMiniPreviewLyricStageDragTransform() {
+        const mini = $("mini-preview");
+        const stage = mini?.querySelector(".mini-preview-lyric-stage");
+        if (!stage) return;
+        stage.style.transform = "";
+        stage.style.willChange = "";
+    }
+
+    function applyMiniPreviewFontSizePx(fontSize) {
+        const fs = Math.round(clamp(Number(fontSize) || 56, 24, 120) * 0.42);
+        $("mini-preview")?.querySelectorAll(".preview-line").forEach((row) => {
+            row.style.fontSize = fs + "px";
+        });
+    }
+
+    function applyMiniPreviewFontOpacityPct(pct) {
+        const p = clamp(Number(pct) || 100, 20, 100) / 100;
+        $("mini-preview")?.querySelectorAll(".preview-line").forEach((row) => {
+            row.style.opacity = String(p);
+        });
+    }
+
+    function applyMiniPreviewProjectionMaskOpacity(pct) {
+        const m = $("mini-preview")?.querySelector(".mini-preview-projection-mask");
+        if (!m) return;
+        const op = clamp(Number(pct), 0, 80) / 100;
+        m.style.background = `rgba(0,0,0,${op})`;
     }
 
     function lyricBlockTopPadPx(boxHeight, posY) {
@@ -831,11 +1300,57 @@
         return parseJSON(localStorage.getItem(key), fallback);
     }
 
+    /** 与 index 中 input 对齐：允许图片与视频（仅改 JS，不依赖 HTML accept） */
+    function ensureBgImageInputAcceptsVideo() {
+        const inp = $("bg-image-input");
+        if (!inp || inp.dataset.videoAcceptBound === "1") return;
+        inp.dataset.videoAcceptBound = "1";
+        inp.setAttribute("accept", "image/*,video/*,.jpg,.jpeg,.png,.gif,.webp,.bmp,.mp4,.webm,.mov,.m4v,.ogv,.mkv");
+    }
+
+    function isStorageQuotaExceededError(err) {
+        if (!err) return false;
+        if (err.name === "QuotaExceededError") return true;
+        if (typeof err.code === "number" && err.code === 22) return true;
+        return false;
+    }
+
+    /** 启动时尽量释放配额：删过大的投屏缓存、上传历史等，静默忽略异常 */
+    function tryFreeLocalStorageForWorshipBoot() {
+        try {
+            const liveKey = STORAGE.LIVE;
+            const liveRaw = localStorage.getItem(liveKey);
+            if (liveRaw && liveRaw.length > 180000) {
+                localStorage.removeItem(liveKey);
+            }
+            const histRaw = localStorage.getItem(CLOUD_UPLOAD_HISTORY_LS);
+            if (histRaw && histRaw.length > 32000) {
+                localStorage.removeItem(CLOUD_UPLOAD_HISTORY_LS);
+            }
+            const legacyLiveKeys = ["worship.live.v4", "worship.live.v3", "worship.live"];
+            for (let i = 0; i < legacyLiveKeys.length; i++) {
+                try {
+                    localStorage.removeItem(legacyLiveKeys[i]);
+                } catch (_e) {
+                    /* ignore */
+                }
+            }
+        } catch (_e) {
+            /* ignore */
+        }
+    }
+
     function setStore(key, value) {
-        localStorage.setItem(key, JSON.stringify(value));
+        try {
+            localStorage.setItem(key, JSON.stringify(value));
+        } catch (err) {
+            if (isStorageQuotaExceededError(err)) return;
+            throw err;
+        }
     }
 
     function showToast(text, triggerElement) {
+        /* 已迁移至 js/utils.js
         const t = $("toast");
         if (!t) return;
         t.textContent = text;
@@ -872,6 +1387,8 @@
             t.style.opacity = "0";
             t.classList.remove("bounceIn");
         }, 1500);
+        */
+        return globalThis.showToast(text, triggerElement);
     }
 
     /** 右下角成功提示：单条可见；显示中下一条入队；等待期间新消息替换待播队列 */
@@ -919,26 +1436,43 @@
         drainCornerSuccessToastQueue();
     }
 
-    function readLocalStorageString(key) {
-        try {
-            const v = localStorage.getItem(key);
-            return v == null ? "" : String(v);
-        } catch {
-            return "";
-        }
-    }
-
-    /** 从歌词文本中移除内嵌 data:*;base64，避免 POST 体积过大 */
+    /** 从歌词纯文本中移除内嵌 data:*;base64，避免误传大图导致 POST 过大 */
     function stripBase64DataUrlsFromLyrics(text) {
         return String(text || "").replace(/data:[^;\s]+;base64,[A-Za-z0-9+/=\s]+/gi, "");
     }
 
-    function readCloudShareUserNickname() {
-        const a = readLocalStorageString("worship.user_nickname").trim();
-        if (a) return a;
-        const b = readLocalStorageString("user_nickname").trim();
-        if (b) return b;
-        return "佚名";
+    /** 从 localStorage 读取分享用昵称，无则「匿名」 */
+    function readCloudShareUserNicknameForPost() {
+        try {
+            const a = String(localStorage.getItem("worship.user_nickname") || "").trim();
+            if (a) return a;
+            const b = String(localStorage.getItem("user_nickname") || "").trim();
+            if (b) return b;
+        } catch (_e) {
+            /* ignore */
+        }
+        return "匿名";
+    }
+
+    /**
+     * 分享云端 POST：仅含 title、lyrics、author、user_nickname 四个纯字符串字段；
+     * 禁止附带 settings、base64、DOM 或其它键。
+     */
+    function buildCloudSharePostBodyStrict(titleFromEditor, lyricsFromEditor, authorFromSong) {
+        const title = String(titleFromEditor || "").trim();
+        const lyrics = stripBase64DataUrlsFromLyrics(
+            String(lyricsFromEditor || "")
+                .replace(/\r\n/g, "\n")
+                .replace(/\r/g, "\n")
+        );
+        const author = String(authorFromSong || "").trim() || "佚名";
+        const user_nickname = readCloudShareUserNicknameForPost();
+        return JSON.stringify({
+            title,
+            lyrics,
+            author,
+            user_nickname
+        });
     }
 
     function canUploadSongToCloud() {
@@ -1229,8 +1763,10 @@
         arr = arr.slice(0, CLOUD_UPLOAD_HISTORY_MAX);
         try {
             localStorage.setItem(CLOUD_UPLOAD_HISTORY_LS, JSON.stringify(arr));
-        } catch {
-            /* ignore quota */
+        } catch (err) {
+            if (!isStorageQuotaExceededError(err)) {
+                /* 其它写入失败同样静默，避免打断分享流程 */
+            }
         }
     }
 
@@ -1425,25 +1961,19 @@
             updateCloudUploadBtnState();
             return;
         }
-        const title = chk.title;
-        const lyrics = stripBase64DataUrlsFromLyrics(chk.lyrics);
+        const title = String(chk.title || "").trim();
+        const lyricsEditorValue = String($("lyric-editor-large")?.value ?? chk.lyrics ?? "");
         const authorRaw = song.author;
-        const author =
+        const authorForPost =
             typeof authorRaw === "string" && authorRaw.trim() ? authorRaw.trim() : "佚名";
-        const user_nickname = readCloudShareUserNickname();
-        const payload = {
-            title,
-            author,
-            lyrics,
-            user_nickname
-        };
+        const postBody = buildCloudSharePostBodyStrict(title, lyricsEditorValue, authorForPost);
         cloudUploadInFlight = true;
         updateCloudUploadBtnState();
         try {
             const res = await fetch(ONLINE_HYMN_SEARCH_WORKER_URL, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload)
+                body: postBody
             });
             let data = null;
             try {
@@ -1475,8 +2005,19 @@
         el.hidden = false;
     }
 
-    /** 与需求一致：首次引导完成后写入 visited，永不再显示 */
-    const FIRST_VISIT_ONBOARD_LS = "visited";
+    /** 首次引导完成后写入 worship_visited=true，永不再显示 */
+    const WORSHIP_VISITED_LS = "worship_visited";
+    const LEGACY_FIRST_VISIT_LS = "visited";
+
+    function isWorshipFirstVisit() {
+        try {
+            if (localStorage.getItem(WORSHIP_VISITED_LS) === "true") return false;
+            if (localStorage.getItem(LEGACY_FIRST_VISIT_LS) === "1") return false;
+            return true;
+        } catch (_e) {
+            return false;
+        }
+    }
 
     function sanitizeWorshipExportBase(name) {
         const t = String(name || "")
@@ -1564,22 +2105,92 @@
         main.appendChild(rng);
     }
 
+    function ensureFirstVisitOnboardingDom() {
+        const wrap = $("mini-preview-wrapper");
+        if (!wrap) return null;
+        let el = $("first-visit-onboarding");
+        if (!el) {
+            el = document.createElement("div");
+            el.id = "first-visit-onboarding";
+            el.innerHTML =
+                '<div class="first-visit-onboarding-inner">' +
+                '<p class="first-visit-onboarding-title" style="margin:0 0 8px;font-weight:600;color:#f5e6c8;">欢迎使用</p>' +
+                '<ol class="first-visit-onboarding-steps" style="margin:0;padding:0 0 0 1.1em;">' +
+                "<li><span aria-hidden=\"true\">📝</span> 在此粘贴歌词，一行一句</li>" +
+                "<li><span aria-hidden=\"true\">✂️</span> 用空行或 <code>[page]</code> 分段</li>" +
+                "<li><span aria-hidden=\"true\">📺</span> 点击&ldquo;开启投屏&rdquo;放映</li>" +
+                "</ol>" +
+                '<button type="button" id="first-visit-onboarding-dismiss" class="first-visit-onboarding-dismiss">知道了</button>' +
+                "</div>";
+            wrap.insertBefore(el, wrap.firstChild);
+            const btn = $("first-visit-onboarding-dismiss");
+            if (btn && !btn.dataset.boundDismiss) {
+                btn.dataset.boundDismiss = "1";
+                btn.addEventListener("click", dismissFirstVisitOnboarding);
+            }
+        } else if (el.parentNode !== wrap) {
+            wrap.insertBefore(el, wrap.firstChild);
+        }
+        wrap.style.position = "relative";
+        el.style.cssText = [
+            "position:absolute",
+            "left:0",
+            "right:0",
+            "bottom:100%",
+            "margin-bottom:10px",
+            "z-index:120",
+            "box-sizing:border-box",
+            "padding:14px 16px 12px",
+            "border-radius:14px",
+            "background:rgba(18,20,28,0.82)",
+            "backdrop-filter:saturate(1.1) blur(10px)",
+            "-webkit-backdrop-filter:saturate(1.1) blur(10px)",
+            "border:1px solid rgba(212,175,119,0.55)",
+            "box-shadow:0 10px 32px rgba(0,0,0,0.42)",
+            "color:#ececec",
+            "font-size:14px",
+            "line-height:1.55"
+        ].join(";");
+        const inner = el.querySelector(".first-visit-onboarding-inner");
+        if (inner) {
+            inner.style.cssText =
+                "display:flex;flex-direction:column;gap:8px;align-items:stretch;margin:0;";
+        }
+        const ol = el.querySelector(".first-visit-onboarding-steps");
+        if (ol) {
+            ol.style.listStyle = "decimal";
+            ol.style.paddingLeft = "1.25em";
+            ol.style.margin = "0";
+        }
+        const btn = $("first-visit-onboarding-dismiss");
+        if (btn) {
+            btn.style.cssText = [
+                "align-self:flex-end",
+                "margin-top:4px",
+                "padding:8px 18px",
+                "border-radius:10px",
+                "border:1px solid rgba(212,175,119,0.45)",
+                "background:rgba(255,255,255,0.08)",
+                "color:#f5e6c8",
+                "cursor:pointer",
+                "font:inherit"
+            ].join(";");
+        }
+        return el;
+    }
+
     function maybeShowFirstVisitOnboarding() {
         if (isDisplay || isLeader) return;
-        try {
-            if (localStorage.getItem(FIRST_VISIT_ONBOARD_LS) === "1") return;
-        } catch (_) {
-            return;
-        }
-        const el = $("first-visit-onboarding");
+        if (!isWorshipFirstVisit()) return;
+        const el = ensureFirstVisitOnboardingDom();
         if (!el) return;
         el.hidden = false;
     }
 
     function dismissFirstVisitOnboarding() {
         try {
-            localStorage.setItem(FIRST_VISIT_ONBOARD_LS, "1");
-        } catch (_) {
+            localStorage.setItem(WORSHIP_VISITED_LS, "true");
+        } catch (_e) {
             /* ignore */
         }
         const el = $("first-visit-onboarding");
@@ -1844,6 +2455,195 @@
             .replace(/>/g, "&gt;");
     }
 
+    const WORSHIP_CHANGELOG_ENTRIES = [
+        {
+            version: "v2.1.0",
+            label: "当前",
+            lines: ["新增云端搜索、备份恢复、自动草稿、高级编辑优化"]
+        },
+        {
+            version: "v2.0.0",
+            label: "",
+            lines: ["模块化架构重构、投屏引导优化、在线搜索接入"]
+        },
+        {
+            version: "v1.5.0",
+            label: "",
+            lines: ["主领视图、播放列表、背景管理、导入导出"]
+        }
+    ];
+
+    function closeWorshipChangelogModal() {
+        const m = $("worship-changelog-modal");
+        if (m) m.remove();
+    }
+
+    function copyWorshipErrorLogsRecent() {
+        let arr = [];
+        try {
+            arr = JSON.parse(localStorage.getItem(WORSHIP_ERROR_LOG_LS) || "[]");
+        } catch (_e) {
+            arr = [];
+        }
+        if (!Array.isArray(arr)) arr = [];
+        const slice = arr.slice(-WORSHIP_ERROR_LOG_COPY_LAST);
+        const text = JSON.stringify(slice, null, 2);
+        const done = () => showToast("已复制最近错误日志", $("worship-error-log-copy-btn"));
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(done).catch(() => {
+                try {
+                    const ta = document.createElement("textarea");
+                    ta.value = text;
+                    ta.style.position = "fixed";
+                    ta.style.left = "-9999px";
+                    document.body.appendChild(ta);
+                    ta.select();
+                    document.execCommand("copy");
+                    ta.remove();
+                    done();
+                } catch (_e2) {
+                    showToast("复制失败", $("worship-error-log-copy-btn"));
+                }
+            });
+        } else {
+            showToast("浏览器不支持剪贴板", $("worship-error-log-copy-btn"));
+        }
+    }
+
+    function openWorshipChangelogModal() {
+        closeWorshipChangelogModal();
+        const wrap = document.createElement("div");
+        wrap.id = "worship-changelog-modal";
+        wrap.setAttribute("role", "dialog");
+        wrap.setAttribute("aria-modal", "true");
+        wrap.style.cssText = [
+            "position:fixed",
+            "inset:0",
+            "z-index:100060",
+            "display:flex",
+            "align-items:center",
+            "justify-content:center",
+            "padding:20px",
+            "box-sizing:border-box",
+            "background:rgba(6,8,16,0.55)",
+            "backdrop-filter:blur(12px)",
+            "-webkit-backdrop-filter:blur(12px)"
+        ].join(";");
+        const card = document.createElement("div");
+        card.style.cssText = [
+            "width:min(440px,92vw)",
+            "max-height:min(78vh,640px)",
+            "overflow:hidden",
+            "display:flex",
+            "flex-direction:column",
+            "border-radius:16px",
+            "border:1px solid rgba(212,175,119,0.35)",
+            "background:rgba(22,26,38,0.82)",
+            "box-shadow:0 16px 48px rgba(0,0,0,0.45)",
+            "color:#ececec"
+        ].join(";");
+        const title = document.createElement("div");
+        title.textContent = "📋 更新日志";
+        title.style.cssText =
+            "padding:14px 18px;font-size:1.05rem;font-weight:700;border-bottom:1px solid rgba(255,255,255,0.1);";
+        const body = document.createElement("div");
+        body.style.cssText =
+            "padding:14px 18px;overflow-y:auto;flex:1;font-size:0.9rem;line-height:1.55;";
+        const ul = document.createElement("ul");
+        ul.style.cssText = "margin:0;padding:0 0 0 1.1em;list-style:disc;";
+        WORSHIP_CHANGELOG_ENTRIES.forEach((entry) => {
+            const li = document.createElement("li");
+            li.style.marginBottom = "12px";
+            const head = document.createElement("div");
+            head.style.fontWeight = "700";
+            head.style.color = "#f5e6c8";
+            head.textContent = entry.label ? `${entry.version}（${entry.label}）` : entry.version;
+            li.appendChild(head);
+            entry.lines.forEach((line) => {
+                const p = document.createElement("div");
+                p.style.marginTop = "4px";
+                p.style.opacity = "0.95";
+                p.textContent = `· ${line}`;
+                li.appendChild(p);
+            });
+            ul.appendChild(li);
+        });
+        body.appendChild(ul);
+        const foot = document.createElement("div");
+        foot.style.cssText =
+            "padding:12px 18px 16px;border-top:1px solid rgba(255,255,255,0.1);display:flex;flex-direction:column;gap:10px;";
+        const hintRow = document.createElement("div");
+        hintRow.style.cssText =
+            "display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:0.78rem;color:rgba(236,240,248,0.82);";
+        const hint = document.createElement("span");
+        hint.textContent = "🛠️ 如遇问题，可将错误日志发送给开发者";
+        hint.style.flex = "1";
+        hint.style.minWidth = "160px";
+        const copyBtn = document.createElement("button");
+        copyBtn.type = "button";
+        copyBtn.id = "worship-error-log-copy-btn";
+        copyBtn.textContent = "📋 复制日志";
+        copyBtn.style.cssText =
+            "padding:6px 12px;border-radius:8px;border:1px solid rgba(212,175,119,0.45);background:rgba(255,255,255,0.08);color:#f5e6c8;cursor:pointer;font:inherit;font-size:0.78rem;";
+        copyBtn.addEventListener("click", () => copyWorshipErrorLogsRecent());
+        hintRow.appendChild(hint);
+        hintRow.appendChild(copyBtn);
+        const btnRow = document.createElement("div");
+        btnRow.style.textAlign = "right";
+        const ok = document.createElement("button");
+        ok.type = "button";
+        ok.textContent = "知道了";
+        ok.style.cssText =
+            "padding:8px 22px;border-radius:10px;border:1px solid rgba(255,255,255,0.45);background:transparent;color:#f0f4fc;cursor:pointer;font:inherit;";
+        ok.addEventListener("click", () => closeWorshipChangelogModal());
+        btnRow.appendChild(ok);
+        foot.appendChild(hintRow);
+        foot.appendChild(btnRow);
+        card.appendChild(title);
+        card.appendChild(body);
+        card.appendChild(foot);
+        wrap.appendChild(card);
+        wrap.addEventListener("click", (e) => {
+            if (e.target === wrap) closeWorshipChangelogModal();
+        });
+        card.addEventListener("click", (e) => e.stopPropagation());
+        document.body.appendChild(wrap);
+    }
+
+    function ensureWorshipVersionFooter() {
+        if (isDisplay || isLeader) return;
+        if ($("worship-app-version-trigger")) return;
+        const panel = $("preview-panel");
+        if (!panel) return;
+        const hints = panel.querySelectorAll("p.hint-text");
+        let anchor = null;
+        hints.forEach((p) => {
+            if (p.textContent && p.textContent.includes("MIT")) anchor = p;
+        });
+        if (!anchor) anchor = hints[hints.length - 1] || null;
+        if (!anchor || !anchor.parentNode) return;
+        const line = document.createElement("p");
+        line.className = "hint-text worship-app-version-footer";
+        line.style.cssText = "margin-top:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;";
+        const lab = document.createElement("span");
+        lab.textContent = "版本";
+        lab.style.opacity = "0.85";
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.id = "worship-app-version-trigger";
+        btn.textContent = WORSHIP_APP_VERSION;
+        btn.setAttribute("aria-label", "查看更新日志");
+        btn.style.cssText =
+            "padding:0;border:none;background:transparent;color:var(--accent);text-decoration:underline;cursor:pointer;font:inherit;font-size:inherit;";
+        btn.addEventListener("click", (e) => {
+            e.preventDefault();
+            openWorshipChangelogModal();
+        });
+        line.appendChild(lab);
+        line.appendChild(btn);
+        anchor.parentNode.insertBefore(line, anchor.nextSibling);
+    }
+
     function escapeRegExp(str) {
         return String(str).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     }
@@ -1873,7 +2673,8 @@
             .map((song) => ({ song, score: 0 }));
     }
 
-    function splitPages(lyrics, linesPerPage) {
+    function parsePages(lyrics, linesPerPage) {
+        /* 已迁移至 js/utils.js
         const size = clamp(Number(linesPerPage) || 4, 1, 20);
         const input = String(lyrics || "").replace(/\r/g, "");
         if (!input.trim()) return [["..."]];
@@ -1887,7 +2688,10 @@
             }
         }
         return pages.length ? pages : [["..."]];
+        */
+        return globalThis.parsePages(lyrics, linesPerPage);
     }
+    const splitPages = parsePages;
 
     function currentSong() {
         return state.songs.find((s) => s.id === state.currentSongId) || state.songs[0] || null;
@@ -1957,6 +2761,7 @@
         state.ui.theme = "dark";
         state.ui.fontFamily = "'Microsoft YaHei','PingFang SC',sans-serif";
         state.ui.fontSize = 56;
+        state.ui.fontWeight = "700";
         state.ui.defaultLines = 4;
         state.ui.posY = 45;
         state.ui.fontColor = "#ffffff";
@@ -1997,33 +2802,76 @@
 
     function installAdvDrawerResetButton() {
         const scroll = $("adv-drawer-scroll");
-        if (!scroll || document.getElementById("adv-reset-defaults-btn")) return;
-        const wrap = document.createElement("div");
-        wrap.className = "adv-drawer-reset-footer";
-        wrap.style.cssText =
-            "margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,0.12);flex-shrink:0;";
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.id = "adv-reset-defaults-btn";
-        btn.textContent = "↩ 恢复默认";
-        btn.setAttribute("aria-label", "恢复默认高级设置");
-        btn.style.cssText =
-            "width:100%;box-sizing:border-box;padding:10px 14px;border:1px solid #ffffff;background:transparent;color:#ffffff;border-radius:10px;cursor:pointer;font:inherit;";
-        btn.addEventListener("click", () => {
-            if (!window.confirm("确定要恢复所有高级设置为默认值吗？")) return;
-            applyAdvEditSettingsDefaultsToState();
-            updateUIFromState();
-            updateAll();
-        });
-        wrap.appendChild(btn);
-        scroll.appendChild(wrap);
+        if (!scroll) return;
+        let wrap = scroll.querySelector(".adv-drawer-reset-footer");
+        if (!wrap) {
+            wrap = document.createElement("div");
+            wrap.className = "adv-drawer-reset-footer";
+            wrap.style.cssText =
+                "margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,0.12);flex-shrink:0;";
+            scroll.appendChild(wrap);
+        }
+        if (!document.getElementById("adv-backup-all-btn")) {
+            const row = document.createElement("div");
+            row.className = "adv-drawer-backup-row";
+            row.style.cssText =
+                "display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center;";
+            const backupBtn = document.createElement("button");
+            backupBtn.type = "button";
+            backupBtn.id = "adv-backup-all-btn";
+            backupBtn.textContent = "💾 备份全部";
+            backupBtn.setAttribute("aria-label", "备份全部数据");
+            backupBtn.style.cssText =
+                "flex:1;min-width:120px;box-sizing:border-box;padding:10px 12px;border:1px solid rgba(255,255,255,0.55);background:rgba(255,255,255,0.06);color:#f0f4fc;border-radius:10px;cursor:pointer;font:inherit;";
+            const restoreBtn = document.createElement("button");
+            restoreBtn.type = "button";
+            restoreBtn.id = "adv-restore-backup-btn";
+            restoreBtn.textContent = "📥 恢复备份";
+            restoreBtn.setAttribute("aria-label", "从备份文件恢复");
+            restoreBtn.style.cssText = backupBtn.style.cssText;
+            const fileInp = document.createElement("input");
+            fileInp.type = "file";
+            fileInp.id = "worship-backup-restore-input";
+            fileInp.accept = ".worship-backup,application/json";
+            fileInp.hidden = true;
+            fileInp.setAttribute("aria-hidden", "true");
+            backupBtn.addEventListener("click", () => {
+                void downloadFullWorshipBackup();
+            });
+            restoreBtn.addEventListener("click", () => fileInp.click());
+            fileInp.addEventListener("change", (e) => {
+                void handleWorshipBackupRestoreFile(e);
+            });
+            row.appendChild(backupBtn);
+            row.appendChild(restoreBtn);
+            row.appendChild(fileInp);
+            wrap.insertBefore(row, wrap.firstChild);
+        }
+        if (!document.getElementById("adv-reset-defaults-btn")) {
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.id = "adv-reset-defaults-btn";
+            btn.textContent = "↩ 恢复默认";
+            btn.setAttribute("aria-label", "恢复默认高级设置");
+            btn.style.cssText =
+                "width:100%;box-sizing:border-box;padding:10px 14px;border:1px solid #ffffff;background:transparent;color:#ffffff;border-radius:10px;cursor:pointer;font:inherit;";
+            btn.addEventListener("click", () => {
+                if (!window.confirm("确定要恢复所有高级设置为默认值吗？")) return;
+                applyAdvEditSettingsDefaultsToState();
+                updateUIFromState();
+                updateAll();
+            });
+            wrap.appendChild(btn);
+        }
     }
 
     function syncThemeBgOpacityControls() {
         const row = $("theme-bg-opacity-row");
         const slider = $("theme-bg-opacity-slider");
         const valEl = $("theme-bg-opacity-value");
-        const hasCustom = !!(_idbThemeBgCache || "").trim();
+        const hasCustom =
+            !!(_idbThemeBgCache || "").trim() ||
+            (isThemeConsoleVideoActive() && !isDisplay && !isLeader);
         if (row) row.classList.toggle("is-disabled", !hasCustom);
         const v = getThemeBgOpacity();
         if (slider) {
@@ -2046,19 +2894,66 @@
     }
 
     function applyThemeBackground() {
+        loadThemeConsoleVideoFromStorage();
         const raw = _idbThemeBgCache;
         const body = document.body;
         const root = document.documentElement;
         applyThemeBgOpacityVar();
-        if (raw && String(raw).trim()) {
+        const hasVideo = isThemeConsoleVideoActive();
+        const hasVideoUi = hasVideo && !isDisplay && !isLeader;
+        const hasWallpaper = !!(raw && String(raw).trim());
+
+        /* 有视频时壁纸仍保留在缓存，但 ::before 不绘制，避免与全屏 video 同层叠放时挡住视频 */
+        if (hasVideoUi) {
+            root.style.setProperty("--theme-bg-image", "none");
+        } else if (hasWallpaper) {
             const safe = String(raw).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-            const val = `url("${safe}")`;
-            root.style.setProperty("--theme-bg-image", val);
-            body.setAttribute("data-theme-custom-bg", "1");
+            root.style.setProperty("--theme-bg-image", `url("${safe}")`);
         } else {
             root.style.setProperty("--theme-bg-image", "none");
+        }
+
+        if (hasVideoUi || hasWallpaper) {
+            body.setAttribute("data-theme-custom-bg", "1");
+        } else {
             body.removeAttribute("data-theme-custom-bg");
         }
+
+        if (!isDisplay && !isLeader) {
+            const vidEl = ensureThemeConsoleVideoElement();
+            const op = getThemeBgOpacity();
+            if (hasVideoUi) {
+                body.setAttribute("data-theme-custom-video", "1");
+                vidEl.muted = true;
+                vidEl.loop = true;
+                vidEl.autoplay = true;
+                vidEl.controls = false;
+                vidEl.setAttribute("playsinline", "");
+                vidEl.setAttribute("webkit-playsinline", "true");
+                vidEl.src = _themeConsoleVideoDataUrl;
+                vidEl.style.display = "block";
+                vidEl.style.opacity = String(op);
+                void vidEl.play?.().catch(() => {});
+            } else {
+                body.removeAttribute("data-theme-custom-video");
+                try {
+                    vidEl.pause();
+                    vidEl.removeAttribute("src");
+                    vidEl.load();
+                } catch (_ve) {}
+                vidEl.style.display = "none";
+            }
+        } else {
+            body.removeAttribute("data-theme-custom-video");
+            const oldVid = document.getElementById("worship-console-theme-bg-video");
+            if (oldVid) {
+                try {
+                    oldVid.pause();
+                    oldVid.remove();
+                } catch (_ve) {}
+            }
+        }
+
         body.style.backgroundImage = "";
         syncThemeBgOpacityControls();
         renderThemeBgGrid();
@@ -2470,6 +3365,7 @@
                     thumb.style.backgroundImage = "none";
                     thumb.style.background = "linear-gradient(145deg,#1e1e28,#12121a)";
                 }
+                thumb.style.position = "relative";
                 if (extracting) {
                     const spin = document.createElement("span");
                     spin.className = "lyric-bg-thumb-cover-spinner";
@@ -2479,9 +3375,14 @@
                 const badge = document.createElement("span");
                 badge.className = "lyric-bg-thumb-play-badge";
                 badge.setAttribute("aria-hidden", "true");
+                badge.style.cssText =
+                    "position:absolute;right:6px;bottom:6px;width:16px;height:16px;border-radius:50%;" +
+                    "background:rgba(255,255,255,0.38);display:flex;align-items:center;justify-content:center;" +
+                    "pointer-events:none;box-sizing:border-box;";
                 const playIc = document.createElement("span");
                 playIc.className = "lyric-bg-thumb-play-icon";
                 playIc.textContent = "▶";
+                playIc.style.cssText = "font-size:8px;line-height:1;color:#fff;";
                 badge.appendChild(playIc);
                 thumb.appendChild(badge);
             } else {
@@ -2741,10 +3642,14 @@
     }
 
     function saveSongs() {
+        /* 已迁移至 js/state.js
         setStore(STORAGE.SONGS, state.songs);
+        */
+        return globalThis.saveSongs();
     }
 
     function saveSettings() {
+        /* 已迁移至 js/state.js
         const ui = { ...state.ui };
         delete ui.overlayOpacityPct;
         delete ui.fontOpacityPct;
@@ -2757,17 +3662,23 @@
             sizePreset: state.sizePreset,
             ui
         });
+        */
+        return globalThis.saveSettings();
     }
 
     function savePlaylist() {
+        /* 已迁移至 js/state.js
         setStore(STORAGE.PLAYLIST, {
             items: state.playlist.items,
             running: state.playlist.running,
             activeIndex: state.playlist.activeIndex
         });
+        */
+        return globalThis.savePlaylist();
     }
 
-    function loadState() {
+    /** 从 localStorage 恢复 app.js 的 state（与 state.js 并行；刷新后 UI 与投屏设置一致） */
+    function hydrateAppStateFromStorage() {
         const songs = getStore(STORAGE.SONGS, []);
         const settings = getStore(STORAGE.SETTINGS, null);
 
@@ -2796,6 +3707,9 @@
             if (settings.ui && typeof settings.ui === "object") {
                 state.ui = { ...state.ui, ...settings.ui };
             }
+            if (state.ui.fontWeight == null || state.ui.fontWeight === "") {
+                state.ui.fontWeight = "700";
+            }
             if (!state.ui.bgImageId) state.ui.bgImageId = "";
             if (state.ui.bgMediaType !== "video" && state.ui.bgMediaType !== "image") {
                 state.ui.bgMediaType = "image";
@@ -2820,6 +3734,30 @@
             const pc = splitPages(curSong.lyrics || "", state.ui.defaultLines);
             state.currentPage = clamp(state.currentPage, 0, Math.max(0, pc.length - 1));
         }
+
+        const allowedThemes = new Set(["dark", "light", "warm", "high-contrast"]);
+        if (!allowedThemes.has(String(state.ui.theme || ""))) {
+            state.ui.theme = "dark";
+        }
+        state.ui.pageTransition = ["fade", "slide", "scale", "none"].includes(String(state.ui.pageTransition || ""))
+            ? state.ui.pageTransition
+            : "none";
+        state.ui.pageTransitionSpeed = clamp(Number(state.ui.pageTransitionSpeed) || 0.6, 0.3, 1.5);
+        state.ui.vignetteShape = state.ui.vignetteShape === "ellipse" ? "ellipse" : "circle";
+        state.ui.vignetteCenterBrightness = clamp(Number(state.ui.vignetteCenterBrightness) || 0, -50, 50);
+        state.ui.vignetteEdgeDarkness = clamp(Number(state.ui.vignetteEdgeDarkness) || 0, 0, 90);
+
+        loadThemeBgSlotsFromStorage();
+        loadThemeConsoleVideoFromStorage();
+    }
+
+    function loadState() {
+        let ret;
+        if (typeof globalThis.loadState === "function") {
+            ret = globalThis.loadState();
+        }
+        hydrateAppStateFromStorage();
+        return ret;
     }
 
     function persistStateBeforeHide() {
@@ -2903,7 +3841,7 @@
                 v.setAttribute("playsinline", "");
                 v.setAttribute("autoplay", "");
                 v.style.cssText =
-                    "position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;z-index:1;pointer-events:none;";
+                    "position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;z-index:0;pointer-events:none;";
                 card.insertBefore(v, card.firstChild);
                 void v.play().catch(() => {});
             } else {
@@ -2937,14 +3875,35 @@
         if (options.linesOnly && isMainVideoBackground()) {
             const cards = container.querySelectorAll(".card");
             if (cards.length === pages.length && pages.length > 0) {
+                let lineCountsMatch = true;
                 cards.forEach((card, idx) => {
-                    card.classList.toggle("active", idx === state.currentPage);
+                    const pl = pages[idx] || [];
+                    const rows = card.querySelectorAll(".card-line");
+                    if (rows.length !== pl.length) lineCountsMatch = false;
                 });
-                syncPageIndicatorFromState(pages.length);
-                requestAnimationFrame(() => {
-                    requestAnimationFrame(scrollSpeakerPreviewCardIntoView);
-                });
-                return;
+                if (lineCountsMatch) {
+                    cards.forEach((card, idx) => {
+                        card.classList.toggle("active", idx === state.currentPage);
+                        const pl = pages[idx] || [];
+                        const rows = card.querySelectorAll(".card-line");
+                        rows.forEach((row, i) => {
+                            row.textContent = pl[i] || "";
+                            applyTypographyToPreviewRow(row, {
+                                fontFamily: state.ui.fontFamily,
+                                fontColor: state.ui.fontColor,
+                                fontOpacityPct: state.ui.fontOpacityPct,
+                                textStrokePx: state.ui.textStrokePx,
+                                lightBg: state.ui.bgType === "solid-white"
+                            });
+                        });
+                    });
+                    syncPageIndicatorFromState(pages.length);
+                    renderAllPagesThumbnails(pages);
+                    requestAnimationFrame(() => {
+                        requestAnimationFrame(scrollSpeakerPreviewCardIntoView);
+                    });
+                    return;
+                }
             }
         }
 
@@ -2963,7 +3922,7 @@
             pages[pageIndex] = pageLines;
             song.lyrics = pages.map((p) => (p || []).join("\n")).join("\n\n");
             saveSongs();
-            updateAll();
+            updateAll({ linesOnly: isMainVideoBackground() });
         };
 
         pages.forEach((lines, idx) => {
@@ -3500,6 +4459,7 @@ ${deleteBtnHtml}
         const lines = pages[state.currentPage] || [];
 
         if (options && options.linesOnly && isMainVideoBackground()) {
+            mini.querySelectorAll(".mini-preview-lyric-stage").forEach((n) => n.remove());
             mini.querySelectorAll(".preview-line").forEach((n) => n.remove());
             mini.querySelectorAll(".mini-preview-projection-mask").forEach((n) => n.remove());
             mini.querySelectorAll(".mini-preview-vignette-radial").forEach((n) => n.remove());
@@ -3508,7 +4468,9 @@ ${deleteBtnHtml}
             mini.style.justifyContent = "flex-start";
             mini.style.alignItems = "center";
             mini.style.boxSizing = "border-box";
-            mini.style.paddingTop = `${lyricBlockTopPadPx(mini.clientHeight, state.ui.posY)}px`;
+            const padLo = lyricBlockTopPadPx(mini.clientHeight, state.ui.posY);
+            mini.style.paddingTop = `${padLo}px`;
+            mini.dataset.miniLyricPadCommitted = String(padLo);
             mini.style.paddingBottom = "12px";
             mini.style.paddingLeft = "12px";
             mini.style.paddingRight = "12px";
@@ -3556,18 +4518,22 @@ ${deleteBtnHtml}
             mini.style.background = "linear-gradient(140deg, rgba(27, 47, 89, 0.55), rgba(10, 15, 29, 0.55))";
         } else if (state.ui.bgType === "image" && state.ui.bgImage && state.ui.bgMediaType === "video") {
             mini.style.background = "#000";
-            const v = document.createElement("video");
-            v.className = "mini-preview-bg-video";
-            v.src = state.ui.bgImage;
-            v.muted = true;
-            v.loop = true;
-            v.playsInline = true;
-            v.setAttribute("playsinline", "");
-            v.setAttribute("autoplay", "");
-            v.style.cssText =
-                "position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;pointer-events:none;";
-            mini.appendChild(v);
-            if (!document.hidden) void v.play().catch(() => {});
+            let v = mini.querySelector(".mini-preview-bg-video");
+            if (!v) {
+                v = document.createElement("video");
+                v.className = "mini-preview-bg-video";
+                v.muted = true;
+                v.loop = true;
+                v.playsInline = true;
+                v.setAttribute("playsinline", "");
+                v.setAttribute("autoplay", "");
+                v.style.cssText =
+                    "position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;pointer-events:none;";
+                if (mini.firstChild) mini.insertBefore(v, mini.firstChild);
+                else mini.appendChild(v);
+            }
+            if (v.src !== state.ui.bgImage) v.src = state.ui.bgImage;
+            void v.play().catch(() => {});
         } else if (state.ui.bgType === "image" && state.ui.bgImage) {
             mini.style.backgroundImage = `url("${state.ui.bgImage}")`;
             mini.style.backgroundSize = "cover";
@@ -3579,7 +4545,9 @@ ${deleteBtnHtml}
         mini.style.justifyContent = "flex-start";
         mini.style.alignItems = "center";
         mini.style.boxSizing = "border-box";
-        mini.style.paddingTop = `${lyricBlockTopPadPx(mini.clientHeight, state.ui.posY)}px`;
+        const padPx = lyricBlockTopPadPx(mini.clientHeight, state.ui.posY);
+        mini.style.paddingTop = `${padPx}px`;
+        mini.dataset.miniLyricPadCommitted = String(padPx);
         mini.style.paddingBottom = "12px";
         mini.style.paddingLeft = "12px";
         mini.style.paddingRight = "12px";
@@ -4051,14 +5019,105 @@ ${deleteBtnHtml}
         if (!rng || rng.dataset.bound === "1") return;
         rng.dataset.bound = "1";
         rng.addEventListener("input", () => {
+            const pct = clamp(Number(rng.value || 100), 20, 100);
+            state.ui.fontOpacityPct = pct;
+            const fv = $("font-opacity-val");
+            if (fv) fv.textContent = String(pct);
+            updateAdvSliderSwatches();
+            scheduleMiniSliderDomPreview(() => applyMiniPreviewFontOpacityPct(pct));
+        });
+        rng.addEventListener("change", () => {
             state.ui.fontOpacityPct = clamp(Number(rng.value || 100), 20, 100);
             const fv = $("font-opacity-val");
             if (fv) fv.textContent = String(state.ui.fontOpacityPct);
             const song = currentSong();
             if (song) song.fontOpacityPct = state.ui.fontOpacityPct;
             updateAdvSliderSwatches();
+            saveSongs();
             updateAll();
         });
+    }
+
+    function normHexColorForPreset(c) {
+        const s = String(c || "").trim().toLowerCase();
+        if (!s.startsWith("#")) return s;
+        if (s.length === 4) {
+            return `#${s[1]}${s[1]}${s[2]}${s[2]}${s[3]}${s[3]}`;
+        }
+        return s;
+    }
+
+    function normFontWeightForPreset(w) {
+        const s = String(w == null ? "700" : w).trim();
+        if (/^normal$/i.test(s) || s === "400") return "400";
+        if (/^bold$/i.test(s) || s === "700") return "700";
+        return s;
+    }
+
+    function fontStylePresetMatchingId() {
+        const ff = String(state.ui.fontFamily || "").trim();
+        const fc = normHexColorForPreset(state.ui.fontColor);
+        const fw = normFontWeightForPreset(state.ui.fontWeight);
+        for (const p of FONT_STYLE_PRESETS) {
+            if (
+                ff === String(p.fontFamily).trim() &&
+                normHexColorForPreset(p.fontColor) === fc &&
+                normFontWeightForPreset(p.fontWeight) === fw
+            ) {
+                return p.id;
+            }
+        }
+        return "";
+    }
+
+    function syncFontStylePresetSelectFromState() {
+        const el = $("adv-font-style-preset");
+        if (!el) return;
+        el.value = fontStylePresetMatchingId() || "";
+    }
+
+    function ensureFontStylePresetSelect() {
+        if ($("adv-font-style-preset")) {
+            syncFontStylePresetSelectFromState();
+            return;
+        }
+        const labFF =
+            document.querySelector("label.adv-drawer-field-label[for=\"font-family-selector\"]") ||
+            document.querySelector("label[for=\"font-family-selector\"]");
+        if (!labFF || !labFF.parentNode) return;
+        const lab = document.createElement("label");
+        lab.className = "adv-drawer-field-label";
+        lab.setAttribute("for", "adv-font-style-preset");
+        lab.textContent = "字体风格";
+        const sel = document.createElement("select");
+        sel.id = "adv-font-style-preset";
+        sel.className = "adv-font-family-select";
+        sel.setAttribute("aria-label", "字体风格预设");
+        const optCustom = document.createElement("option");
+        optCustom.value = "";
+        optCustom.textContent = "自定义";
+        sel.appendChild(optCustom);
+        FONT_STYLE_PRESETS.forEach((p) => {
+            const o = document.createElement("option");
+            o.value = p.id;
+            o.textContent = p.label;
+            sel.appendChild(o);
+        });
+        labFF.parentNode.insertBefore(lab, labFF);
+        labFF.parentNode.insertBefore(sel, labFF);
+        sel.addEventListener("change", () => {
+            const v = sel.value;
+            if (!v) return;
+            const preset = FONT_STYLE_PRESET_BY_ID[v];
+            if (!preset) return;
+            state.ui.fontFamily = preset.fontFamily;
+            state.ui.fontColor = preset.fontColor;
+            state.ui.fontWeight = preset.fontWeight;
+            updateUIFromState();
+            saveSettings();
+            updateAll();
+        });
+        syncFontStylePresetSelectFromState();
     }
 
     function ensureFontColorControls() {
@@ -4159,12 +5218,21 @@ ${deleteBtnHtml}
         if (rng && rng.dataset.bound !== "1") {
             rng.dataset.bound = "1";
             rng.addEventListener("input", () => {
+                const pct = clamp(Number(rng.value || 0), 0, 80);
+                state.ui.overlayOpacityPct = pct;
+                const ov = $("projection-overlay-opacity-val");
+                if (ov) ov.textContent = String(pct);
+                updateAdvSliderSwatches();
+                scheduleMiniSliderDomPreview(() => applyMiniPreviewProjectionMaskOpacity(pct));
+            });
+            rng.addEventListener("change", () => {
                 state.ui.overlayOpacityPct = clamp(Number(rng.value || 0), 0, 80);
                 const ov = $("projection-overlay-opacity-val");
                 if (ov) ov.textContent = String(state.ui.overlayOpacityPct);
                 const song = currentSong();
                 if (song) song.overlayOpacityPct = state.ui.overlayOpacityPct;
                 updateAdvSliderSwatches();
+                saveSongs();
                 updateAll();
             });
         }
@@ -4278,6 +5346,7 @@ ${deleteBtnHtml}
         ensureFontOpacitySwatchLayout();
         updateAdvSliderSwatches();
         updateCloudUploadBtnState();
+        syncFontStylePresetSelectFromState();
     }
 
     const ADV_ACC_STORAGE_KEY = "adv-drawer-accordion-v1";
@@ -4347,6 +5416,7 @@ ${deleteBtnHtml}
             text: {
                 fontFamily: state.ui.fontFamily,
                 fontSize: state.ui.fontSize,
+                fontWeight: state.ui.fontWeight == null || state.ui.fontWeight === "" ? "700" : String(state.ui.fontWeight),
                 topPct: state.ui.posY,
                 color: state.ui.bgType === "solid-white" ? "#111" : state.ui.fontColor,
                 strokePx: clamp(Number(state.ui.textStrokePx), 0, 6)
@@ -4389,6 +5459,7 @@ ${deleteBtnHtml}
     }
 
     function broadcastState() {
+        /* 已迁移至 js/router.js
         liveState = buildLiveState();
         setStore(STORAGE.LIVE, liveState);
         if (channel) {
@@ -4401,6 +5472,8 @@ ${deleteBtnHtml}
         persistAdvPreviewCssVars();
         saveSongs();
         saveSettings();
+        */
+        return globalThis.broadcastState();
     }
 
     /** 避免 localStorage 配额/序列化异常阻断投屏等关键路径 */
@@ -4577,6 +5650,375 @@ ${deleteBtnHtml}
         saveSettings();
     }
 
+    let lyricDraftSaveTimer = 0;
+
+    function readLyricDraft() {
+        return parseJSON(localStorage.getItem(WORSHIP_DRAFT_LS), null);
+    }
+
+    function hideLyricDraftBanner() {
+        const b = $("lyric-draft-banner");
+        if (b) b.remove();
+    }
+
+    function clearLyricDraft() {
+        try {
+            localStorage.removeItem(WORSHIP_DRAFT_LS);
+        } catch (_e) {
+            /* ignore */
+        }
+        hideLyricDraftBanner();
+    }
+
+    function persistLyricDraftNow() {
+        const ta = $("lyric-editor-large");
+        if (!ta || isDisplay || isLeader) return;
+        const text = String(ta.value || "");
+        if (!text.trim()) {
+            clearLyricDraft();
+            return;
+        }
+        const payload = {
+            text,
+            songId: String(state.currentSongId || ""),
+            savedAt: Date.now()
+        };
+        try {
+            localStorage.setItem(WORSHIP_DRAFT_LS, JSON.stringify(payload));
+        } catch (err) {
+            if (!isStorageQuotaExceededError(err)) console.warn("persistLyricDraftNow", err);
+        }
+    }
+
+    function scheduleLyricDraftSave() {
+        if (lyricDraftSaveTimer) window.clearTimeout(lyricDraftSaveTimer);
+        lyricDraftSaveTimer = window.setTimeout(() => {
+            lyricDraftSaveTimer = 0;
+            persistLyricDraftNow();
+        }, 3000);
+    }
+
+    function formatDraftAgeMinutes(savedAt) {
+        const t = Number(savedAt) || 0;
+        if (!t) return "刚刚";
+        const mins = Math.floor((Date.now() - t) / 60000);
+        if (mins <= 0) return "刚刚";
+        return `${mins} 分钟`;
+    }
+
+    function maybeOfferLyricDraftRestore() {
+        if (isDisplay || isLeader) return;
+        const draft = readLyricDraft();
+        const raw = String(draft?.text || "").trim();
+        if (!raw) return;
+        const song = currentSong();
+        const onDisk = String(song?.lyrics || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+        const draftNorm = raw.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+        const sid = String(draft?.songId || "");
+        if (draftNorm === onDisk && sid === String(state.currentSongId || "")) {
+            clearLyricDraft();
+            return;
+        }
+        if ($("lyric-draft-banner")) return;
+        const col = document.querySelector(".editor-lyric-column");
+        if (!col) return;
+        const bar = document.createElement("div");
+        bar.id = "lyric-draft-banner";
+        bar.className = "lyric-draft-banner";
+        bar.style.cssText = [
+            "display:flex",
+            "flex-wrap:wrap",
+            "align-items:center",
+            "gap:8px 10px",
+            "padding:8px 10px",
+            "margin-bottom:8px",
+            "border-radius:10px",
+            "box-sizing:border-box",
+            "background:rgba(212,175,55,0.12)",
+            "border:1px solid rgba(212,175,55,0.35)",
+            "color:var(--text-primary)",
+            "font-size:0.82rem",
+            "line-height:1.45"
+        ].join(";");
+        const age = formatDraftAgeMinutes(draft?.savedAt);
+        const msg = document.createElement("span");
+        msg.style.flex = "1";
+        msg.style.minWidth = "140px";
+        msg.textContent = `📝 检测到未保存的草稿（保存于 ${age}前），是否恢复？`;
+        const btnRestore = document.createElement("button");
+        btnRestore.type = "button";
+        btnRestore.textContent = "恢复";
+        btnRestore.className = "small-btn";
+        btnRestore.style.cssText = "padding:4px 12px;border-radius:8px;cursor:pointer;font:inherit;";
+        btnRestore.addEventListener("click", () => {
+            if ($("lyric-editor-large")) $("lyric-editor-large").value = draftNorm;
+            hideLyricDraftBanner();
+            clearLyricDraft();
+            syncEditorToSong();
+            state.currentPage = 0;
+            updateSpeakerCards();
+            renderMiniPreview();
+            updateCloudUploadBtnState();
+        });
+        const btnDismiss = document.createElement("button");
+        btnDismiss.type = "button";
+        btnDismiss.textContent = "忽略";
+        btnDismiss.className = "small-btn";
+        btnDismiss.style.cssText = btnRestore.style.cssText;
+        btnDismiss.addEventListener("click", () => {
+            clearLyricDraft();
+        });
+        bar.appendChild(msg);
+        bar.appendChild(btnRestore);
+        bar.appendChild(btnDismiss);
+        col.insertBefore(bar, col.firstChild);
+    }
+
+    function collectWorshipBackupLocalExtras() {
+        const keys = [
+            THEME_BG_OPACITY_STORAGE,
+            ADV_MINI_OVERLAY_PCT_LS,
+            ADV_MINI_BLUR_PX_LS,
+            ADV_PREVIEW_LINE_HEIGHT_LS,
+            ADV_ACC_STORAGE_KEY,
+            "worship_theme_wallpaper",
+            "playlist_auto_switch",
+            WORSHIP_VISITED_LS,
+            LEGACY_FIRST_VISIT_LS,
+            "worship.user_nickname",
+            "user_nickname",
+            CLOUD_UPLOAD_HISTORY_LS
+        ];
+        const o = {};
+        keys.forEach((k) => {
+            try {
+                const v = localStorage.getItem(k);
+                if (v != null) o[k] = v;
+            } catch (_e) {
+                /* ignore */
+            }
+        });
+        return o;
+    }
+
+    async function buildFullWorshipBackupPayload() {
+        syncEditorToSong();
+        saveSongs();
+        saveSettings();
+        const tpl = getStore(LYRIC_TEMPLATES_KEY, null);
+        return {
+            version: 1,
+            format: WORSHIP_BACKUP_FORMAT,
+            backupAt: Date.now(),
+            backupAtIso: new Date().toISOString(),
+            nickname: readCloudShareUserNicknameForPost(),
+            songs: JSON.parse(JSON.stringify(state.songs)),
+            settings: getStore(STORAGE.SETTINGS, null),
+            playlist: getStore(STORAGE.PLAYLIST, null),
+            live: getStore(STORAGE.LIVE, null),
+            lyricTemplates: tpl,
+            backgrounds: {
+                themeBgCache: _idbThemeBgCache,
+                uploadedBackgrounds: JSON.parse(JSON.stringify(getUploadedBackgrounds())),
+                themeBgSlots: JSON.parse(JSON.stringify(_themeBgSlotsCache || [])),
+                themeBgActiveId: _themeBgActiveId || ""
+            },
+            localStorageExtras: collectWorshipBackupLocalExtras()
+        };
+    }
+
+    async function downloadFullWorshipBackup() {
+        try {
+            const payload = await buildFullWorshipBackupPayload();
+            const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            const d = new Date();
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, "0");
+            const day = String(d.getDate()).padStart(2, "0");
+            a.download = `worship-backup-${y}-${m}-${day}.worship-backup`;
+            a.rel = "noopener";
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+            showCornerSuccessToast("✅ 已生成备份文件");
+        } catch (err) {
+            console.warn("downloadFullWorshipBackup", err);
+            showToast("备份失败", $("adv-backup-all-btn"));
+        }
+    }
+
+    function countBackupBackgroundItems(bg) {
+        if (!bg || typeof bg !== "object") return 0;
+        const up = Array.isArray(bg.uploadedBackgrounds) ? bg.uploadedBackgrounds.length : 0;
+        const slots = Array.isArray(bg.themeBgSlots) ? bg.themeBgSlots.filter((x) => x && x.imageData).length : 0;
+        return up + slots;
+    }
+
+    function formatBackupConfirmLabel(iso, ts) {
+        if (iso && typeof iso === "string") {
+            const d = new Date(iso);
+            if (!Number.isNaN(d.getTime())) return d.toLocaleString();
+        }
+        const n = Number(ts) || 0;
+        if (n) return new Date(n).toLocaleString();
+        return "未知时间";
+    }
+
+    async function applyWorshipBackupPayload(data) {
+        const bg = data.backgrounds && typeof data.backgrounds === "object" ? data.backgrounds : {};
+        _themeBgSlotsCache = normalizeThemeBgSlots(Array.isArray(bg.themeBgSlots) ? bg.themeBgSlots : []);
+        _themeBgActiveId = String(bg.themeBgActiveId || "").trim();
+        if (!_themeBgActiveId && _themeBgSlotsCache.length) {
+            _themeBgActiveId = _themeBgSlotsCache[0].id;
+        }
+        if (String(bg.themeBgCache || "").trim()) {
+            _idbThemeBgCache = String(bg.themeBgCache);
+        } else {
+            syncActiveThemeBgCacheFromSlots();
+        }
+        persistThemeBgSlotsMetaOnly();
+        _idbUploadedCache = normalizeUploadedBackgroundsArray(
+            Array.isArray(bg.uploadedBackgrounds) ? bg.uploadedBackgrounds : []
+        );
+        if (!_bgUseIdbFallbackLs) {
+            const db = await openWorshipBgDatabase();
+            if (!_idbThemeBgCache.trim()) await idbClearThemeBg(db);
+            else await idbWriteThemeBg(db, _idbThemeBgCache);
+            await idbWriteAllUploaded(db, _idbUploadedCache);
+        } else {
+            persistThemeBgAsync(_idbThemeBgCache);
+            try {
+                setStore(UPLOADED_BACKGROUNDS_STORAGE, _idbUploadedCache);
+            } catch (err) {
+                console.warn(err);
+            }
+        }
+
+        if (Array.isArray(data.songs) && data.songs.length) {
+            state.songs = data.songs;
+        }
+        const st = data.settings && typeof data.settings === "object" ? data.settings : {};
+        state.currentSongId = st.currentSongId || state.songs[0]?.id || state.currentSongId;
+        state.currentPage = Number.isFinite(st.currentPage) ? st.currentPage : 0;
+        state.sizePreset = st.sizePreset || state.sizePreset || "M";
+        if (st.ui && typeof st.ui === "object") {
+            state.ui = { ...state.ui, ...st.ui };
+        }
+        if (state.ui.fontWeight == null || state.ui.fontWeight === "") state.ui.fontWeight = "700";
+        if (!state.ui.bgImageId) state.ui.bgImageId = "";
+        setStore(STORAGE.SONGS, state.songs);
+        setStore(STORAGE.SETTINGS, {
+            currentSongId: state.currentSongId,
+            currentPage: state.currentPage,
+            sizePreset: state.sizePreset,
+            ui: state.ui
+        });
+
+        if (data.playlist && typeof data.playlist === "object") {
+            state.playlist.items = Array.isArray(data.playlist.items) ? data.playlist.items : [];
+            state.playlist.running = !!data.playlist.running;
+            state.playlist.activeIndex = clamp(
+                Number(data.playlist.activeIndex) || 0,
+                0,
+                Math.max(0, state.playlist.items.length - 1)
+            );
+            setStore(STORAGE.PLAYLIST, {
+                items: state.playlist.items,
+                running: state.playlist.running,
+                activeIndex: state.playlist.activeIndex
+            });
+        }
+        if (data.live != null) {
+            try {
+                setStore(STORAGE.LIVE, data.live);
+            } catch (_e) {
+                /* ignore */
+            }
+        }
+        if (data.lyricTemplates != null) {
+            try {
+                setStore(LYRIC_TEMPLATES_KEY, data.lyricTemplates);
+            } catch (_e) {
+                /* ignore */
+            }
+        }
+        const extras = data.localStorageExtras && typeof data.localStorageExtras === "object" ? data.localStorageExtras : {};
+        Object.keys(extras).forEach((k) => {
+            try {
+                const v = extras[k];
+                if (v == null) localStorage.removeItem(k);
+                else localStorage.setItem(k, String(v));
+            } catch (_e) {
+                /* ignore */
+            }
+        });
+        const nick = String(data.nickname || "").trim();
+        if (nick && nick !== "匿名") {
+            try {
+                localStorage.setItem("worship.user_nickname", nick);
+            } catch (_e) {
+                /* ignore */
+            }
+        }
+        try {
+            localStorage.removeItem(WORSHIP_DRAFT_LS);
+        } catch (_e) {
+            /* ignore */
+        }
+        saveSongs();
+        saveSettings();
+        savePlaylist();
+        normalizeLegacyBgImageReference();
+        const nSong = Array.isArray(data.songs) ? data.songs.length : state.songs.length;
+        const nBg = countBackupBackgroundItems(data.backgrounds);
+        showCornerSuccessToast(`✅ 已恢复 ${nSong} 首诗歌，${nBg} 个背景`);
+        window.setTimeout(() => {
+            location.reload();
+        }, 650);
+    }
+
+    async function handleWorshipBackupRestoreFile(ev) {
+        const input = ev.target;
+        const file = input?.files?.[0];
+        if (input) input.value = "";
+        if (!file) return;
+        const name = String(file.name || "").toLowerCase();
+        if (!name.endsWith(".worship-backup") && !name.endsWith(".json")) {
+            showToast("请选择 .worship-backup 文件", $("adv-restore-backup-btn"));
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = async () => {
+            const data = parseJSON(String(reader.result || ""), null);
+            const songs = data && Array.isArray(data.songs) ? data.songs : [];
+            if (!data || !songs.length) {
+                showToast("备份文件无效", $("adv-restore-backup-btn"));
+                return;
+            }
+            const okFormat = data.format === WORSHIP_BACKUP_FORMAT || data.backupAt != null;
+            if (!okFormat && !data.settings) {
+                showToast("备份文件格式不正确", $("adv-restore-backup-btn"));
+                return;
+            }
+            const when = formatBackupConfirmLabel(data.backupAtIso, data.backupAt);
+            const nBg = countBackupBackgroundItems(data.backgrounds);
+            const msg = `即将恢复备份数据（含 ${songs.length} 首诗歌，备份于 ${when}）。当前数据将被覆盖，是否继续？`;
+            if (!window.confirm(msg)) return;
+            try {
+                await applyWorshipBackupPayload(data);
+            } catch (err) {
+                console.warn("applyWorshipBackupPayload", err);
+                showToast("恢复失败", $("adv-restore-backup-btn"));
+            }
+        };
+        reader.onerror = () => showToast("读取文件失败", $("adv-restore-backup-btn"));
+        reader.readAsText(file, "utf-8");
+    }
+
     function saveCurrentLyrics(opts) {
         const silent = !!(opts && typeof opts === "object" && opts.silent);
         if (!silent) {
@@ -4596,6 +6038,7 @@ ${deleteBtnHtml}
         updateSpeakerCards();
         renderMiniPreview();
         broadcastState();
+        clearLyricDraft();
         if (!silent) showCornerSuccessToast("✅ 已保存");
     }
 
@@ -4628,7 +6071,7 @@ ${deleteBtnHtml}
     async function publishSong() {
         const s = getCurrentSong();
         if (!s.lyrics || !s.lyrics.length) { showToast('无歌词可发布'); return; }
-        const url = 'https://spring-bush-d415.cuirenjie123456789.workers.dev';
+        const url = 'https://holy-snow-ebc5.cuirenjie123456789.workers.dev';
         try {
             const response = await fetch(url, {
                 method: 'POST',
@@ -4878,6 +6321,9 @@ ${deleteBtnHtml}
             state.sizePreset = settings.sizePreset || "M";
             if (settings.ui && typeof settings.ui === "object") {
                 state.ui = { ...state.ui, ...settings.ui };
+            }
+            if (state.ui.fontWeight == null || state.ui.fontWeight === "") {
+                state.ui.fontWeight = "700";
             }
             if (!state.ui.bgImageId) state.ui.bgImageId = "";
             normalizeLegacyBgImageReference();
@@ -5363,21 +6809,62 @@ ${deleteBtnHtml}
         on("ocr-btn", "click", () => $("ocr-file-input")?.click());
         on("help-btn", "click", openHelpModal);
         on("ocr-file-input", "change", async (e) => {
-            const file = e.target.files?.[0];
+            const input = e.target;
+            const file = input?.files?.[0];
             if (!file) return;
+            const waitTesseractReady = () =>
+                new Promise((resolve) => {
+                    if (typeof Tesseract !== "undefined") {
+                        resolve(true);
+                        return;
+                    }
+                    const t0 = Date.now();
+                    const maxMs = 45000;
+                    const step = () => {
+                        if (typeof Tesseract !== "undefined") {
+                            resolve(true);
+                            return;
+                        }
+                        if (Date.now() - t0 >= maxMs) {
+                            resolve(false);
+                            return;
+                        }
+                        window.setTimeout(step, 150);
+                    };
+                    step();
+                });
             if (typeof Tesseract === "undefined") {
-                showToast("OCR 组件未加载", $("ocr-btn"));
-                return;
+                showToast("Tesseract.js 正在加载，请稍候…", $("ocr-btn"));
+                const ok = await waitTesseractReady();
+                if (!ok) {
+                    showToast("OCR 尚未就绪，请刷新页面或稍后再试", $("ocr-btn"));
+                    input.value = "";
+                    return;
+                }
             }
-            showToast("OCR 识别中...", $("ocr-btn"));
+            showToast("OCR 识别中…", $("ocr-btn"));
             try {
                 const res = await Tesseract.recognize(file, "chi_sim+eng", { logger: () => {} });
-                const text = [$("lyric-editor-large")?.value || "", res?.data?.text || ""].filter(Boolean).join("\n");
-                if ($("lyric-editor-large")) $("lyric-editor-large").value = text;
+                const raw = String(res?.data?.text || "")
+                    .replace(/\r\n/g, "\n")
+                    .replace(/\r/g, "\n")
+                    .trim();
+                if (!raw) {
+                    showToast("未识别到文字", $("ocr-btn"));
+                    input.value = "";
+                    return;
+                }
+                const cur = String($("lyric-editor-large")?.value || "").trim();
+                if ($("lyric-editor-large")) {
+                    $("lyric-editor-large").value = cur ? `${cur}\n${raw}` : raw;
+                }
                 saveCurrentLyrics();
                 updateCloudUploadBtnState();
+                showToast("已填入歌词编辑区", $("ocr-btn"));
             } catch (_e) {
                 showToast("OCR 失败", $("ocr-btn"));
+            } finally {
+                input.value = "";
             }
         });
 
@@ -5504,24 +6991,46 @@ ${deleteBtnHtml}
         on("online-search-input", "input", renderOnlineSearchResult);
 
         on("font-slider", "input", () => {
+            const v = clamp(Number($("font-slider").value || 56), 24, 120);
+            if ($("font-val")) $("font-val").textContent = String(v);
+            scheduleMiniSliderDomPreview(() => applyMiniPreviewFontSizePx(v));
+        });
+        on("font-slider", "change", () => {
             state.ui.fontSize = clamp(Number($("font-slider").value || 56), 24, 120);
             if ($("font-val")) $("font-val").textContent = String(state.ui.fontSize);
+            saveSettings();
             updateAll();
         });
         on("default-lines-input", "input", () => {
             state.ui.defaultLines = clamp(Number($("default-lines-input").value || 4), 1, 20);
             state.currentPage = 0;
+            renderMiniPreview();
+        });
+        on("default-lines-input", "change", () => {
+            state.ui.defaultLines = clamp(Number($("default-lines-input").value || 4), 1, 20);
+            state.currentPage = 0;
+            saveSettings();
             updateAll();
         });
         on("pos-slider", "input", () => {
+            const v = clamp(Number($("pos-slider").value || 45), 20, 70);
+            if ($("pos-val")) $("pos-val").textContent = String(v);
+            scheduleMiniSliderDomPreview(() => applyMiniPreviewPosDragTransform(v));
+        });
+        on("pos-slider", "change", () => {
             state.ui.posY = clamp(Number($("pos-slider").value || 45), 20, 70);
             if ($("pos-val")) $("pos-val").textContent = String(state.ui.posY);
             const song = currentSong();
             if (song) song.posY = state.ui.posY;
+            clearMiniPreviewLyricStageDragTransform();
+            saveSongs();
+            saveSettings();
             updateAll();
         });
         on("font-family-selector", "change", () => {
             state.ui.fontFamily = $("font-family-selector").value;
+            syncFontStylePresetSelectFromState();
+            saveSettings();
             updateAll();
         });
         on("theme-selector", "change", () => {
@@ -5580,7 +7089,11 @@ ${deleteBtnHtml}
                     return;
                 }
                 try {
-                    const mt = file.type.startsWith("video/") ? "video" : "image";
+                    const name = String(file.name || "").toLowerCase();
+                    const videoByExt = /\.(mp4|webm|mov|m4v|ogv|ogg|mkv|avi)$/i.test(name);
+                    const videoByMime = String(file.type || "").startsWith("video/");
+                    const videoByDataUrl = /^data:video\//i.test(dataUrl);
+                    const mt = videoByMime || videoByExt || videoByDataUrl ? "video" : "image";
                     addUploadedBackgroundAndApply(dataUrl, mt);
                     updateUIFromState();
                     updateAll();
@@ -5600,63 +7113,36 @@ ${deleteBtnHtml}
             };
             reader.readAsDataURL(file);
         });
-        on("theme-bg-input", "change", (e) => {
-            const input = e.target;
-            const file = input.files?.[0];
-            if (!file) return;
-            const reader = new FileReader();
-            const toastAnchor = $("theme-bg-grid") || $("theme-bg-input");
-            reader.onload = () => {
-                const dataUrl = String(reader.result || "").trim();
-                if (!dataUrl) {
-                    showToast("未能读取图片", toastAnchor);
-                    input.value = "";
-                    return;
-                }
-                try {
-                    const dup = _themeBgSlotsCache.find((x) => x && x.imageData === dataUrl);
-                    if (dup) {
-                        _themeBgActiveId = dup.id;
-                        persistFullThemeBgFromSlots();
-                        applyThemeBackground();
-                        showToast("已切换到该主题背景", toastAnchor);
-                    } else {
-                        if (
-                            _themeBgSlotsCache.filter((x) => x && x.imageData).length >=
-                            THEME_BG_SLOTS_MAX
-                        ) {
-                            showToast("已满 4 张，请先删除一张", toastAnchor);
-                            input.value = "";
-                            return;
-                        }
-                        const nid = themeBgSlotId();
-                        _themeBgSlotsCache = normalizeThemeBgSlots([
-                            { id: nid, imageData: dataUrl, timestamp: Date.now() },
-                            ..._themeBgSlotsCache
-                        ]);
-                        _themeBgActiveId = nid;
-                        persistFullThemeBgFromSlots();
-                        applyThemeBackground();
-                        showToast("主题背景已更新", toastAnchor);
-                    }
-                } catch (err) {
-                    console.warn(err);
-                    showToast("主题背景存储失败（空间不足）", toastAnchor);
-                } finally {
-                    input.value = "";
-                }
-            };
-            reader.onerror = () => {
-                showToast("读取文件失败", toastAnchor);
-                input.value = "";
-            };
-            reader.readAsDataURL(file);
+        on("theme-bg-input", "change", handleThemeBgSlotFileInputChange);
+        on("worship-console-wallpaper-input", "change", handleThemeBgSlotFileInputChange);
+        on("worship-console-wallpaper-upload-btn", "click", () => {
+            const inp = $("worship-console-wallpaper-input") || $("theme-bg-input");
+            inp?.click();
         });
+        on("worship-console-wallpaper-reset", "click", () => {
+            resetWorshipConsoleThemeBackgrounds();
+        });
+        on("worship-console-theme-video-upload-btn", "click", () => {
+            $("worship-console-theme-video-input")?.click();
+        });
+        on("worship-console-theme-video-input", "change", handleThemeConsoleVideoFileChange);
         on("theme-bg-opacity-slider", "input", () => {
             const v = clamp(parseFloat($("theme-bg-opacity-slider").value || "0.65"), 0.05, 1);
-            localStorage.setItem(THEME_BG_OPACITY_STORAGE, String(v));
             document.documentElement.style.setProperty("--theme-bg-opacity", String(v));
             if ($("theme-bg-opacity-value")) $("theme-bg-opacity-value").textContent = `${Math.round(v * 100)}%`;
+            syncThemeConsoleVideoElementOpacity();
+            updateAdvSliderSwatches();
+        });
+        on("theme-bg-opacity-slider", "change", () => {
+            const v = clamp(parseFloat($("theme-bg-opacity-slider").value || "0.65"), 0.05, 1);
+            try {
+                localStorage.setItem(THEME_BG_OPACITY_STORAGE, String(v));
+            } catch (_e) {
+                /* ignore */
+            }
+            document.documentElement.style.setProperty("--theme-bg-opacity", String(v));
+            if ($("theme-bg-opacity-value")) $("theme-bg-opacity-value").textContent = `${Math.round(v * 100)}%`;
+            syncThemeConsoleVideoElementOpacity();
             updateAdvSliderSwatches();
             updateAll();
         });
@@ -5701,6 +7187,7 @@ ${deleteBtnHtml}
             updateSpeakerCards();
             renderMiniPreview();
             updateCloudUploadBtnState();
+            scheduleLyricDraftSave();
         });
         on("song-title-input", "input", () => {
             syncEditorToSong();
@@ -5717,11 +7204,17 @@ ${deleteBtnHtml}
         on("adv-lyric-overlay-opacity", "input", () => {
             const v = clamp(Number($("adv-lyric-overlay-opacity").value || 0), 0, 55);
             document.documentElement.style.setProperty("--adv-mini-readability", (v / 100).toFixed(3));
+        });
+        on("adv-lyric-overlay-opacity", "change", () => {
+            persistAdvPreviewCssVars();
             updateAll();
         });
         on("adv-lyric-layer-blur", "input", () => {
             const v = clamp(Number($("adv-lyric-layer-blur").value || 0), 0, 20);
             document.documentElement.style.setProperty("--adv-mini-blur-px", String(v));
+        });
+        on("adv-lyric-layer-blur", "change", () => {
+            persistAdvPreviewCssVars();
             updateAll();
         });
         on("adv-preview-line-height", "input", () => {
@@ -5732,8 +7225,27 @@ ${deleteBtnHtml}
             updateAll();
         });
         on("text-stroke-slider", "input", () => {
+            const sp = clamp(Number($("text-stroke-slider").value || 0), 0, 6);
+            if ($("text-stroke-val")) $("text-stroke-val").textContent = String(sp);
+            const lightBg = state.ui.bgType === "solid-white";
+            scheduleMiniSliderDomPreview(() => {
+                $("mini-preview")?.querySelectorAll(".preview-line").forEach((row) => {
+                    if (sp > 0) {
+                        const w = Math.min(sp, 2.5);
+                        const tcol = lightBg ? "rgba(0,0,0,0.4)" : "rgba(0,0,0,0.62)";
+                        row.style.webkitTextStroke = `${w}px ${tcol}`;
+                        row.style.paintOrder = "stroke fill";
+                    } else {
+                        row.style.webkitTextStroke = "";
+                        row.style.paintOrder = "";
+                    }
+                });
+            });
+        });
+        on("text-stroke-slider", "change", () => {
             state.ui.textStrokePx = clamp(Number($("text-stroke-slider").value || 0), 0, 6);
             if ($("text-stroke-val")) $("text-stroke-val").textContent = String(state.ui.textStrokePx);
+            saveSettings();
             updateAll();
         });
         on("vignette-shape-select", "change", () => {
@@ -5758,6 +7270,11 @@ ${deleteBtnHtml}
             scheduleMiniPreviewTransitionDemo();
         });
         on("page-transition-speed-slider", "input", () => {
+            const sp = clamp(parseFloat($("page-transition-speed-slider").value || "0.6"), 0.3, 1.5);
+            if ($("page-transition-speed-val")) $("page-transition-speed-val").textContent = String(sp);
+            scheduleMiniPreviewTransitionDemo(sp);
+        });
+        on("page-transition-speed-slider", "change", () => {
             state.ui.pageTransitionSpeed = clamp(
                 parseFloat($("page-transition-speed-slider").value || "0.6"),
                 0.3,
@@ -5766,6 +7283,7 @@ ${deleteBtnHtml}
             if ($("page-transition-speed-val")) {
                 $("page-transition-speed-val").textContent = String(state.ui.pageTransitionSpeed);
             }
+            saveSettings();
             updateAll();
             scheduleMiniPreviewTransitionDemo();
         });
@@ -5820,8 +7338,10 @@ ${deleteBtnHtml}
             displayVid.setAttribute("playsinline", "");
             displayVid.playsInline = true;
             displayVid.setAttribute("autoplay", "");
+            /** 始终占位，用 opacity 切换，避免 display:none 导致反复解码/重载 */
             displayVid.style.cssText =
-                "position:fixed;top:0;left:0;width:100%;height:100%;object-fit:cover;z-index:0;display:none;pointer-events:none;";
+                "position:fixed;top:0;left:0;width:100%;height:100%;object-fit:cover;z-index:0;" +
+                "pointer-events:none;opacity:0;display:block;";
             host.appendChild(displayVid);
         }
 
@@ -5863,7 +7383,7 @@ ${deleteBtnHtml}
             "transform:translateY(-50%)",
             "text-align:center",
             "line-height:1.45",
-            "font-weight:700",
+            "font-weight:" + String(state.ui.fontWeight == null || state.ui.fontWeight === "" ? "700" : state.ui.fontWeight),
             "text-shadow:0 2px 10px rgba(0,0,0,.85)",
             "z-index:10"
         ].join(";");
@@ -5989,8 +7509,14 @@ ${deleteBtnHtml}
         if (CSS_DYNAMIC_BG_TYPES.has(type)) {
             if (dispV) {
                 dispV.pause();
-                dispV.src = "";
-                dispV.style.display = "none";
+                dispV.removeAttribute("src");
+                delete dispV.dataset.worshipBgUrl;
+                try {
+                    dispV.load();
+                } catch (_e) {
+                    /* ignore */
+                }
+                dispV.style.opacity = "0";
             }
             ensureProjectionCssBg(type);
             if (gifLayer) gifLayer.style.display = "none";
@@ -6004,10 +7530,13 @@ ${deleteBtnHtml}
             removeProjectionCssBg();
             if (gifLayer) gifLayer.style.display = "none";
             if (projectionCanvas) projectionCanvas.style.display = "none";
-            dispV.src = bgState.imageData;
-            dispV.style.display = "block";
-            if (document.hidden) dispV.pause();
-            else void dispV.play().catch(() => {});
+            const want = String(bgState.imageData || "");
+            if (dispV.dataset.worshipBgUrl !== want) {
+                dispV.dataset.worshipBgUrl = want;
+                dispV.src = want;
+            }
+            dispV.style.opacity = "1";
+            void dispV.play().catch(() => {});
             projectionLastTs = ts;
             projectionRaf = 0;
             return;
@@ -6015,8 +7544,14 @@ ${deleteBtnHtml}
 
         if (dispV) {
             dispV.pause();
-            dispV.src = "";
-            dispV.style.display = "none";
+            dispV.removeAttribute("src");
+            delete dispV.dataset.worshipBgUrl;
+            try {
+                dispV.load();
+            } catch (_e) {
+                /* ignore */
+            }
+            dispV.style.opacity = "0";
         }
 
         removeProjectionCssBg();
@@ -6122,6 +7657,10 @@ ${deleteBtnHtml}
         layer.style.top = (t.topPct || 45) + "%";
         layer.style.fontFamily = t.fontFamily || state.ui.fontFamily;
         layer.style.fontSize = clamp(t.fontSize || 56, 24, 160) + "px";
+        layer.style.fontWeight =
+            t.fontWeight != null && t.fontWeight !== ""
+                ? String(t.fontWeight)
+                : String(state.ui.fontWeight || "700");
         layer.style.color = fontColor;
         const applyFade = !!liveState.playlistFade;
         if (applyFade) layer.style.transition = "opacity 300ms ease";
@@ -6153,6 +7692,10 @@ ${deleteBtnHtml}
         const fontOp = clamp(Number(liveState.fontOpacityPct ?? 100), 20, 100) / 100;
         layer.style.textAlign = "left";
         layer.style.fontFamily = t.fontFamily || state.ui.fontFamily;
+        layer.style.fontWeight =
+            t.fontWeight != null && t.fontWeight !== ""
+                ? String(t.fontWeight)
+                : String(state.ui.fontWeight || "700");
         layer.style.color = fontColor;
         layer.style.fontSize = "44px";
         const applyFade = !!liveState.playlistFade;
@@ -6243,6 +7786,7 @@ ${deleteBtnHtml}
     }
 
     function initDisplayMode() {
+        tryFreeLocalStorageForWorshipBoot();
         projectionMode = "display";
         installProjectionUI("display");
         displayProjectionChromeHidden = true;
@@ -6682,6 +8226,7 @@ ${deleteBtnHtml}
     }
 
     function initLeaderView() {
+        tryFreeLocalStorageForWorshipBoot();
         {
             projectionMode = "leader";
             document.title = "主领视角";
@@ -8029,9 +9574,10 @@ ${deleteBtnHtml}
 
     function initMain() {
         const boot = () => {
+            tryFreeLocalStorageForWorshipBoot();
+            ensureBgImageInputAcceptsVideo();
             loadState();
             applyAdvPreviewCssVarsFromStorage();
-            loadThemeBgSlotsFromStorage();
             ensureDefaultThemeBackgroundAtBoot();
             normalizeLegacyBgImageReference();
             applyThemeBackground();
@@ -8039,6 +9585,7 @@ ${deleteBtnHtml}
             const right = $("preview-panel");
             if (left && !left.style.width) left.style.width = "260px";
             if (right && !right.style.width) right.style.width = "300px";
+            ensureFontStylePresetSelect();
             ensureFontColorControls();
             ensureProjectionOverlayOpacitySlider();
             initAdvDrawerAccordion();
@@ -8053,6 +9600,9 @@ ${deleteBtnHtml}
             renderPlaylist();
             if ($("playlist-auto-switch")) $("playlist-auto-switch").checked = !!state.playlist.autoSwitch;
             bindEvents();
+            queueMicrotask(() => {
+                maybeOfferLyricDraftRestore();
+            });
             initCloudShareActionGroup();
             rehomeOnlineResultsPanelIfNeeded();
             const onlineSearchInp = $("online-search-input");
@@ -8105,6 +9655,7 @@ ${deleteBtnHtml}
             }
             maybeShowWelcomeToast();
             maybeShowFirstVisitOnboarding();
+            ensureWorshipVersionFooter();
             requestEnsureUploadedVideoCoversOnMineTab();
         };
         initBackgroundImageIndexedDb().then(boot).catch((err) => {

@@ -1348,18 +1348,60 @@ body.online-search-overlay-open {
     gap: 6px;
     margin: 0;
     padding: 6px 14px;
-    border: 1px solid rgba(212, 175, 55, 0.3);
-    border-radius: 6px;
-    background: rgba(12, 14, 22, 0.65);
-    color: rgba(248, 248, 252, 0.96);
+    border-radius: 8px;
     font-size: 0.8rem;
     font-weight: 600;
     line-height: 1.25;
     cursor: pointer;
     white-space: nowrap;
     box-sizing: border-box;
-    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.1s ease;
+    transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    background: rgba(255, 255, 255, 0.06);
+    color: rgba(248, 248, 252, 0.96);
 }
+
+/* 核心操作：保存、应用到演示屏 */
+#editor-action-bar #save-song-btn,
+#editor-action-bar #apply-to-display {
+    border: 1px solid rgba(212, 175, 55, 0.55);
+    background: rgba(212, 175, 55, 0.12);
+    color: rgba(252, 250, 245, 0.98);
+}
+#editor-action-bar #save-song-btn:hover,
+#editor-action-bar #apply-to-display:hover {
+    border-color: rgba(212, 175, 55, 0.8);
+    background: rgba(212, 175, 55, 0.2);
+    color: #fff;
+}
+
+/* 次要操作：存为模板、重置示例 */
+#editor-action-bar #save-as-template-btn,
+#editor-action-bar #reset-current-song {
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    background: rgba(255, 255, 255, 0.06);
+}
+#editor-action-bar #save-as-template-btn:hover,
+#editor-action-bar #reset-current-song:hover {
+    border-color: rgba(255, 255, 255, 0.42);
+    background: rgba(255, 255, 255, 0.11);
+    color: #fff;
+}
+
+/* 辅助工具：拍照识歌词、使用帮助 */
+#editor-action-bar #ocr-btn,
+#editor-action-bar #help-btn {
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: transparent;
+    color: rgba(236, 238, 245, 0.82);
+}
+#editor-action-bar #ocr-btn:hover,
+#editor-action-bar #help-btn:hover {
+    border-color: rgba(255, 255, 255, 0.28);
+    background: rgba(255, 255, 255, 0.05);
+    color: rgba(248, 248, 252, 0.95);
+}
+
 .editor-action-bar-btn__icon {
     font-size: 1rem;
     line-height: 1;
@@ -1367,11 +1409,6 @@ body.online-search-overlay-open {
 }
 .editor-action-bar-btn__text {
     letter-spacing: 0.02em;
-}
-.editor-action-bar-btn:hover {
-    background: rgba(24, 28, 40, 0.88);
-    border-color: rgba(212, 175, 55, 0.48);
-    color: #fff;
 }
 .editor-action-bar-btn:active {
     transform: scale(0.98);
@@ -2697,6 +2734,85 @@ body.is-col-resizing * {
 }
 .adv-drawer-acc-item--theme .adv-drawer-theme-setting-group {
     margin-top: 0;
+}
+
+/* —— 高级编辑：主题背景（仅控制台外观）—— */
+.adv-console-theme-card {
+    position: relative;
+    gap: 10px;
+}
+.adv-console-theme-scope-hint {
+    margin: 0 0 2px;
+    font-size: 0.72rem;
+    line-height: 1.45;
+    color: var(--text-secondary);
+    opacity: 0.92;
+}
+/* 保留 #theme-selector 供 app.js 同步，视觉上隐藏 */
+.adv-console-theme-selector-sr {
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    padding: 0 !important;
+    margin: -1px !important;
+    overflow: hidden !important;
+    clip: rect(0, 0, 0, 0) !important;
+    clip-path: inset(50%) !important;
+    white-space: nowrap !important;
+    border: 0 !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
+.adv-console-wallpaper-upload-btn,
+.adv-console-wallpaper-reset-btn {
+    width: 100%;
+    box-sizing: border-box;
+}
+.worship-console-wallpaper-preview {
+    min-height: 56px;
+    border-radius: 12px;
+    border: 1px dashed rgba(255, 255, 255, 0.18);
+    background: rgba(0, 0, 0, 0.12);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px;
+    box-sizing: border-box;
+}
+body[data-theme="light"] .worship-console-wallpaper-preview {
+    border-color: rgba(0, 0, 0, 0.12);
+    background: rgba(0, 0, 0, 0.03);
+}
+.worship-console-wallpaper-empty {
+    margin: 0;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    text-align: center;
+    opacity: 0.88;
+}
+.worship-console-wallpaper-thumb {
+    width: 100%;
+    max-width: 200px;
+    aspect-ratio: 16 / 10;
+    border: 1px solid rgba(212, 175, 119, 0.45);
+    border-radius: 10px;
+    background-size: cover;
+    background-position: center;
+    cursor: pointer;
+    padding: 0;
+    background-color: rgba(0, 0, 0, 0.2);
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25);
+}
+body[data-theme="light"] .worship-console-wallpaper-thumb {
+    border-color: rgba(201, 162, 39, 0.5);
+    box-shadow: 0 1px 8px rgba(0, 0, 0, 0.12);
+}
+.adv-bg-fine-scope-hint {
+    margin: 0 0 10px;
+    font-size: 0.72rem;
+    line-height: 1.45;
+    color: var(--text-secondary);
+    opacity: 0.9;
 }
 #preview-panel .adv-font-family-select option {
     font-size: 0.95rem;

@@ -56,6 +56,8 @@
         <div id="editor-action-bar" class="editor-action-bar" role="toolbar" aria-label="歌词编辑操作">
             <button type="button" id="save-song-btn" class="editor-action-bar-btn" title="保存当前歌词到曲库"><span class="editor-action-bar-btn__icon" aria-hidden="true">💾</span><span class="editor-action-bar-btn__text">保存</span></button>
             <button type="button" id="save-as-template-btn" class="editor-action-bar-btn" title="将当前歌词存为可复用模板"><span class="editor-action-bar-btn__icon" aria-hidden="true">📄</span><span class="editor-action-bar-btn__text">存为模板</span></button>
+            <button type="button" id="apply-to-display" class="editor-action-bar-btn" title="将当前样式与歌词同步到演示屏"><span class="editor-action-bar-btn__icon" aria-hidden="true">📺</span><span class="editor-action-bar-btn__text">应用到演示屏</span></button>
+            <button type="button" id="reset-current-song" class="editor-action-bar-btn" title="恢复本首诗歌的示例内容"><span class="editor-action-bar-btn__icon" aria-hidden="true">🔄</span><span class="editor-action-bar-btn__text">重置示例</span></button>
             <div id="upload-cloud-action-wrap" style="position:relative;display:inline-flex;align-items:center;gap:6px;flex-wrap:nowrap;">
                 <button type="button" id="upload-cloud-btn" class="editor-action-bar-btn" title="将当前诗歌与高级编辑设置上传到云端，生成分享链接" disabled><span class="editor-action-bar-btn__icon" aria-hidden="true">☁️</span><span class="editor-action-bar-btn__text" id="upload-cloud-btn-label">上传云端</span></button>
                 <button type="button" id="upload-history-toggle-btn" class="editor-action-bar-btn" title="查看最近 5 条上传记录" aria-expanded="false" aria-controls="upload-history-dropdown"><span class="editor-action-bar-btn__icon" aria-hidden="true">📋</span><span class="editor-action-bar-btn__text">历史</span></button>
@@ -63,8 +65,6 @@
                     <div id="upload-history-dropdown-list" style="display:flex;flex-direction:column;gap:10px;"></div>
                 </div>
             </div>
-            <button type="button" id="apply-to-display" class="editor-action-bar-btn" title="将当前样式与歌词同步到演示屏"><span class="editor-action-bar-btn__icon" aria-hidden="true">📺</span><span class="editor-action-bar-btn__text">应用到演示屏</span></button>
-            <button type="button" id="reset-current-song" class="editor-action-bar-btn" title="恢复本首诗歌的示例内容"><span class="editor-action-bar-btn__icon" aria-hidden="true">🔄</span><span class="editor-action-bar-btn__text">重置示例</span></button>
             <button type="button" id="ocr-btn" class="editor-action-bar-btn" title="从照片识别歌词"><span class="editor-action-bar-btn__icon" aria-hidden="true">📷</span><span class="editor-action-bar-btn__text">拍照识歌词</span></button>
             <button type="button" id="help-btn" class="editor-action-bar-btn" title="查看使用说明与快捷键"><span class="editor-action-bar-btn__icon" aria-hidden="true">❓</span><span class="editor-action-bar-btn__text">使用帮助</span></button>
             <input type="file" id="ocr-file-input" accept="image/*" capture="environment" hidden>
@@ -240,10 +240,34 @@
                                 </div>
                             </div>
                         </section>
+                        <section class="adv-drawer-acc-item is-open" data-adv-acc data-adv-acc-id="console-theme">
+                            <button type="button" class="adv-drawer-acc-trigger" aria-expanded="true"><span>🖥️ 主题背景</span><span class="adv-drawer-acc-chevron" aria-hidden="true"></span></button>
+                            <div class="adv-drawer-acc-panel">
+                                <div class="adv-drawer-acc-panel-inner adv-drawer-card-body adv-console-theme-card">
+                                    <p class="adv-console-theme-scope-hint">以下设置仅影响网站控制台自身的界面外观</p>
+                                    <label class="adv-drawer-field-label" for="theme-selector">界面主题</label>
+                                    <select id="theme-selector" class="adv-font-family-select" style="width:100%;box-sizing:border-box;margin-top:2px;" aria-label="界面主题">
+                                        <option value="dark" selected>深色</option>
+                                        <option value="light">浅色</option>
+                                        <option value="warm">暖色</option>
+                                        <option value="high-contrast">高对比</option>
+                                    </select>
+                                    <div style="display:flex;gap:8px;width:100%;box-sizing:border-box;flex-wrap:wrap;">
+                                        <button type="button" id="worship-console-wallpaper-upload-btn" class="btn-outline adv-console-wallpaper-upload-btn" style="flex:1 1 120px;min-width:0;">📷 上传壁纸</button>
+                                        <button type="button" id="worship-console-theme-video-upload-btn" class="btn-outline adv-console-wallpaper-upload-btn" style="flex:1 1 120px;min-width:0;">🎬 上传视频</button>
+                                    </div>
+                                    <input type="file" id="worship-console-wallpaper-input" accept="image/png,image/jpeg,image/jpg,image/gif,image/bmp,image/webp,image/svg+xml" hidden>
+                                    <input type="file" id="worship-console-theme-video-input" accept=".mp4,.webm,.mov,video/mp4,video/webm,video/quicktime" hidden>
+                                    <div id="worship-console-wallpaper-preview" class="worship-console-wallpaper-preview" role="region" aria-label="自定义主题壁纸缩略图" aria-live="polite"></div>
+                                    <button type="button" id="worship-console-wallpaper-reset" class="btn-outline adv-console-wallpaper-reset-btn">↩ 恢复默认</button>
+                                </div>
+                            </div>
+                        </section>
                         <section class="adv-drawer-acc-item is-open" data-adv-acc data-adv-acc-id="bgfine">
                             <button type="button" class="adv-drawer-acc-trigger" aria-expanded="true"><span>🖼️ 背景微调</span><span class="adv-drawer-acc-chevron" aria-hidden="true"></span></button>
                             <div class="adv-drawer-acc-panel">
                                 <div class="adv-drawer-acc-panel-inner adv-drawer-card-body" id="adv-bg-fine-body">
+                                    <p class="adv-bg-fine-scope-hint">以下设置主要影响投屏画面与歌词预览</p>
                                     <div id="theme-bg-opacity-row" class="theme-bg-opacity-row is-disabled">
                                         <label for="theme-bg-opacity-slider">主题壁纸透明度</label>
                                         <div class="theme-bg-opacity-inner">
@@ -253,6 +277,10 @@
                                         </div>
                                     </div>
                                     <div id="adv-projection-mask-slot"></div>
+                                    <label class="adv-drawer-field-label" for="adv-lyric-overlay-opacity">快速预览暗角浓度</label>
+                                    <input type="range" id="adv-lyric-overlay-opacity" class="adv-range" min="0" max="55" value="0" step="1" title="叠在预览上的半透明层">
+                                    <label class="adv-drawer-field-label" for="adv-lyric-layer-blur">快速预览毛玻璃模糊</label>
+                                    <input type="range" id="adv-lyric-layer-blur" class="adv-range" min="0" max="20" value="0" step="1" title="作用于预览区叠层">
                                     <label class="adv-drawer-field-label" for="vignette-shape-select">局部亮度 · 渐变形状</label>
                                     <select id="vignette-shape-select">
                                         <option value="circle" selected>圆形</option>
@@ -262,10 +290,6 @@
                                     <input type="range" id="vignette-center-slider" class="adv-range" min="-50" max="50" value="0" step="1" title="负值压暗中心，正值提亮中心">
                                     <label class="adv-drawer-field-label" for="vignette-edge-slider">边缘暗度 <span id="vignette-edge-val">0</span> %</label>
                                     <input type="range" id="vignette-edge-slider" class="adv-range" min="0" max="90" value="0" step="1" title="四周压暗强度">
-                                    <label class="adv-drawer-field-label" for="adv-lyric-overlay-opacity">快速预览暗角浓度</label>
-                                    <input type="range" id="adv-lyric-overlay-opacity" class="adv-range" min="0" max="55" value="0" step="1" title="叠在预览上的半透明层">
-                                    <label class="adv-drawer-field-label" for="adv-lyric-layer-blur">快速预览毛玻璃模糊</label>
-                                    <input type="range" id="adv-lyric-layer-blur" class="adv-range" min="0" max="20" value="0" step="1" title="作用于预览区叠层">
                                 </div>
                             </div>
                         </section>
@@ -299,25 +323,6 @@
                                     </select>
                                     <label class="adv-drawer-field-label" for="page-transition-speed-slider">动画速度 <span id="page-transition-speed-val">0.6</span> 秒</label>
                                     <input type="range" id="page-transition-speed-slider" class="adv-range" min="0.3" max="1.5" value="0.6" step="0.05" title="翻页过渡时长">
-                                </div>
-                            </div>
-                        </section>
-                        <section class="adv-drawer-acc-item adv-drawer-acc-item--theme is-open" data-adv-acc data-adv-acc-id="theme">
-                            <button type="button" class="adv-drawer-acc-trigger" aria-expanded="true"><span>🎭 界面主题</span><span class="adv-drawer-acc-chevron" aria-hidden="true"></span></button>
-                            <div class="adv-drawer-acc-panel">
-                                <div class="adv-drawer-acc-panel-inner">
-                                    <div class="setting-group adv-drawer-theme-setting-group">
-                                        <label>🎭 界面主题</label>
-                                        <select id="theme-selector">
-                                            <option value="dark" selected>深色</option>
-                                            <option value="light">浅色</option>
-                                            <option value="warm">暖色</option>
-                                            <option value="high-contrast">高对比</option>
-                                        </select>
-                                        <label class="theme-bg-subheading">自定义主题背景</label>
-                                        <div id="theme-bg-grid" class="theme-bg-grid" role="group" aria-label="自定义主题背景"></div>
-                                        <input type="file" id="theme-bg-input" accept="image/png,image/jpeg,image/jpg,image/gif,image/bmp,image/webp,image/*" hidden>
-                                    </div>
                                 </div>
                             </div>
                         </section>
@@ -637,6 +642,75 @@
         drawerHandle.addEventListener('mousedown', startDrawerDrag);
         drawerHandle.addEventListener('touchstart', startDrawerDrag, { passive: false });
     }
+})();
+</script>
+<script>
+(function () {
+    var root = document.documentElement;
+
+    function syncOpacityRow() {
+        var row = document.getElementById("theme-bg-opacity-row");
+        var slider = document.getElementById("theme-bg-opacity-slider");
+        var prop = (getComputedStyle(root).getPropertyValue("--theme-bg-image") || "").trim();
+        var hasImg = !!prop && prop !== "none";
+        var hasVid = document.body.getAttribute("data-theme-custom-video") === "1";
+        var has = hasImg || hasVid;
+        if (row) row.classList.toggle("is-disabled", !has);
+        if (slider) slider.disabled = !has;
+    }
+
+    function reapplyAfterApp() {
+        syncOpacityRow();
+    }
+
+    function syncThemeQuickButtons() {
+        var sel = document.getElementById("theme-selector");
+        if (!sel) return;
+        var v = sel.value || "dark";
+        document.querySelectorAll(".adv-theme-quick-btn").forEach(function (b) {
+            b.classList.toggle("is-active", (b.getAttribute("data-theme-quick") || "") === v);
+        });
+    }
+
+    function bind() {
+        var themeSel = document.getElementById("theme-selector");
+        var drawerToggle = document.getElementById("adv-drawer-toggle");
+
+        document.querySelectorAll(".adv-theme-quick-btn").forEach(function (btn) {
+            btn.addEventListener("click", function () {
+                var v = btn.getAttribute("data-theme-quick");
+                if (!v || !themeSel) return;
+                themeSel.value = v;
+                themeSel.dispatchEvent(new Event("change", { bubbles: true }));
+                syncThemeQuickButtons();
+            });
+        });
+        if (themeSel) {
+            themeSel.addEventListener("change", syncThemeQuickButtons);
+        }
+        if (drawerToggle) {
+            drawerToggle.addEventListener("change", function () {
+                syncOpacityRow();
+                syncThemeQuickButtons();
+            });
+        }
+
+        syncThemeQuickButtons();
+        syncOpacityRow();
+    }
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", bind);
+    } else {
+        bind();
+    }
+
+    window.addEventListener("load", function () {
+        requestAnimationFrame(function () {
+            requestAnimationFrame(reapplyAfterApp);
+        });
+        window.setTimeout(reapplyAfterApp, 700);
+    });
 })();
 </script>
 

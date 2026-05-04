@@ -3679,14 +3679,10 @@
     }
 
     function saveSongs() {
-        /* 已迁移至 js/state.js
         setStore(STORAGE.SONGS, state.songs);
-        */
-        return globalThis.saveSongs();
     }
 
     function saveSettings() {
-        /* 已迁移至 js/state.js
         const ui = { ...state.ui };
         delete ui.overlayOpacityPct;
         delete ui.fontOpacityPct;
@@ -3699,19 +3695,14 @@
             sizePreset: state.sizePreset,
             ui
         });
-        */
-        return globalThis.saveSettings();
     }
 
     function savePlaylist() {
-        /* 已迁移至 js/state.js
         setStore(STORAGE.PLAYLIST, {
             items: state.playlist.items,
             running: state.playlist.running,
             activeIndex: state.playlist.activeIndex
         });
-        */
-        return globalThis.savePlaylist();
     }
 
     /** 从 localStorage 恢复 app.js 的 state（与 state.js 并行；刷新后 UI 与投屏设置一致） */
@@ -5545,7 +5536,6 @@ ${deleteBtnHtml}
     }
 
     function broadcastState() {
-        /* 已迁移至 js/router.js
         liveState = buildLiveState();
         setStore(STORAGE.LIVE, liveState);
         if (channel) {
@@ -5558,8 +5548,6 @@ ${deleteBtnHtml}
         persistAdvPreviewCssVars();
         saveSongs();
         saveSettings();
-        */
-        return globalThis.broadcastState();
     }
 
     /** 避免 localStorage 配额/序列化异常阻断投屏等关键路径 */

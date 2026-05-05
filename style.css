@@ -1079,6 +1079,87 @@ body.online-search-overlay-open {
     letter-spacing: 0.01em;
 }
 
+/* 投屏控制区底部信息（三行排版） */
+.worship-footer-stack {
+    margin-top: 18px;
+    padding: 16px 4px 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    text-align: center;
+}
+.worship-footer-line {
+    margin: 0;
+    line-height: 1.55;
+}
+.worship-footer-line--copyright {
+    font-size: 0.65rem;
+    color: rgba(255, 255, 255, 0.4);
+    letter-spacing: 0.02em;
+}
+.worship-footer-version-slot {
+    display: inline;
+}
+.worship-footer-version-btn {
+    display: inline;
+    padding: 0;
+    margin: 0;
+    border: none;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-size: inherit;
+    letter-spacing: inherit;
+    cursor: pointer;
+    text-decoration: none;
+    vertical-align: baseline;
+}
+.worship-footer-version-btn:hover {
+    text-decoration: underline;
+    color: rgba(255, 255, 255, 0.55);
+}
+.worship-footer-line--privacy {
+    font-size: 0.72rem;
+    color: rgba(255, 255, 255, 0.6);
+}
+.worship-footer-line--shortcuts {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px 20px;
+    text-align: left;
+    font-size: 0.78rem;
+    color: rgba(255, 255, 255, 0.8);
+}
+.worship-footer-shortcuts-text {
+    flex: 1 1 220px;
+    min-width: 0;
+}
+.worship-footer-feedback-link {
+    flex: 0 0 auto;
+    color: rgba(255, 255, 255, 0.85);
+    text-decoration: none;
+    white-space: nowrap;
+    align-self: center;
+}
+.worship-footer-feedback-link:hover {
+    text-decoration: underline;
+    color: rgba(255, 255, 255, 0.95);
+}
+@media (max-width: 520px) {
+    .worship-footer-line--shortcuts {
+        flex-direction: column;
+        align-items: stretch;
+        text-align: left;
+    }
+    .worship-footer-feedback-link {
+        white-space: normal;
+        align-self: flex-start;
+    }
+}
+
 /* 控制台：投屏丢失 — 淡遮罩 + 半透明玻璃卡片 */
 .restore-projection-overlay {
     position: fixed;
@@ -3069,6 +3150,9 @@ body[data-theme="light"] .worship-console-wallpaper-thumb {
 #lyric-editor-large,
 #preview-panel :where(button, input:not([type="checkbox"]):not([type="radio"]), textarea, select, label),
 #preview-panel .hint-text,
+#preview-panel .worship-footer-stack .worship-footer-line,
+#preview-panel .worship-footer-version-btn,
+#preview-panel .worship-footer-feedback-link,
 #preview-panel label.theme-bg-subheading,
 #preview-panel .adv-drawer-close,
 #preview-panel .adv-drawer-panel-title,
@@ -3294,8 +3378,8 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
 /* 「我的背景」标签页：固定 4 列网格，缩略图 70×45 */
 #my-backgrounds-container.my-backgrounds {
     display:grid;
-    grid-template-columns:repeat(4, 70px);
-    gap:8px;
+    grid-template-columns:repeat(4, minmax(76px, 1fr));
+    gap:10px;
     justify-content:start;
     max-height:min(42vh, 320px);
     overflow-y:auto;
@@ -3305,6 +3389,12 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
     flex: 1 1 auto;
     min-height: 120px;
     max-height: none;
+}
+#shared-backgrounds-container .lyric-bg-thumb-wrap {
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    padding: 0 !important;
 }
 .lyric-bg-thumb-wrap { position:relative; aspect-ratio:1; min-height:0; }
 .lyric-bg-thumb {
@@ -3333,6 +3423,17 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
     position:relative;
     display:block;
     overflow:hidden;
+}
+#my-backgrounds-container .lyric-bg-thumb .lyric-bg-thumb-cover-img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: inherit;
+    pointer-events: none;
+    z-index: 0;
+    display: block;
 }
 .lyric-bg-thumb-cover-spinner {
     position:absolute;
@@ -3376,9 +3477,21 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
 
 #my-backgrounds-container .lyric-bg-thumb-wrap {
     aspect-ratio:auto;
-    width:70px;
+    width:100%;
+    min-width:0;
     height:45px;
     overflow: visible;
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    border-radius: 0;
+    transition: none;
+}
+#my-backgrounds-container .lyric-bg-thumb-wrap:hover {
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
 }
 #my-backgrounds-container .lyric-bg-thumb-delete {
     position:absolute;
@@ -3524,7 +3637,7 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
     animation:dissolve-particles 0.72s ease-out forwards;
 }
 #my-backgrounds-container .lyric-bg-slot-empty {
-    width:70px;
+    width:76px;
     height:45px;
     box-sizing:border-box;
     border:1px dashed rgba(255,255,255,0.35);
@@ -3549,9 +3662,10 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
     font-weight:300;
 }
 #my-backgrounds-container .lyric-bg-thumb {
-    width:70px;
+    width:56px;
     height:45px;
     min-height:0;
+    margin-left:12px;
     border-radius:8px;
     border:1px solid rgba(255,255,255,0.38);
 }
@@ -3594,6 +3708,143 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
     right:2px;
     bottom:2px;
 }
+
+/* 背景悬停中央放大预览 */
+.bg-hover-preview-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 12000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+.bg-hover-preview-overlay.is-visible {
+    opacity: 1;
+    pointer-events: auto;
+}
+.bg-hover-preview-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.72);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+}
+.bg-hover-preview-frame {
+    position: relative;
+    z-index: 1;
+    width: min(86vw, 960px);
+    height: min(78vh, 540px);
+    border-radius: 20px;
+    overflow: hidden;
+    box-shadow:
+        0 0 0 1px rgba(255, 255, 255, 0.12),
+        0 24px 80px rgba(0, 0, 0, 0.65),
+        0 0 60px rgba(120, 160, 255, 0.18);
+    background: rgba(12, 14, 22, 0.5);
+}
+.bg-hover-preview-inner {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.bg-hover-preview-inner img,
+.bg-hover-preview-inner video {
+    max-width: 100%;
+    max-height: 100%;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    display: block;
+}
+
+.adv-font-mega-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+    user-select: none;
+}
+.adv-font-mega-label input {
+    width: 1rem;
+    height: 1rem;
+    accent-color: var(--accent, #6b8ec9);
+}
+
+#my-backgrounds-container .lyric-bg-thumb-wrap--dragging {
+    opacity: 0.55;
+}
+.lyric-bg-drag-handle {
+    position: absolute;
+    left: 2px;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 5;
+    width: 12px;
+    height: 28px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.12);
+    color: rgba(255, 255, 255, 0.65);
+    font-size: 9px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: grab;
+    user-select: none;
+    letter-spacing: -1px;
+}
+.lyric-bg-drag-handle:active {
+    cursor: grabbing;
+}
+.lyric-bg-default-badge {
+    position: absolute;
+    left: 50%;
+    bottom: 4px;
+    transform: translateX(-50%);
+    z-index: 4;
+    font-size: 9px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 6px;
+    background: linear-gradient(135deg, rgba(212, 175, 55, 0.95), rgba(180, 140, 40, 0.92));
+    color: #1a1208;
+    pointer-events: none;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+.lyric-bg-default-btn {
+    position: absolute;
+    left: 2px;
+    bottom: 2px;
+    z-index: 6;
+    min-width: 0;
+    padding: 2px 5px;
+    margin: 0;
+    border: none;
+    border-radius: 5px;
+    font-size: 9px;
+    font-weight: 700;
+    cursor: pointer;
+    background: rgba(0, 0, 0, 0.55);
+    color: rgba(255, 248, 220, 0.95);
+    line-height: 1.2;
+}
+.lyric-bg-default-btn:hover {
+    background: rgba(212, 175, 55, 0.85);
+    color: #1a1208;
+}
+.lyric-bg-default-btn.is-on {
+    background: rgba(212, 175, 55, 0.9);
+    color: #1a1208;
+}
+
 .my-bg-thumb { width:44px; height:44px; border-radius:14px; cursor:pointer; border:2px solid transparent; background-size:cover; background-position:center; box-shadow:0 1px 4px rgba(0,0,0,0.3); transition:all 0.15s ease; }
 .my-bg-thumb:hover { border-color:var(--accent-light); transform:scale(1.05); }
 .my-bg-thumb.active { border-color:white; box-shadow:0 0 12px var(--accent); }

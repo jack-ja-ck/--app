@@ -359,6 +359,10 @@
             (state.ui.bgImageId === id || state.ui.bgImage === removed.imageData);
         saveUploadedBackgrounds(arr);
         pruneBgThumbUsageForId(id);
+        if (removed && String(state.ui.defaultUploadedBgId || "") === id) {
+            state.ui.defaultUploadedBgId = "";
+            saveSettings();
+        }
         if (wasActive) {
             setBackground("solid-black");
             saveSettings();
@@ -973,7 +977,9 @@
             vignetteCenterBrightness: 0,
             vignetteEdgeDarkness: 0,
             pageTransition: "none",
-            pageTransitionSpeed: 0.6
+            pageTransitionSpeed: 0.6,
+            fontMegaMode: false,
+            defaultUploadedBgId: ""
         },
         sizePreset: "M",
         autoplay: {
@@ -1042,6 +1048,17 @@
 
     function clamp(v, min, max) {
         return Math.max(min, Math.min(max, v));
+    }
+
+    function getLyricFontSliderMax() {
+        const mega = $("font-mega-mode");
+        return mega && mega.checked ? 500 : 300;
+    }
+
+    function clampLyricFontSize(v) {
+        const n = Number(v);
+        const base = Number.isFinite(n) ? n : 56;
+        return clamp(base, 8, getLyricFontSliderMax());
     }
 
     function readUiLike(u) {
@@ -1277,7 +1294,7 @@
     }
 
     function applyMiniPreviewFontSizePx(fontSize) {
-        const fs = Math.round(clamp(Number(fontSize) || 56, 24, 120) * 0.42);
+        const fs = Math.round(Math.min(140, clampLyricFontSize(fontSize) * 0.42));
         $("mini-preview")?.querySelectorAll(".preview-line").forEach((row) => {
             row.style.fontSize = fs + "px";
         });
@@ -2653,6 +2670,21 @@
     function ensureWorshipVersionFooter() {
         if (isDisplay || isLeader) return;
         if ($("worship-app-version-trigger")) return;
+        const slot = $("worship-footer-version-slot");
+        if (slot) {
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.id = "worship-app-version-trigger";
+            btn.textContent = WORSHIP_APP_VERSION;
+            btn.setAttribute("aria-label", "查看更新日志");
+            btn.className = "worship-footer-version-btn";
+            btn.addEventListener("click", (e) => {
+                e.preventDefault();
+                openWorshipChangelogModal();
+            });
+            slot.appendChild(btn);
+            return;
+        }
         const panel = $("preview-panel");
         if (!panel) return;
         const hints = panel.querySelectorAll("p.hint-text");
@@ -2816,6 +2848,8 @@
         state.ui.pageTransitionSpeed = 0.6;
         state.ui.overlayOpacityPct = 30;
         state.ui.fontOpacityPct = 100;
+        state.ui.fontMegaMode = false;
+        state.ui.defaultUploadedBgId = "";
         defaultSongPosY = 45;
         const song = currentSong();
         if (song) {
@@ -3011,9 +3045,47 @@
         return item.mediaType === "video" || inferMediaTypeFromDataUrl(item.imageData) === "video";
     }
 
+    function analyzeCoverFrameStats(canvas) {
+        const ctx = canvas.getContext("2d");
+        if (!ctx || canvas.width < 2 || canvas.height < 2) return { mean: 0, variance: 0 };
+        let img;
+        try {
+            img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        } catch (_e) {
+            return { mean: 0, variance: 0 };
+        }
+        const d = img.data;
+        const w = canvas.width;
+        const h = canvas.height;
+        const step = Math.max(2, Math.floor(Math.min(w, h) / 28));
+        let sum = 0;
+        let sumSq = 0;
+        let n = 0;
+        for (let y = 0; y < h; y += step) {
+            for (let x = 0; x < w; x += step) {
+                const i = (y * w + x) * 4;
+                const r = d[i];
+                const g = d[i + 1];
+                const b = d[i + 2];
+                const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+                sum += lum;
+                sumSq += lum * lum;
+                n++;
+            }
+        }
+        if (!n) return { mean: 0, variance: 0 };
+        const mean = sum / n;
+        const variance = Math.max(0, sumSq / n - mean * mean);
+        return { mean, variance };
+    }
+
+    function isCoverFrameUnusable(stats) {
+        if (!stats) return true;
+        return stats.mean < 22 || stats.variance < 52;
+    }
+
     /**
-     * 从视频 Data URL 截取一帧作为封面（JPEG Base64，质量 0.7）。
-     * hidden video + canvas，loadeddata → currentTime≈1s → seeked 后 drawImage，最后移除 video；canvas 仅丢弃引用。
+     * 从视频 Data URL 截取封面：loadedmetadata 后从 0.5s 起每 0.5s 尝试截帧，过暗或过于单调则继续，最多到 5s；均不合格则用 0.5s 帧兜底。
      */
     function extractVideoCoverFromDataUrl(dataUrl) {
         const src = String(dataUrl || "").trim();
@@ -3032,6 +3104,10 @@
 
             const canvas = document.createElement("canvas");
             let tid = 0;
+            /** 0.5s 处截到的 JPEG，作最终兜底 */
+            let fallback05Jpeg = "";
+            let candidates = [];
+            let idx = 0;
 
             const finish = (out) => {
                 if (settled) return;
@@ -3054,68 +3130,101 @@
                 resolve(String(out || "").trim());
             };
 
-            const drawFrame = () => {
-                if (settled) return;
-                try {
-                    const w = video.videoWidth || 0;
-                    const h = video.videoHeight || 0;
-                    if (!w || !h) {
-                        finish("");
-                        return;
-                    }
-                    const maxSide = 400;
-                    let tw = w;
-                    let th = h;
-                    if (w > maxSide || h > maxSide) {
-                        if (w >= h) {
-                            tw = maxSide;
-                            th = Math.max(1, Math.round((h * maxSide) / w));
-                        } else {
-                            th = maxSide;
-                            tw = Math.max(1, Math.round((w * maxSide) / h));
-                        }
-                    }
-                    canvas.width = tw;
-                    canvas.height = th;
-                    const ctx = canvas.getContext("2d");
-                    if (!ctx) {
-                        finish("");
-                        return;
-                    }
-                    ctx.drawImage(video, 0, 0, tw, th);
-                    finish(canvas.toDataURL("image/jpeg", 0.7));
-                } catch (_err) {
-                    finish("");
+            function buildSeekTimesHalfToFive(durationSec) {
+                const out = [];
+                for (let s = 0.5; s <= 5.001; s += 0.5) {
+                    out.push(Math.round(s * 10) / 10);
                 }
-            };
+                const d = Number(durationSec);
+                if (Number.isFinite(d) && d > 0) {
+                    const filtered = out.filter((t) => t <= d - 0.04);
+                    if (filtered.length) return filtered;
+                    const one = clamp(0.5, 0.05, Math.max(0.06, d - 0.05));
+                    return [one];
+                }
+                return out;
+            }
 
-            video.addEventListener("error", () => finish(""), false);
+            function captureJpegFromVideoFrame() {
+                const w = video.videoWidth || 0;
+                const h = video.videoHeight || 0;
+                if (!w || !h) return null;
+                const maxSide = 400;
+                let tw = w;
+                let th = h;
+                if (w > maxSide || h > maxSide) {
+                    if (w >= h) {
+                        tw = maxSide;
+                        th = Math.max(1, Math.round((h * maxSide) / w));
+                    } else {
+                        th = maxSide;
+                        tw = Math.max(1, Math.round((w * maxSide) / h));
+                    }
+                }
+                canvas.width = tw;
+                canvas.height = th;
+                const ctx = canvas.getContext("2d");
+                if (!ctx) return null;
+                ctx.drawImage(video, 0, 0, tw, th);
+                const stats = analyzeCoverFrameStats(canvas);
+                let jpeg;
+                try {
+                    jpeg = canvas.toDataURL("image/jpeg", 0.72);
+                } catch (_e) {
+                    jpeg = "";
+                }
+                return jpeg ? { jpeg, stats } : null;
+            }
+
+            function tryNextSeek() {
+                if (settled) return;
+                if (idx >= candidates.length) {
+                    finish(fallback05Jpeg || "");
+                    return;
+                }
+                const slotIndex = idx;
+                const t = candidates[idx++];
+                const dur = Number(video.duration);
+                let target = t;
+                if (Number.isFinite(dur) && dur > 0.1) {
+                    target = clamp(t, 0.04, Math.max(0.05, dur - 0.05));
+                }
+                const onSeeked = () => {
+                    video.removeEventListener("seeked", onSeeked);
+                    const pack = captureJpegFromVideoFrame();
+                    if (pack && pack.jpeg && slotIndex === 0) {
+                        fallback05Jpeg = pack.jpeg;
+                    }
+                    if (pack && !isCoverFrameUnusable(pack.stats)) {
+                        finish(pack.jpeg);
+                        return;
+                    }
+                    tryNextSeek();
+                };
+                video.addEventListener("seeked", onSeeked, { once: true });
+                try {
+                    video.currentTime = target;
+                } catch (_e) {
+                    tryNextSeek();
+                }
+            }
 
             video.addEventListener(
-                "loadeddata",
+                "loadedmetadata",
                 () => {
-                    const dur = Number(video.duration);
-                    let target = 1;
-                    if (!Number.isFinite(dur) || dur <= 0) target = 0;
-                    else if (dur <= 1) target = Math.max(0, dur * 0.25);
-                    else target = 1;
-
-                    const onSeeked = () => drawFrame();
-                    video.addEventListener("seeked", onSeeked, { once: true });
-                    try {
-                        video.currentTime = target;
-                    } catch (_e) {
-                        finish("");
-                    }
+                    candidates = buildSeekTimesHalfToFive(video.duration);
+                    idx = 0;
+                    tryNextSeek();
                 },
                 { once: true }
             );
 
+            video.addEventListener("error", () => finish(""), false);
+
             tid = window.setTimeout(() => {
                 if (settled) return;
-                if (video.readyState >= 2 && (video.videoWidth || 0) > 0) drawFrame();
-                else finish("");
-            }, 14000);
+                finish(fallback05Jpeg || "");
+            }, 20000);
 
             document.body.appendChild(video);
             video.src = src;
@@ -3367,10 +3476,92 @@
         });
     }
 
+    let _bgHoverPreviewTimer = 0;
+
+    function hideBgHoverPreview() {
+        if (_bgHoverPreviewTimer) {
+            clearTimeout(_bgHoverPreviewTimer);
+            _bgHoverPreviewTimer = 0;
+        }
+        const root = $("bg-hover-preview-overlay");
+        const inner = $("bg-hover-preview-inner");
+        if (!root || !inner) return;
+        root.classList.remove("is-visible");
+        root.hidden = true;
+        root.setAttribute("aria-hidden", "true");
+        inner.innerHTML = "";
+    }
+
+    function scheduleBgHoverPreviewThumb(item) {
+        hideBgHoverPreview();
+        if (!item || !item.imageData) return;
+        const root = $("bg-hover-preview-overlay");
+        const inner = $("bg-hover-preview-inner");
+        if (!root || !inner) return;
+        _bgHoverPreviewTimer = window.setTimeout(() => {
+            _bgHoverPreviewTimer = 0;
+            inner.innerHTML = "";
+            const isVid = item.mediaType === "video" || inferMediaTypeFromDataUrl(item.imageData) === "video";
+            if (isVid) {
+                const v = document.createElement("video");
+                v.src = item.imageData;
+                v.muted = true;
+                v.loop = true;
+                v.playsInline = true;
+                v.autoplay = true;
+                v.setAttribute("playsinline", "");
+                inner.appendChild(v);
+                void v.play().catch(() => {});
+            } else {
+                const im = document.createElement("img");
+                im.alt = "";
+                im.src = item.imageData;
+                inner.appendChild(im);
+            }
+            root.hidden = false;
+            root.classList.add("is-visible");
+            root.setAttribute("aria-hidden", "false");
+        }, 280);
+    }
+
+    function scheduleBgHoverPreviewUrl(imageUrl) {
+        hideBgHoverPreview();
+        const url = String(imageUrl || "").trim();
+        if (!url) return;
+        const root = $("bg-hover-preview-overlay");
+        const inner = $("bg-hover-preview-inner");
+        if (!root || !inner) return;
+        _bgHoverPreviewTimer = window.setTimeout(() => {
+            _bgHoverPreviewTimer = 0;
+            inner.innerHTML = "";
+            const im = document.createElement("img");
+            im.alt = "";
+            im.src = url;
+            inner.appendChild(im);
+            root.hidden = false;
+            root.classList.add("is-visible");
+            root.setAttribute("aria-hidden", "false");
+        }, 280);
+    }
+
+    function reorderUploadedBackgrounds(fromId, toId) {
+        const a = String(fromId || "").trim();
+        const b = String(toId || "").trim();
+        if (!a || !b || a === b) return;
+        const arr = getUploadedBackgrounds().slice();
+        const i = arr.findIndex((x) => x && x.id === a);
+        const j = arr.findIndex((x) => x && x.id === b);
+        if (i < 0 || j < 0) return;
+        const [moved] = arr.splice(i, 1);
+        arr.splice(j, 0, moved);
+        saveUploadedBackgrounds(arr);
+        renderUploadedBackgrounds();
+    }
+
     function renderUploadedBackgrounds() {
         const root = $("my-backgrounds-container");
         if (!root) return;
-        const items = sortUploadedBackgroundsByUsage(getUploadedBackgrounds());
+        const items = getUploadedBackgrounds().filter((x) => x && x.imageData);
         root.innerHTML = "";
         if (!items.length) {
             root.innerHTML = '<div class="hint-text" style="grid-column:1/-1;">暂无已上传背景，请在「预设背景」中上传图片</div>';
@@ -3387,11 +3578,19 @@
             root.appendChild(emptyAdd);
             return;
         }
+        let dragFromId = "";
         items.forEach((item) => {
             if (!item || !item.imageData) return;
             const wrap = document.createElement("div");
             wrap.className = "lyric-bg-thumb-wrap";
             wrap.dataset.wrapItemId = item.id;
+
+            const grip = document.createElement("span");
+            grip.className = "lyric-bg-drag-handle";
+            grip.draggable = true;
+            grip.title = "拖动排序";
+            grip.setAttribute("aria-hidden", "true");
+            grip.textContent = "⋮⋮";
 
             const isVid = item.mediaType === "video" || inferMediaTypeFromDataUrl(item.imageData) === "video";
             const thumb = document.createElement("button");
@@ -3401,14 +3600,17 @@
             if (isVid) {
                 const cover = String(item.coverImage || "").trim();
                 const extracting = _videoThumbExtractingIds.has(item.id);
-                if (cover) {
-                    thumb.style.backgroundImage = `url("${cover.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}")`;
-                    thumb.style.background = "";
-                } else {
-                    thumb.style.backgroundImage = "none";
-                    thumb.style.background = "linear-gradient(145deg,#1e1e28,#12121a)";
-                }
                 thumb.style.position = "relative";
+                thumb.style.backgroundImage = "none";
+                thumb.style.background = "linear-gradient(145deg,#1e1e28,#12121a)";
+                if (cover) {
+                    const covImg = document.createElement("img");
+                    covImg.className = "lyric-bg-thumb-cover-img";
+                    covImg.alt = "";
+                    covImg.draggable = false;
+                    covImg.src = cover;
+                    thumb.appendChild(covImg);
+                }
                 if (extracting) {
                     const spin = document.createElement("span");
                     spin.className = "lyric-bg-thumb-cover-spinner";
@@ -3431,10 +3633,12 @@
             } else {
                 thumb.style.backgroundImage = `url("${String(item.imageData).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}")`;
             }
-            thumb.title = isVid ? "设为当前歌词背景（视频）" : "设为当前歌词背景";
+            thumb.title = isVid ? "点击使用视频背景" : "点击使用图片背景";
             if (state.ui.bgType === "image" && state.ui.bgImage === item.imageData) {
                 thumb.classList.add("lyric-bg-thumb--active");
             }
+            thumb.addEventListener("mouseenter", () => scheduleBgHoverPreviewThumb(item));
+            thumb.addEventListener("mouseleave", () => hideBgHoverPreview());
             thumb.addEventListener("click", (e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -3460,9 +3664,57 @@
             delBtn.addEventListener("click", (e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                openLyricBgDeletePopover(wrap, item.id);
+                if (!window.confirm("确定删除此背景？")) return;
+                beginLyricBgDeleteSequence(wrap, item.id);
             });
 
+            const defBtn = document.createElement("button");
+            defBtn.type = "button";
+            defBtn.className =
+                "lyric-bg-default-btn" + (String(state.ui.defaultUploadedBgId || "") === item.id ? " is-on" : "");
+            defBtn.textContent = String(state.ui.defaultUploadedBgId || "") === item.id ? "取消" : "设默认";
+            defBtn.title = "标记或取消默认背景";
+            defBtn.addEventListener("mousedown", (e) => e.stopPropagation());
+            defBtn.addEventListener("click", (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (String(state.ui.defaultUploadedBgId || "") === item.id) {
+                    state.ui.defaultUploadedBgId = "";
+                    showToast("已取消默认背景", defBtn);
+                } else {
+                    state.ui.defaultUploadedBgId = item.id;
+                    showToast("已设为默认背景", defBtn);
+                }
+                saveSettings();
+                renderUploadedBackgrounds();
+            });
+
+            grip.addEventListener("dragstart", (e) => {
+                dragFromId = item.id;
+                if (e.dataTransfer) {
+                    e.dataTransfer.effectAllowed = "move";
+                    e.dataTransfer.setData("text/plain", item.id);
+                }
+                wrap.classList.add("lyric-bg-thumb-wrap--dragging");
+            });
+            grip.addEventListener("dragend", () => {
+                dragFromId = "";
+                wrap.classList.remove("lyric-bg-thumb-wrap--dragging");
+            });
+            wrap.addEventListener("dragover", (e) => {
+                e.preventDefault();
+                if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+            });
+            wrap.addEventListener("drop", (e) => {
+                e.preventDefault();
+                const from =
+                    dragFromId ||
+                    String(e.dataTransfer?.getData("text/plain") || "").trim();
+                dragFromId = "";
+                reorderUploadedBackgrounds(from, item.id);
+            });
+
+            wrap.appendChild(grip);
             wrap.appendChild(thumb);
             wrap.appendChild(delBtn);
             if (!item.shared && !isVid) {
@@ -3472,17 +3724,25 @@
                 shareBtn.title = "共享到云端";
                 shareBtn.setAttribute("aria-label", "共享此背景");
                 shareBtn.textContent = "☁";
+                shareBtn.addEventListener("mousedown", (e) => e.stopPropagation());
                 shareBtn.addEventListener("click", (e) => {
                     e.preventDefault();
                     e.stopPropagation();
                     shareMyBackgroundItem(item.id, shareBtn);
                 });
                 wrap.appendChild(shareBtn);
-            } else {
-                const badge = document.createElement("span");
-                badge.className = "bg-shared-badge";
-                badge.title = "已共享";
-                wrap.appendChild(badge);
+            } else if (item.shared) {
+                const sb = document.createElement("span");
+                sb.className = "bg-shared-badge";
+                sb.title = "已共享";
+                wrap.appendChild(sb);
+            }
+            wrap.appendChild(defBtn);
+            if (String(state.ui.defaultUploadedBgId || "") === item.id) {
+                const defBadge = document.createElement("span");
+                defBadge.className = "lyric-bg-default-badge";
+                defBadge.textContent = "默认";
+                wrap.appendChild(defBadge);
             }
             root.appendChild(wrap);
         });
@@ -3583,6 +3843,8 @@
                 saveSettings();
                 showToast("已应用共享背景", thumb);
             });
+            thumb.addEventListener("mouseenter", () => scheduleBgHoverPreviewUrl(imageUrl));
+            thumb.addEventListener("mouseleave", () => hideBgHoverPreview());
             wrap.appendChild(thumb);
             root.appendChild(wrap);
         });
@@ -3613,6 +3875,15 @@
                 switchBgTabTo(tab.getAttribute("data-bg-tab") || "preset");
             });
         });
+        const hoverOv = $("bg-hover-preview-overlay");
+        if (hoverOv && hoverOv.dataset.dismissBound !== "1") {
+            hoverOv.dataset.dismissBound = "1";
+            hoverOv.addEventListener("click", (e) => {
+                if (e.target === hoverOv || (e.target && e.target.classList.contains("bg-hover-preview-backdrop"))) {
+                    hideBgHoverPreview();
+                }
+            });
+        }
     }
 
     function openFreeBgMaterialsPanel() {
@@ -3695,24 +3966,27 @@
     }
 
     function saveSettings() {
-        /* ==========================================================
-           [迁移标记 round1] 已迁移至 js/state.js；以下为旧实现，保留作安全网。
-           当 globalThis.saveSettings 不可用时可恢复块内逻辑。
-           ==========================================================
+        try {
+            if (typeof globalThis.saveSettings === "function") globalThis.saveSettings();
+        } catch (_e) {
+            /* ignore */
+        }
         const ui = { ...state.ui };
         delete ui.overlayOpacityPct;
         delete ui.fontOpacityPct;
         if (ui.bgType === "image" && ui.bgImageId) {
             ui.bgImage = "";
         }
-        setStore(STORAGE.SETTINGS, {
-            currentSongId: state.currentSongId,
-            currentPage: state.currentPage,
-            sizePreset: state.sizePreset,
-            ui
-        });
-        */
-        return globalThis.saveSettings();
+        try {
+            setStore(STORAGE.SETTINGS, {
+                currentSongId: state.currentSongId,
+                currentPage: state.currentPage,
+                sizePreset: state.sizePreset,
+                ui
+            });
+        } catch (err) {
+            console.warn("saveSettings setStore SETTINGS", err);
+        }
     }
 
     function savePlaylist() {
@@ -3766,6 +4040,11 @@
             if (state.ui.bgMediaType !== "video" && state.ui.bgMediaType !== "image") {
                 state.ui.bgMediaType = "image";
             }
+            if (state.ui.fontMegaMode !== true) state.ui.fontMegaMode = false;
+            if (state.ui.defaultUploadedBgId == null) state.ui.defaultUploadedBgId = "";
+            if (Number(state.ui.fontSize) > 300) state.ui.fontMegaMode = true;
+            const cap = state.ui.fontMegaMode ? 500 : 300;
+            state.ui.fontSize = clamp(Number(state.ui.fontSize) || 56, 8, cap);
         } else {
             state.currentSongId = state.songs[0].id;
         }
@@ -3853,7 +4132,7 @@
         song.fontOpacityPct = clamp(Number(state.ui.fontOpacityPct), 20, 100);
     }
 
-    /** 投屏预览卡片固定高度 200px，上下各 10px 内边距 → 可用内容高度 180px；字号按行数独立计算，不受全局字体滑块影响 */
+    /** 投屏预览卡片固定高度 200px，上下各 10px 内边距 → 可用内容高度 180px；字号随全局歌词字号比例缩放 */
     const SPEAKER_CARD_INNER_HEIGHT_PX = 180;
 
     function speakerPreviewCardFontPx(lineCount) {
@@ -3864,7 +4143,9 @@
             window.matchMedia("(max-width: 768px)").matches
                 ? 130
                 : SPEAKER_CARD_INNER_HEIGHT_PX;
-        return Math.min(20, Math.max(10, (inner - n * 8) / n));
+        const base = Math.min(20, Math.max(10, (inner - n * 8) / n));
+        const scale = clampLyricFontSize(state.ui.fontSize) / 56;
+        return Math.min(52, Math.max(8, base * scale));
     }
 
     function applyCardBackground(card) {
@@ -4559,7 +4840,8 @@ ${deleteBtnHtml}
             lines.forEach((line) => {
                 const row = document.createElement("div");
                 row.className = "preview-line";
-                row.style.fontSize = Math.round(state.ui.fontSize * 0.42) + "px";
+                row.style.fontSize =
+                    Math.round(Math.min(140, clampLyricFontSize(state.ui.fontSize) * 0.42)) + "px";
                 row.style.position = "relative";
                 row.style.zIndex = "3";
                 row.textContent = line;
@@ -4654,7 +4936,8 @@ ${deleteBtnHtml}
         lines.forEach((line) => {
             const row = document.createElement("div");
             row.className = "preview-line";
-            row.style.fontSize = Math.round(state.ui.fontSize * 0.42) + "px";
+            row.style.fontSize =
+                Math.round(Math.min(140, clampLyricFontSize(state.ui.fontSize) * 0.42)) + "px";
             row.style.position = "relative";
             row.style.zIndex = "3";
             row.textContent = line;
@@ -5371,7 +5654,15 @@ ${deleteBtnHtml}
     function updateUIFromState() {
         if ($("theme-selector")) $("theme-selector").value = state.ui.theme;
         if ($("font-family-selector")) $("font-family-selector").value = state.ui.fontFamily;
-        if ($("font-slider")) $("font-slider").value = String(state.ui.fontSize);
+        const megaEl = $("font-mega-mode");
+        if (megaEl) megaEl.checked = !!state.ui.fontMegaMode;
+        const fmax = getLyricFontSliderMax();
+        if ($("font-slider")) {
+            $("font-slider").min = "8";
+            $("font-slider").max = String(fmax);
+            $("font-slider").value = String(clamp(Number(state.ui.fontSize) || 56, 8, fmax));
+        }
+        state.ui.fontSize = clamp(Number(state.ui.fontSize) || 56, 8, fmax);
         if ($("font-val")) $("font-val").textContent = String(state.ui.fontSize);
         if ($("default-lines-input")) $("default-lines-input").value = String(state.ui.defaultLines);
         if ($("pos-slider")) $("pos-slider").value = String(state.ui.posY);
@@ -5400,10 +5691,6 @@ ${deleteBtnHtml}
         });
         document.querySelectorAll(".bg-option").forEach((node) => {
             node.classList.toggle("active", node.getAttribute("data-bg") === state.ui.bgType);
-        });
-        ["size-s", "size-m", "size-l"].forEach((id) => {
-            const el = $(id);
-            if (el) el.classList.toggle("active", state.sizePreset === id.split("-")[1].toUpperCase());
         });
         syncThemeBgOpacityControls();
         updateMyBackgroundThumbActiveState();
@@ -5521,7 +5808,7 @@ ${deleteBtnHtml}
             pageIndex: state.currentPage,
             text: {
                 fontFamily: state.ui.fontFamily,
-                fontSize: state.ui.fontSize,
+                fontSize: clampLyricFontSize(state.ui.fontSize),
                 fontWeight: state.ui.fontWeight == null || state.ui.fontWeight === "" ? "700" : String(state.ui.fontWeight),
                 topPct: state.ui.posY,
                 color: state.ui.bgType === "solid-white" ? "#111" : state.ui.fontColor,
@@ -7133,12 +7420,24 @@ ${deleteBtnHtml}
         on("online-search-input", "input", renderOnlineSearchResult);
 
         on("font-slider", "input", () => {
-            const v = clamp(Number($("font-slider").value || 56), 24, 120);
+            const v = clampLyricFontSize($("font-slider").value || 56);
             if ($("font-val")) $("font-val").textContent = String(v);
             scheduleMiniSliderDomPreview(() => applyMiniPreviewFontSizePx(v));
         });
         on("font-slider", "change", () => {
-            state.ui.fontSize = clamp(Number($("font-slider").value || 56), 24, 120);
+            state.ui.fontSize = clampLyricFontSize($("font-slider").value || 56);
+            if ($("font-val")) $("font-val").textContent = String(state.ui.fontSize);
+            saveSettings();
+            updateAll();
+        });
+        on("font-mega-mode", "change", () => {
+            state.ui.fontMegaMode = !!($("font-mega-mode") && $("font-mega-mode").checked);
+            const mx = getLyricFontSliderMax();
+            state.ui.fontSize = clamp(Number(state.ui.fontSize) || 56, 8, mx);
+            if ($("font-slider")) {
+                $("font-slider").max = String(mx);
+                $("font-slider").value = String(state.ui.fontSize);
+            }
             if ($("font-val")) $("font-val").textContent = String(state.ui.fontSize);
             saveSettings();
             updateAll();
@@ -7313,15 +7612,6 @@ ${deleteBtnHtml}
         });
         on("open-leader-btn", "click", openLeaderWindow);
         on("leader-qr-btn", "click", openLeaderQrModal);
-
-        ["size-s", "size-m", "size-l"].forEach((id) => {
-            on(id, "click", () => {
-                state.sizePreset = id.split("-")[1].toUpperCase();
-                updateUIFromState();
-                updateSpeakerCards();
-                saveSettings();
-            });
-        });
 
         on("lyric-editor-large", "input", () => {
             syncEditorToSong();
@@ -7817,7 +8107,7 @@ ${deleteBtnHtml}
         layer.style.textAlign = "center";
         layer.style.top = (t.topPct || 45) + "%";
         layer.style.fontFamily = t.fontFamily || state.ui.fontFamily;
-        layer.style.fontSize = clamp(t.fontSize || 56, 24, 160) + "px";
+        layer.style.fontSize = clamp(Number(t.fontSize) || 56, 8, 500) + "px";
         layer.style.fontWeight =
             t.fontWeight != null && t.fontWeight !== ""
                 ? String(t.fontWeight)

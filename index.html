@@ -122,11 +122,6 @@
                 <h4>
                     <span>🖥️ 投屏预览：横滑预览各页</span>
                     <span>
-                        <span class="size-btn-group">
-                            <button id="size-s" class="size-btn">S</button>
-                            <button id="size-m" class="size-btn active">M</button>
-                            <button id="size-l" class="size-btn">L</button>
-                        </span>
                         <span class="page-indicator-wrap" title="输入页码后按回车跳转">
                             <input type="text" inputmode="numeric" pattern="[0-9]*" id="page-indicator-input" class="page-indicator-input" value="1" aria-label="当前页码">
                             <span id="page-indicator-total" class="page-indicator-total">/1</span>
@@ -168,14 +163,14 @@
                     <div class="bg-option" data-bg="cross-glow" title="十字光晕"></div>
                     <div class="bg-option" data-bg="gradient" title="渐变"></div>
                     <div class="bg-option" data-bg="image" id="upload-bg-trigger" title="从文件上传"></div>
-                    <input type="file" id="bg-image-input" accept="image/png,image/jpeg,image/jpg,image/gif,image/bmp,image/webp" hidden>
+                    <input type="file" id="bg-image-input" accept="image/png,image/jpeg,image/jpg,image/gif,image/bmp,image/webp,video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov" hidden>
                 </div>
                 <button type="button" id="upload-bg-btn" class="btn-outline" style="width:100%; margin-top:8px;">🖼️ 上传背景图片</button>
                 <p class="bg-privacy-hint">您上传的背景默认为私密，可在「我的背景」中共享到云端。</p>
             </div>
             <div id="bg-tab-mine" class="bg-tab-panel" role="tabpanel">
                 <div id="my-backgrounds-container" class="my-backgrounds"></div>
-                <p class="hint-text" style="margin-top:6px;">点击缩略图应用背景；「共享」可上传到云端素材库。</p>
+                <p class="hint-text" style="margin-top:6px;">悬停可看大图；拖动 ⋮⋮ 排序；「设默认」标记常用背景；「共享」上传云端（仅图片）。</p>
             </div>
             <div id="bg-tab-shared" class="bg-tab-panel" role="tabpanel">
                 <div id="shared-backgrounds-container" class="my-backgrounds shared-cloud-backgrounds" aria-label="云端共享背景"></div>
@@ -210,10 +205,23 @@
             <button id="open-leader-btn" class="btn btn-outline" style="flex:1; height:42px; display:flex; align-items:center; justify-content:center;">📱 主领视图</button>
             <button id="leader-qr-btn" class="btn btn-outline" style="width:42px; height:42px; display:flex; align-items:center; justify-content:center;" title="主领视图二维码">📱</button>
         </div>
-        <p class="hint-text hint-text--footer-inline" style="margin-top:6px;">B=黑屏 W=白屏 F=全屏 &nbsp;|&nbsp; 💡 首次使用需在浏览器中允许弹窗和多屏幕权限</p>
-        <p class="hint-text">© 2026 敬拜投屏工具。基于 MIT 许可证开源，使用者须保留此版权声明。</p>
-        <p class="hint-text">隐私说明：本网站不会收集用户个人信息，所有歌词数据仅保留在您的本地浏览器中。</p>
-        <p class="hint-text">📝 用户反馈：<a href="https://docs.google.com/forms/d/e/1FAIpQLSf3XMyOfjcoV1MNWMmZZ0JEapXDnUfa3qWLjELN_YyqvcLQGw/viewform" target="_blank" rel="noopener noreferrer" style="color:var(--accent);text-decoration:underline;">点击提交反馈</a></p>
+        <footer class="worship-footer-stack" id="worship-footer-stack" aria-label="页脚信息">
+            <p class="worship-footer-line worship-footer-line--copyright">
+                © 2026 敬拜投屏工具 · MIT 开源 · <span id="worship-footer-version-slot" class="worship-footer-version-slot"></span>
+            </p>
+            <p class="worship-footer-line worship-footer-line--privacy">
+                🔒 本网站不会收集个人信息，歌词数据仅保留在您的浏览器中。
+            </p>
+            <div class="worship-footer-line worship-footer-line--shortcuts">
+                <span class="worship-footer-shortcuts-text">⌨ B=黑屏 W=白屏 F=全屏 | 首次使用需允许弹窗和多屏幕权限</span>
+                <a
+                    class="worship-footer-feedback-link"
+                    href="https://docs.google.com/forms/d/e/1FAIpQLSf3XMyOfjcoV1MNWMmZZ0JEapXDnUfa3qWLjELN_YyqvcLQGw/viewform"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    >📧 用户反馈</a>
+            </div>
+        </footer>
         <label class="adv-drawer-scrim" for="adv-drawer-toggle" aria-hidden="true"></label>
         <aside class="adv-drawer-panel" aria-label="高级编辑抽屉" id="adv-drawer-panel">
             <div class="adv-drawer-width-handle" id="adv-drawer-width-handle" title="拖动调节面板宽度" aria-hidden="true"></div>
@@ -231,8 +239,9 @@
                                     <label class="adv-drawer-field-label" for="font-family-selector">字体选择</label>
                                     <select id="font-family-selector" class="adv-font-family-select adv-font-family-select--lyrics" aria-label="歌词字体"></select>
                                     <p class="adv-font-license-hint" role="note">字体均采用开源免费商用授权，无版权风险</p>
-                                    <label class="adv-drawer-field-label" for="font-slider">字号 <span id="font-val">56</span> px</label>
-                                    <input type="range" id="font-slider" class="adv-range" min="24" max="120" value="56" step="2">
+                                    <label class="adv-drawer-field-label" for="font-slider">字号 <span id="font-val" class="adv-font-val">56</span> px</label>
+                                    <input type="range" id="font-slider" class="adv-range" min="8" max="300" value="56" step="1">
+                                    <label class="adv-font-mega-label"><input type="checkbox" id="font-mega-mode" aria-label="超大模式"> 超大模式（字号最高 500px）</label>
                                     <div id="adv-font-color-slot"></div>
                                     <label class="adv-drawer-field-label" for="text-stroke-slider">描边 <span id="text-stroke-val">0</span> px</label>
                                     <input type="range" id="text-stroke-slider" class="adv-range" min="0" max="6" value="0" step="1" title="歌词描边粗细">
@@ -329,6 +338,12 @@
                 </div>
             </div>
         </aside>
+    </div>
+</div>
+<div id="bg-hover-preview-overlay" class="bg-hover-preview-overlay" hidden aria-hidden="true">
+    <div class="bg-hover-preview-backdrop"></div>
+    <div class="bg-hover-preview-frame">
+        <div class="bg-hover-preview-inner" id="bg-hover-preview-inner"></div>
     </div>
 </div>
 <div id="toast"></div>

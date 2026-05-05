@@ -2107,74 +2107,6 @@ body.online-search-overlay-open {
     user-select: none;
 }
 
-/* 全部页面缩略图 */
-.all-pages-strip {
-    margin: 6px 0 10px 0;
-    border-radius: 12px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    background: rgba(0, 0, 0, 0.18);
-    overflow: hidden;
-}
-.all-pages-strip-summary {
-    cursor: pointer;
-    list-style: none;
-    padding: 8px 12px;
-    font-size: 0.82rem;
-    font-weight: 600;
-    color: var(--text-secondary);
-    user-select: none;
-}
-.all-pages-strip summary::-webkit-details-marker {
-    display: none;
-}
-.all-pages-strip[open] .all-pages-strip-summary {
-    color: var(--text-primary);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-}
-.all-pages-thumbs {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
-    gap: 8px;
-    padding: 10px 10px 12px;
-    max-height: 200px;
-    overflow-y: auto;
-}
-.all-pages-thumb {
-    border: 2px solid transparent;
-    border-radius: 10px;
-    padding: 6px 6px 8px;
-    background: rgba(255, 255, 255, 0.06);
-    cursor: pointer;
-    text-align: left;
-    color: var(--text-primary);
-    font-size: 0.65rem;
-    line-height: 1.25;
-    min-height: 52px;
-    transition: border-color 0.15s ease, background 0.15s ease;
-}
-.all-pages-thumb:hover {
-    background: rgba(255, 255, 255, 0.1);
-}
-.all-pages-thumb.is-active {
-    border-color: var(--accent);
-    background: rgba(74, 111, 165, 0.25);
-}
-.all-pages-thumb-index {
-    display: block;
-    font-weight: 700;
-    font-size: 0.68rem;
-    color: var(--accent-light);
-    margin-bottom: 4px;
-}
-.all-pages-thumb-preview {
-    display: -webkit-box;
-    -webkit-line-clamp: 3;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-    word-break: break-word;
-    color: rgba(255, 255, 255, 0.75);
-}
-
 /* 歌词模板选择 */
 .lyric-template-modal {
     position: fixed;
@@ -3051,6 +2983,9 @@ body[data-theme="light"] .worship-console-wallpaper-thumb {
 }
 #preview-panel .adv-drawer-scroll .theme-bg-opacity-row {
     margin-top: 0;
+}
+#preview-panel .adv-console-theme-card .theme-bg-opacity-row .adv-drawer-field-label {
+    margin-bottom: 6px;
 }
 #preview-panel .adv-drawer-scroll .theme-bg-subheading {
     margin-top: 8px;

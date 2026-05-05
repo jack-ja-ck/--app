@@ -838,6 +838,51 @@ globalThis.drawBg = function (ts) {
         globalThis.projectionRaf = 0;
         return;
     }
+    const urlForMedia = String(bgState.imageData || "");
+    let mediaType = bgState.mediaType;
+    if (mediaType !== "video" && mediaType !== "image") {
+        mediaType =
+            typeof globalThis.inferMediaTypeFromDataUrl === "function"
+                ? globalThis.inferMediaTypeFromDataUrl(urlForMedia)
+                : /^data:video\//i.test(urlForMedia)
+                  ? "video"
+                  : "image";
+    }
+    if (!mediaType) mediaType = "image";
+
+    // 视频背景处理
+    const isVideoBg = type === "image" && mediaType === "video" && !!bgState.imageData;
+    const dispV = document.getElementById("display-video-bg");
+
+    if (isVideoBg && dispV && bgState.imageData) {
+        globalThis.removeProjectionCssBg();
+        if (gifLayer) gifLayer.style.display = "none";
+        if (globalThis.projectionCanvas) globalThis.projectionCanvas.style.display = "none";
+        const want = String(bgState.imageData || "");
+        if (dispV.dataset.worshipBgUrl !== want) {
+            dispV.dataset.worshipBgUrl = want;
+            dispV.src = want;
+        }
+        dispV.style.opacity = "1";
+        void dispV.play().catch(() => {});
+        globalThis.projectionLastTs = ts;
+        globalThis.projectionRaf = 0;
+        return;
+    }
+
+    // 当不是视频背景时，暂停并清空视频元素
+    if (dispV && !isVideoBg) {
+        dispV.pause();
+        dispV.removeAttribute("src");
+        delete dispV.dataset.worshipBgUrl;
+        try {
+            dispV.load();
+        } catch (_e) {
+            /* ignore */
+        }
+        dispV.style.opacity = "0";
+    }
+
     globalThis.removeProjectionCssBg();
     if (globalThis.projectionCanvas) globalThis.projectionCanvas.style.display = "block";
 
@@ -1000,6 +1045,21 @@ globalThis.installProjectionUI = function (mode) {
     host.id = "projection-host";
     host.style.cssText = "position:fixed;inset:0;background:#000;overflow:hidden;";
     document.body.appendChild(host);
+
+    if (mode === "display") {
+        const displayVid = document.createElement("video");
+        displayVid.id = "display-video-bg";
+        displayVid.setAttribute("loop", "");
+        displayVid.muted = true;
+        displayVid.defaultMuted = true;
+        displayVid.setAttribute("playsinline", "");
+        displayVid.playsInline = true;
+        displayVid.setAttribute("autoplay", "");
+        displayVid.style.cssText =
+            "position:fixed;top:0;left:0;width:100%;height:100%;object-fit:cover;z-index:0;" +
+            "pointer-events:none;opacity:0;display:block;";
+        host.appendChild(displayVid);
+    }
 
     const canvas = document.createElement("canvas");
     canvas.id = "projection-bg";

@@ -14,6 +14,8 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js" defer></script>
     <script src="js/utils.js"></script>
+    <script src="js/data.js"></script>
+    <script src="js/actions.js"></script>
     <script src="js/state.js"></script>
     <script src="js/router.js"></script>
     <script src="js/ui.js"></script>
@@ -131,10 +133,6 @@
                         </span>
                     </span>
                 </h4>
-                <details id="all-pages-strip" class="all-pages-strip">
-                    <summary class="all-pages-strip-summary">📋 全部页面</summary>
-                    <div id="all-pages-thumbs" class="all-pages-thumbs" role="list"></div>
-                </details>
                 <div id="card-container"></div>
                 <div class="hint-text">← 左右滑动卡片浏览页面</div>
             </div>
@@ -260,6 +258,14 @@
                                     <input type="file" id="worship-console-wallpaper-input" accept="image/png,image/jpeg,image/jpg,image/gif,image/bmp,image/webp,image/svg+xml" hidden>
                                     <input type="file" id="worship-console-theme-video-input" accept=".mp4,.webm,.mov,video/mp4,video/webm,video/quicktime" hidden>
                                     <div id="worship-console-wallpaper-preview" class="worship-console-wallpaper-preview" role="region" aria-label="自定义主题壁纸缩略图" aria-live="polite"></div>
+                                    <div id="theme-bg-opacity-row" class="theme-bg-opacity-row is-disabled">
+                                        <label class="adv-drawer-field-label" for="theme-bg-opacity-slider">主题壁纸透明度</label>
+                                        <div class="theme-bg-opacity-inner">
+                                            <span id="theme-bg-opacity-swatch" class="adv-slider-swatch adv-slider-swatch--theme-bg" aria-hidden="true"></span>
+                                            <input type="range" id="theme-bg-opacity-slider" class="adv-range" min="0.3" max="1" step="0.05" value="0.75" disabled>
+                                            <span id="theme-bg-opacity-value">75%</span>
+                                        </div>
+                                    </div>
                                     <button type="button" id="worship-console-wallpaper-reset" class="btn-outline adv-console-wallpaper-reset-btn">↩ 恢复默认</button>
                                 </div>
                             </div>
@@ -269,14 +275,6 @@
                             <div class="adv-drawer-acc-panel">
                                 <div class="adv-drawer-acc-panel-inner adv-drawer-card-body" id="adv-bg-fine-body">
                                     <p class="adv-bg-fine-scope-hint">以下设置主要影响投屏画面与歌词预览</p>
-                                    <div id="theme-bg-opacity-row" class="theme-bg-opacity-row is-disabled">
-                                        <label for="theme-bg-opacity-slider">主题壁纸透明度</label>
-                                        <div class="theme-bg-opacity-inner">
-                                            <span id="theme-bg-opacity-swatch" class="adv-slider-swatch adv-slider-swatch--theme-bg" aria-hidden="true"></span>
-                                            <input type="range" id="theme-bg-opacity-slider" class="adv-range" min="0.3" max="1" step="0.05" value="0.75" disabled>
-                                            <span id="theme-bg-opacity-value">75%</span>
-                                        </div>
-                                    </div>
                                     <div id="adv-projection-mask-slot"></div>
                                     <label class="adv-drawer-field-label" for="adv-lyric-overlay-opacity">快速预览暗角浓度</label>
                                     <input type="range" id="adv-lyric-overlay-opacity" class="adv-range" min="0" max="55" value="0" step="1" title="叠在预览上的半透明层">

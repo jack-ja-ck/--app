@@ -1387,7 +1387,10 @@
     }
 
     function showToast(text, triggerElement) {
-        /* 已迁移至 js/utils.js
+        /* ==========================================================
+           [迁移标记 round1] 已迁移至 js/utils.js；以下为旧实现，保留作安全网。
+           当 globalThis.showToast 不可用时可恢复块内逻辑。
+           ==========================================================
         const t = $("toast");
         if (!t) return;
         t.textContent = text;
@@ -2711,7 +2714,10 @@
     }
 
     function parsePages(lyrics, linesPerPage) {
-        /* 已迁移至 js/utils.js
+        /* ==========================================================
+           [迁移标记 round1] 已迁移至 js/utils.js；以下为旧实现，保留作安全网。
+           当 globalThis.parsePages 不可用时可恢复块内逻辑。
+           ==========================================================
         const size = clamp(Number(linesPerPage) || 4, 1, 20);
         const input = String(lyrics || "").replace(/\r/g, "");
         if (!input.trim()) return [["..."]];
@@ -3679,14 +3685,20 @@
     }
 
     function saveSongs() {
-        /* 已迁移至 js/state.js
+        /* ==========================================================
+           [迁移标记 round1] 已迁移至 js/state.js；以下为旧实现，保留作安全网。
+           当 globalThis.saveSongs 不可用时可恢复块内逻辑。
+           ==========================================================
         setStore(STORAGE.SONGS, state.songs);
         */
         return globalThis.saveSongs();
     }
 
     function saveSettings() {
-        /* 已迁移至 js/state.js
+        /* ==========================================================
+           [迁移标记 round1] 已迁移至 js/state.js；以下为旧实现，保留作安全网。
+           当 globalThis.saveSettings 不可用时可恢复块内逻辑。
+           ==========================================================
         const ui = { ...state.ui };
         delete ui.overlayOpacityPct;
         delete ui.fontOpacityPct;
@@ -3704,7 +3716,10 @@
     }
 
     function savePlaylist() {
-        /* 已迁移至 js/state.js
+        /* ==========================================================
+           [迁移标记 round1] 已迁移至 js/state.js；以下为旧实现，保留作安全网。
+           当 globalThis.savePlaylist 不可用时可恢复块内逻辑。
+           ==========================================================
         setStore(STORAGE.PLAYLIST, {
             items: state.playlist.items,
             running: state.playlist.running,
@@ -3788,6 +3803,11 @@
         loadThemeConsoleVideoFromStorage();
     }
 
+    /* ==========================================================
+       loadState：持久化加载已部分迁移至 js/state.js（globalThis.loadState）。
+       本包装先尝试新模块，再始终执行 hydrateAppStateFromStorage() 作为 app.js 侧回退。
+       保留此结构作为安全网；未来版本可考虑收紧或移除本地 hydrate。
+       ========================================================== */
     function loadState() {
         let ret;
         if (typeof globalThis.loadState === "function") {
@@ -5545,21 +5565,55 @@ ${deleteBtnHtml}
     }
 
     function broadcastState() {
-        /* 已迁移至 js/router.js
-        liveState = buildLiveState();
-        setStore(STORAGE.LIVE, liveState);
-        if (channel) {
-            const msg = { type: "update", payload: liveState, source: "main" };
-            channel.postMessage(msg);
-            requestAnimationFrame(() => {
-                channel.postMessage(msg);
-            });
+        const routerFn =
+            typeof globalThis !== "undefined" && typeof globalThis.broadcastState === "function"
+                ? globalThis.broadcastState
+                : null;
+        let routerErr = null;
+        if (routerFn) {
+            try {
+                routerFn();
+            } catch (err) {
+                routerErr = err;
+            }
         }
-        persistAdvPreviewCssVars();
-        saveSongs();
-        saveSettings();
-        */
-        return globalThis.broadcastState();
+        liveState = buildLiveState();
+        if (typeof globalThis !== "undefined") globalThis.worshipLiveState = liveState;
+        try {
+            setStore(STORAGE.LIVE, liveState);
+        } catch (err) {
+            console.warn("broadcastState setStore LIVE", err);
+        }
+        if (channel) {
+            try {
+                const msg = { type: "update", payload: liveState, source: "main" };
+                channel.postMessage(msg);
+                if (typeof requestAnimationFrame === "function") {
+                    requestAnimationFrame(() => {
+                        try {
+                            channel.postMessage(msg);
+                        } catch (e2) {
+                            console.warn("broadcastState channel rAF", e2);
+                        }
+                    });
+                }
+            } catch (err) {
+                console.warn("broadcastState channel", err);
+            }
+        }
+        try {
+            persistAdvPreviewCssVars();
+        } catch (_) {
+            /* ignore */
+        }
+        try {
+            saveSongs();
+            saveSettings();
+        } catch (err) {
+            console.warn("broadcastState persist songs/settings", err);
+        }
+        if (routerErr) console.warn("broadcastState router", routerErr);
+        return liveState;
     }
 
     /** 避免 localStorage 配额/序列化异常阻断投屏等关键路径 */
@@ -6119,6 +6173,7 @@ ${deleteBtnHtml}
             }
         }
         syncEditorToSong();
+        if (typeof WorshipActions !== "undefined") WorshipActions.saveLyrics();
         saveSongs();
         renderSongList();
         updateSpeakerCards();
@@ -6507,20 +6562,18 @@ ${deleteBtnHtml}
     }
 
     function openDisplayWindow() {
+        if (typeof UI !== "undefined" && typeof UI.createDisplayWindow === "function") {
+            return UI.createDisplayWindow();
+        }
         const anchor = $("open-display-btn");
         const w = projectionDisplayWindowRef;
         if (w && !w.closed) {
-            safeBroadcastState("openDisplayWindow:focus-existing");
             try {
-                w.focus();
-                const de = w.document.documentElement;
-                if (de.requestFullscreen) void de.requestFullscreen({ navigationUI: "hide" }).catch(() => {});
-                hideRestoreProjectionBanner();
-                refocusMainWindowForOperator();
-                return;
-            } catch (_) {
-                projectionDisplayWindowRef = null;
+                w.close();
+            } catch (_e) {
+                /* ignore */
             }
+            projectionDisplayWindowRef = null;
         }
         const displayWinName =
             "worship_proj_" + Date.now() + "_" + Math.random().toString(36).slice(2, 10);
@@ -6534,6 +6587,9 @@ ${deleteBtnHtml}
     }
 
     function openLeaderWindow() {
+        if (typeof UI !== "undefined" && typeof UI.createLeaderWindow === "function") {
+            return UI.createLeaderWindow();
+        }
         const anchor = $("open-leader-btn");
         const leaderWinName =
             "worship_leader_" + Date.now() + "_" + Math.random().toString(36).slice(2, 10);
@@ -7437,6 +7493,8 @@ ${deleteBtnHtml}
         host.appendChild(canvas);
         projectionCanvas = canvas;
         projectionCtx = canvas.getContext("2d");
+        globalThis.projectionCanvas = projectionCanvas;
+        globalThis.projectionCtx = projectionCtx;
 
         const gifImg = document.createElement("img");
         gifImg.id = "projection-bg-image";
@@ -7581,6 +7639,14 @@ ${deleteBtnHtml}
     }
 
     function drawBg(ts) {
+        if (typeof globalThis !== "undefined" && typeof globalThis.drawBg === "function") {
+            return globalThis.drawBg(ts);
+        }
+        /* ==========================================================
+           以下为 drawBg 的旧实现，已被 js/ui.js 中的 globalThis.drawBg 接管。
+           保留此代码作为安全网，当新模块不可用时自动回退。
+           未来版本可考虑移除。
+           ========================================================== */
         if (!projectionCtx || !liveState) return;
         const bgState = liveState.background || {};
         const type = bgState.type || "solid-black";
@@ -7710,6 +7776,14 @@ ${deleteBtnHtml}
     }
 
     function restartBg() {
+        if (typeof globalThis !== "undefined" && typeof globalThis.restartBg === "function") {
+            return globalThis.restartBg();
+        }
+        /* ==========================================================
+           以下为 restartBg 的旧实现，已被 js/ui.js 中的 globalThis.restartBg 接管。
+           保留此代码作为安全网，当新模块不可用时自动回退。
+           未来版本可考虑移除。
+           ========================================================== */
         if (projectionRaf) cancelAnimationFrame(projectionRaf);
         projectionRaf = requestAnimationFrame(drawBg);
     }
@@ -7834,6 +7908,14 @@ ${deleteBtnHtml}
     }
 
     function applyLive(mode, payload) {
+        if (typeof globalThis !== "undefined" && typeof globalThis.applyLive === "function") {
+            return globalThis.applyLive(mode, payload);
+        }
+        /* ==========================================================
+           以下为 applyLive 的旧实现，已被 js/ui.js 中的 globalThis.applyLive 接管。
+           保留此代码作为安全网，当新模块不可用时自动回退。
+           未来版本可考虑移除。
+           ========================================================== */
         if (payload === undefined && mode && typeof mode === "object") {
             payload = mode;
             mode = projectionMode || "display";
@@ -7842,6 +7924,8 @@ ${deleteBtnHtml}
         const prev = liveState;
         const prevIdx = Number(prev?.pageIndex) || 0;
         liveState = payload;
+        if (typeof globalThis !== "undefined") globalThis.worshipLiveState = liveState;
+        globalThis.liveState = liveState;
         applyProjectionMaskFromLiveState();
         applyProjectionVignetteFromLiveState();
         const newIdx = Number(liveState.pageIndex) || 0;
@@ -7878,6 +7962,12 @@ ${deleteBtnHtml}
     }
 
     function initDisplayMode() {
+        /* ==========================================================
+           initDisplayMode：投屏入口由 app.js 的 init() 在 isDisplay 时优先分流调用。
+           以下为本函数体内的旧实现；与 js/ui.js 中 initDisplayMode 并存，新 UI 管线
+           完整时可考虑委托。保留作为安全网。
+           未来版本可考虑移除。
+           ========================================================== */
         tryFreeLocalStorageForWorshipBoot();
         projectionMode = "display";
         installProjectionUI("display");
@@ -7947,6 +8037,14 @@ ${deleteBtnHtml}
         }
 
         function removeFullscreenGuide(immediate) {
+            if (typeof UI !== "undefined" && typeof UI.removeFullscreenGuide === "function") {
+                return UI.removeFullscreenGuide(immediate);
+            }
+            /* ==========================================================
+               以下为 removeFullscreenGuide 的旧实现，已被 UI.removeFullscreenGuide 接管。
+               保留此代码作为安全网，当新模块不可用时自动回退。
+               未来版本可考虑移除。
+               ========================================================== */
             stopGuideMovePoll();
             clearGuideIdleTimer();
             if (!fullscreenGuideOverlay) return;
@@ -7984,6 +8082,14 @@ ${deleteBtnHtml}
          * @param {{ helpMode?: boolean }} [opts] helpMode 为 true 时展示 Windows/macOS 双栏帮助；否则为「投屏中」单栏引导。
          */
         function showFullscreenGuidePanel(opts) {
+            if (typeof UI !== "undefined" && typeof UI.showFullscreenGuidePanel === "function") {
+                return UI.showFullscreenGuidePanel(opts);
+            }
+            /* ==========================================================
+               以下为 showFullscreenGuidePanel 的旧实现，已被 UI.showFullscreenGuidePanel 接管。
+               保留此代码作为安全网，当新模块不可用时自动回退。
+               未来版本可考虑移除。
+               ========================================================== */
             const helpMode = !!(opts && opts.helpMode);
             removeFullscreenGuide(true);
             if (document.fullscreenElement) return;
@@ -8075,11 +8181,21 @@ ${deleteBtnHtml}
             () => {
                 if (document.fullscreenElement) {
                     displayHadFullscreenSession = true;
+                    removeFullscreenGuide(true);
                     hideFullscreenGuideFsZone();
                     resetGuideIdleTimer();
                     if (channel) channel.postMessage({ type: "projection_fs_active", source: "display" });
                 } else if (displayHadFullscreenSession) {
                     if (channel) channel.postMessage({ type: "projection_attention", reason: "fs_exit", source: "display" });
+                    window.requestAnimationFrame(() => {
+                        if (!document.fullscreenElement) {
+                            try {
+                                showFullscreenGuidePanel({});
+                            } catch (_e) {
+                                /* ignore */
+                            }
+                        }
+                    });
                 }
             },
             false
@@ -8131,7 +8247,8 @@ ${deleteBtnHtml}
         /** 静默尝试一次自动全屏；若仍非全屏则在延迟后展示引导面板（多数浏览器会因用户手势策略拦截） */
         requestAnimationFrame(() => requestAnimationFrame(() => tryProjectionFullscreenOnce()));
         window.setTimeout(() => {
-            if (!document.fullscreenElement) showFullscreenGuidePanel({});
+            if (document.fullscreenElement) return;
+            showFullscreenGuidePanel({});
         }, 750);
 
         document.addEventListener("mousemove", onProjectionPointerActivity, { passive: true });
@@ -8171,6 +8288,14 @@ ${deleteBtnHtml}
         }
 
         async function toggleProjectionFullscreen() {
+            if (typeof UI !== "undefined" && typeof UI.toggleProjectionFullscreen === "function") {
+                return UI.toggleProjectionFullscreen();
+            }
+            /* ==========================================================
+               以下为 toggleProjectionFullscreen 的旧实现，已被 UI.toggleProjectionFullscreen 接管。
+               保留此代码作为安全网，当新模块不可用时自动回退。
+               未来版本可考虑移除。
+               ========================================================== */
             try {
                 if (document.fullscreenElement) await document.exitFullscreen();
                 else {
@@ -8183,8 +8308,34 @@ ${deleteBtnHtml}
             }
         }
 
+        function applyDisplayLiveFromPayload(payload) {
+            if (!payload || !payload.pages) return;
+            applyLive("display", payload);
+            const bg = payload.background || {};
+            const mediaType =
+                bg.mediaType === "video" || inferMediaTypeFromDataUrl(bg.imageData || "") === "video"
+                    ? "video"
+                    : "image";
+            const isVideoBg = bg.type === "image" && mediaType === "video" && !!bg.imageData;
+            requestAnimationFrame(() => {
+                if (isVideoBg) {
+                    const dispV = $("display-video-bg");
+                    if (dispV && bg.imageData) {
+                        const want = String(bg.imageData);
+                        dispV.dataset.worshipBgUrl = want;
+                        dispV.src = want;
+                        void dispV.play().catch(() => {});
+                    }
+                } else {
+                    requestAnimationFrame(() => {
+                        restartBg();
+                    });
+                }
+            });
+        }
+
         const initState = getStore(STORAGE.LIVE, null);
-        if (initState) applyLive("display", initState);
+        if (initState) applyDisplayLiveFromPayload(initState);
         const onPrev = () => channel && channel.postMessage({ type: "flip", delta: -1 });
         const onNext = () => channel && channel.postMessage({ type: "flip", delta: 1 });
 
@@ -8244,14 +8395,16 @@ ${deleteBtnHtml}
                     return;
                 }
                 if (d && d.type === "update" && d.payload && d.payload.pages) {
-                    applyLive("display", d.payload);
+                    applyDisplayLiveFromPayload(d.payload);
                 }
             };
             channel.postMessage({ type: "request_state" });
         }
 
         window.addEventListener("storage", (e) => {
-            if (e.key === STORAGE.LIVE && e.newValue) applyLive("display", parseJSON(e.newValue, null));
+            if (e.key === STORAGE.LIVE && e.newValue) {
+                applyDisplayLiveFromPayload(parseJSON(e.newValue, null));
+            }
         });
         window.addEventListener("resize", () => {
             restartBg();
@@ -9513,10 +9666,7 @@ ${deleteBtnHtml}
             state.currentPage = cur + d;
             updateAll({ linesOnly: isMainVideoBackground() });
             notifyProjectionConsoleReadyForGuide();
-            return;
-        }
-
-        if (cur >= maxIdx) {
+        } else if (cur >= maxIdx) {
             if (state.playlist.running && state.playlist.autoSwitch) {
                 const nextIdx = state.playlist.activeIndex + 1;
                 if (nextIdx < state.playlist.items.length) {
@@ -9525,12 +9675,15 @@ ${deleteBtnHtml}
                     }
                 }
             }
-            return;
+        } else {
+            state.currentPage = Math.min(cur + d, maxIdx);
+            updateAll({ linesOnly: isMainVideoBackground() });
+            notifyProjectionConsoleReadyForGuide();
         }
-
-        state.currentPage = Math.min(cur + d, maxIdx);
-        updateAll({ linesOnly: isMainVideoBackground() });
-        notifyProjectionConsoleReadyForGuide();
+        safeBroadcastState("changePage");
+        if (typeof WorshipActions !== "undefined" && WorshipActions.broadcastState) {
+            WorshipActions.broadcastState();
+        }
     }
 
     function prevPage() {
@@ -9749,6 +9902,7 @@ ${deleteBtnHtml}
             maybeShowWelcomeToast();
             maybeShowFirstVisitOnboarding();
             ensureWorshipVersionFooter();
+            if (typeof UI !== "undefined" && UI.init) UI.init();
             requestEnsureUploadedVideoCoversOnMineTab();
         };
         initBackgroundImageIndexedDb().then(boot).catch((err) => {

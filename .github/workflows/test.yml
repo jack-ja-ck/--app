@@ -1,14 +1,13 @@
-name: Test Workflow
-on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
-
+name: E2E Test
+on: push
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Run a test command
-        run: echo "Workflow is working"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm install playwright
+      - run: npx playwright install chromium
+      - run: node .github/scripts/run-e2e.cjs

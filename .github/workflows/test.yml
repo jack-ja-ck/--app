@@ -11,3 +11,10 @@ jobs:
       - run: npm install playwright
       - run: npx playwright install chromium
       - run: node .github/scripts/run-e2e.cjs
+      
+      # 下面这行是新增的，记得保留
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-screenshot
+          path: screenshot.png

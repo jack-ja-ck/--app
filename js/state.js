@@ -88,6 +88,8 @@ var playlist = {
 var defaultSongPosY = 45;
 
 function saveSongs() {
+    songs = Array.isArray(AppState.songs) ? AppState.songs : [];
+    root.songs = songs;
     setStore(STORAGE.SONGS, songs);
 }
 
@@ -195,6 +197,8 @@ function addSong(song) {
         next.id = `song_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
     }
     AppState.songs = AppState.songs.concat([next]);
+    songs = AppState.songs;
+    root.songs = songs;
     return next;
 }
 
@@ -204,6 +208,8 @@ function deleteSong(id) {
     const before = AppState.songs.length;
     AppState.songs = AppState.songs.filter((s) => !s || String(s.id) !== sid);
     if (AppState.songs.length === before) return false;
+    songs = AppState.songs;
+    root.songs = songs;
     if (AppState.currentSongId != null && String(AppState.currentSongId) === sid) {
         AppState.currentSongId = AppState.songs[0] ? AppState.songs[0].id : null;
         AppState.currentPageIndex = 0;

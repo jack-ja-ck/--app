@@ -3955,17 +3955,28 @@
         modal.style.display = "flex";
     }
 
+    function syncMigratedStateModuleFromAppState() {
+        const root = typeof globalThis !== "undefined" ? globalThis : window;
+        if (root.AppState && typeof root.AppState === "object") {
+            root.AppState.songs = state.songs;
+            root.AppState.currentSongId = state.currentSongId;
+            root.AppState.currentPageIndex = state.currentPage;
+            root.AppState.currentCardPage = state.currentPage;
+            root.AppState.fontSize = state.ui.fontSize;
+            root.AppState.defaultLines = state.ui.defaultLines;
+            root.AppState.posY = state.ui.posY;
+            root.AppState.bgType = state.ui.bgType;
+        }
+        root.songs = state.songs;
+    }
+
     function saveSongs() {
-        /* ==========================================================
-           [迁移标记 round1] 已迁移至 js/state.js；以下为旧实现，保留作安全网。
-           当 globalThis.saveSongs 不可用时可恢复块内逻辑。
-           ==========================================================
+        syncMigratedStateModuleFromAppState();
         setStore(STORAGE.SONGS, state.songs);
-        */
-        return globalThis.saveSongs();
     }
 
     function saveSettings() {
+        syncMigratedStateModuleFromAppState();
         try {
             if (typeof globalThis.saveSettings === "function") globalThis.saveSettings();
         } catch (_e) {

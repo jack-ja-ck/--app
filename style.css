@@ -1909,8 +1909,8 @@ body.online-search-overlay-open {
 }
 .pwa-install-guide__panel {
     position: relative;
-    width: min(480px, 100%);
-    max-height: min(86vh, 620px);
+    width: min(500px, 100%);
+    max-height: min(92vh, 720px);
     overflow: auto;
     padding: 22px 22px 18px;
     border-radius: 16px;
@@ -1940,6 +1940,111 @@ body.online-search-overlay-open {
 .pwa-install-guide__x:hover {
     background: rgba(255, 255, 255, 0.18);
 }
+.pwa-install-guide__store-card {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    margin: 0 36px 14px 0;
+    padding: 14px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.pwa-install-guide__icon-wrap {
+    flex-shrink: 0;
+}
+.pwa-install-guide__icon-img {
+    width: 56px;
+    height: 56px;
+    border-radius: 14px;
+    object-fit: cover;
+    display: block;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+.pwa-install-guide__store-meta {
+    flex: 1;
+    min-width: 0;
+}
+.pwa-install-guide__app-name {
+    margin: 0 0 6px;
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #f5e6c8;
+}
+.pwa-install-guide__badges {
+    margin: 0 0 8px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+.pwa-install-guide__badge {
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: rgba(212, 175, 55, 0.2);
+    color: #f5e6c8;
+    border: 1px solid rgba(212, 175, 55, 0.35);
+}
+.pwa-install-guide__store-note {
+    margin: 0;
+    font-size: 0.76rem;
+    line-height: 1.5;
+    color: rgba(255, 255, 255, 0.65);
+}
+.pwa-install-guide__flow-label {
+    margin: 0 0 8px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.88);
+}
+.pwa-install-guide__flow {
+    margin: 0 0 16px;
+}
+.pwa-install-guide__flow-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+.pwa-install-guide__flow-item {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    margin-bottom: 10px;
+}
+.pwa-install-guide__flow-item:last-child {
+    margin-bottom: 0;
+}
+.pwa-install-guide__flow-n {
+    flex-shrink: 0;
+    width: 26px;
+    height: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    font-size: 0.78rem;
+    font-weight: 800;
+    background: rgba(212, 175, 55, 0.25);
+    color: #f5e6c8;
+    border: 1px solid rgba(212, 175, 55, 0.4);
+}
+.pwa-install-guide__flow-t {
+    flex: 1;
+    min-width: 0;
+    font-size: 0.86rem;
+    line-height: 1.5;
+    color: rgba(255, 255, 255, 0.88);
+}
+.pwa-install-guide__btn-secondary {
+    background: rgba(255, 255, 255, 0.08) !important;
+    border: 1px solid rgba(255, 255, 255, 0.22) !important;
+    color: var(--text-primary) !important;
+}
+.pwa-install-guide__btn-secondary:hover {
+    background: rgba(255, 255, 255, 0.14) !important;
+}
 .pwa-install-guide__title {
     margin: 0 36px 12px 0;
     font-size: 1.12rem;
@@ -1958,6 +2063,62 @@ body.online-search-overlay-open {
     padding: 1px 6px;
     border-radius: 6px;
     background: rgba(255, 255, 255, 0.08);
+}
+.pwa-install-guide__cta {
+    margin: 0 0 16px;
+    padding: 14px 14px 16px;
+    border-radius: 12px;
+    background: rgba(46, 125, 50, 0.18);
+    border: 1px solid rgba(129, 199, 132, 0.45);
+}
+.pwa-install-guide__cta-text {
+    margin: 0 0 12px;
+    font-size: 0.88rem;
+    line-height: 1.55;
+    color: rgba(255, 255, 255, 0.92);
+}
+.pwa-install-guide__cta-btn {
+    width: 100%;
+    min-height: 44px;
+    font-weight: 700;
+    background: #2e7d32 !important;
+    border-color: rgba(255, 255, 255, 0.2) !important;
+    color: #fff !important;
+}
+.pwa-install-guide__cta-btn:hover:not(:disabled) {
+    filter: brightness(1.08);
+}
+.pwa-install-guide__cta-btn:disabled {
+    opacity: 0.75;
+    cursor: wait;
+}
+.pwa-install-guide__sub {
+    margin: 0 0 8px;
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: rgba(212, 175, 119, 0.95);
+    letter-spacing: 0.02em;
+}
+.pwa-install-guide__url-fallback {
+    margin-top: 12px;
+}
+.pwa-install-guide__url-fallback-label {
+    margin: 0 0 6px;
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.72);
+}
+.pwa-install-guide__url-field {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: rgba(0, 0, 0, 0.35);
+    color: rgba(255, 255, 255, 0.95);
+    font-size: 0.78rem;
+    line-height: 1.45;
+    resize: vertical;
+    min-height: 52px;
 }
 .pwa-install-guide__body {
     font-size: 0.88rem;

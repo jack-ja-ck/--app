@@ -4653,8 +4653,7 @@
 
     /**
      * @param {{ galleryThumb?: boolean; song?: object }} [opts]
-     * 画廊里视频背景：非当前诗歌不重复为每卡拉起多路视频解码，优先用素材库里的视频封面图；无封面时用渐变占位。
-     * 当前诗歌下各分页卡仍播真实 video（与投屏监视一致）。
+     * 画廊里视频背景：各首诗歌的分页卡均使用真实 video 元素播放（与投屏监视一致）；不再对非当前诗歌降级为静帧封面，避免「像一张图」的观感。
      * 传入 opts.song 时按该诗歌独立背景渲染；否则按当前诗歌（与中间预览一致）。
      */
     function applyCardBackgroundFromSlice(card, slice, opts) {
@@ -5137,7 +5136,7 @@
                 const prevBgSig = card.getAttribute("data-gallery-bg-sig") || "";
                 if (prevBgSig !== wantBgSig) {
                     applyCardBackground(card, {
-                        galleryThumb: !(galleryLiveVideoBgThis && isCurrent),
+                        galleryThumb: !galleryLiveVideoBgThis,
                         song: plSong
                     });
                     card.setAttribute("data-gallery-bg-sig", wantBgSig);
@@ -5249,7 +5248,7 @@
                     ";padding:10px 12px;cursor:pointer;box-sizing:border-box;overflow:hidden;flex-shrink:0;transition:border-color 0.15s ease,box-shadow 0.15s ease;position:relative;";
                 if (act) card.style.boxShadow = "0 0 0 1px rgba(212,175,55,0.35), 0 8px 28px rgba(0,0,0,0.35)";
                 applyCardBackground(card, {
-                    galleryThumb: !(galleryLiveVideoBgThis && isCurrent),
+                    galleryThumb: !galleryLiveVideoBgThis,
                     song: plSong
                 });
                 card.setAttribute("data-gallery-bg-sig", pageGalleryBackgroundIdentityKey(effStrip));

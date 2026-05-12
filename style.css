@@ -1887,6 +1887,108 @@ body.online-search-overlay-open {
     50% { filter: brightness(1.12); opacity: 0.94; }
 }
 
+/* PWA 安装引导（替代 alert，分端说明 + 复制网址） */
+.pwa-install-guide {
+    position: fixed;
+    inset: 0;
+    z-index: 100090;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    box-sizing: border-box;
+}
+.pwa-install-guide[hidden] {
+    display: none !important;
+}
+.pwa-install-guide__backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    cursor: pointer;
+}
+.pwa-install-guide__panel {
+    position: relative;
+    width: min(480px, 100%);
+    max-height: min(86vh, 620px);
+    overflow: auto;
+    padding: 22px 22px 18px;
+    border-radius: 16px;
+    background: rgba(26, 28, 38, 0.96);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 20px 56px rgba(0, 0, 0, 0.55);
+    color: var(--text-primary);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    box-sizing: border-box;
+}
+.pwa-install-guide__x {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    border: none;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+    font-size: 1.1rem;
+    line-height: 1;
+    cursor: pointer;
+}
+.pwa-install-guide__x:hover {
+    background: rgba(255, 255, 255, 0.18);
+}
+.pwa-install-guide__title {
+    margin: 0 36px 12px 0;
+    font-size: 1.12rem;
+    font-weight: 700;
+    color: #f5e6c8;
+    line-height: 1.35;
+}
+.pwa-install-guide__lead {
+    margin: 0 0 14px;
+    font-size: 0.88rem;
+    line-height: 1.55;
+    color: rgba(255, 255, 255, 0.82);
+}
+.pwa-install-guide__lead code {
+    font-size: 0.82em;
+    padding: 1px 6px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.08);
+}
+.pwa-install-guide__body {
+    font-size: 0.88rem;
+    line-height: 1.55;
+    color: rgba(255, 255, 255, 0.88);
+}
+.pwa-install-guide__steps {
+    margin: 0;
+    padding-left: 1.2em;
+}
+.pwa-install-guide__steps li {
+    margin: 0 0 10px;
+}
+.pwa-install-guide__tip {
+    margin: 12px 0 0;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: rgba(212, 175, 55, 0.12);
+    border: 1px solid rgba(212, 175, 55, 0.35);
+    font-size: 0.84rem;
+    line-height: 1.45;
+    color: rgba(248, 236, 210, 0.95);
+}
+.pwa-install-guide__actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 18px;
+}
+
 /* 高级编辑：滑块旁 16×16 微型预览色块 */
 .adv-drawer-slider-visual-row {
     display: flex;

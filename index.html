@@ -95,7 +95,7 @@
                     <div id="upload-history-dropdown-list" style="display:flex;flex-direction:column;gap:10px;"></div>
                 </div>
             </div>
-            <button type="button" id="pwa-install-btn" class="editor-action-bar-btn" style="display:none" title="将本网站安装到手机或电脑主屏幕"><span class="editor-action-bar-btn__icon" aria-hidden="true">📲</span><span class="editor-action-bar-btn__text">安装App</span></button>
+            <button type="button" id="pwa-install-btn" class="editor-action-bar-btn pwa-install-btn" style="display:none" title="将本站固定到桌面或主屏幕（不下载 exe；与 Chrome 地址栏「安装」相同）"><span class="editor-action-bar-btn__icon" aria-hidden="true">📲</span><span class="editor-action-bar-btn__text">安装App</span></button>
             <button type="button" id="ocr-btn" class="editor-action-bar-btn" title="从照片识别歌词"><span class="editor-action-bar-btn__icon" aria-hidden="true">📷</span><span class="editor-action-bar-btn__text">拍照识歌词</span></button>
             <button type="button" id="help-btn" class="editor-action-bar-btn" title="查看使用说明与快捷键"><span class="editor-action-bar-btn__icon" aria-hidden="true">❓</span><span class="editor-action-bar-btn__text">使用帮助</span></button>
             <input type="file" id="ocr-file-input" accept="image/*" capture="environment" hidden>
@@ -765,47 +765,182 @@
     <div id="monitor-resize-handle" aria-hidden="true"></div>
 </div>
 
+<div id="pwa-install-guide" class="pwa-install-guide" hidden aria-hidden="true">
+    <div class="pwa-install-guide__backdrop" data-pwa-guide-close tabindex="-1"></div>
+    <div class="pwa-install-guide__panel" role="dialog" aria-modal="true" aria-labelledby="pwa-install-guide-title">
+        <button type="button" class="pwa-install-guide__x" data-pwa-guide-close aria-label="关闭">✕</button>
+        <h2 id="pwa-install-guide-title" class="pwa-install-guide__title">安装到电脑桌面 / 手机主屏幕</h2>
+        <p class="pwa-install-guide__lead">
+            这是 <strong>网页应用（PWA）</strong>：不会像传统软件那样下载 <code>.exe</code> 安装包，而是把本站固定成独立窗口，与 Chrome 地址栏里的「安装」是同一类功能。
+        </p>
+        <div id="pwa-install-guide-body" class="pwa-install-guide__body"></div>
+        <p id="pwa-install-guide-tip" class="pwa-install-guide__tip" hidden></p>
+        <div class="pwa-install-guide__actions">
+            <button type="button" id="pwa-install-guide-copy" class="btn btn-outline">复制当前网址</button>
+            <button type="button" class="btn" data-pwa-guide-close>知道了</button>
+        </div>
+    </div>
+</div>
+
 <script>
-(function() {
-  var deferredPrompt = null;
-  var installBtn = document.getElementById('pwa-install-btn');
-  if (!installBtn) return;
-  
-  // 如果已经是PWA独立模式（已安装），隐藏按钮
-  if (window.matchMedia('(display-mode: standalone)').matches || navigator.standalone) {
-    installBtn.style.display = 'none';
-    return;
-  }
-  
-  // 监听安装事件
-  window.addEventListener('beforeinstallprompt', function(e) {
-    e.preventDefault();
-    deferredPrompt = e;
-    installBtn.style.display = 'inline-flex';
-  });
-  
-  installBtn.addEventListener('click', function() {
-    if (deferredPrompt) {
-      deferredPrompt.prompt();
-      deferredPrompt.userChoice.then(function(result) {
-        if (result.outcome === 'accepted') {
-          installBtn.style.display = 'none';
-          console.log('✅ 用户接受了安装');
+(function () {
+    var deferredPrompt = null;
+    var installBtn = document.getElementById("pwa-install-btn");
+    var guideEl = document.getElementById("pwa-install-guide");
+    var guideBody = document.getElementById("pwa-install-guide-body");
+    var guideTip = document.getElementById("pwa-install-guide-tip");
+    var copyBtn = document.getElementById("pwa-install-guide-copy");
+    if (!installBtn) return;
+
+    function isStandalone() {
+        return window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+    }
+
+    if (isStandalone()) {
+        installBtn.style.display = "none";
+        return;
+    }
+
+    function detectGuideKind() {
+        var ua = String(navigator.userAgent || "");
+        var plat = String(navigator.platform || "");
+        var isIOS =
+            /iPhone|iPad|iPod/i.test(ua) ||
+            (plat === "MacIntel" && (navigator.maxTouchPoints || 0) > 1);
+        var isAndroid = /Android/i.test(ua);
+        var isSafariDesktop = /Safari/i.test(ua) && !/Chrome|Chromium|CriOS|Edg/i.test(ua) && /^Mac/i.test(plat);
+        var isEdge = /Edg/i.test(ua);
+        var isChromeish = /Chrome|Chromium/i.test(ua) && !/Edg/i.test(ua);
+        if (isIOS) return "ios";
+        if (isAndroid) return "android";
+        if (isSafariDesktop) return "safari_mac";
+        if (isEdge) return "edge";
+        if (isChromeish) return "chrome";
+        return "generic";
+    }
+
+    function buildGuideHtml(kind) {
+        var rows = [];
+        if (kind === "ios") {
+            rows.push(
+                "<li>点浏览器<strong>底部中间的「分享」</strong>按钮（方框带向上箭头）。</li>",
+                "<li>在菜单里<strong>上滑</strong>或找到<strong>「添加到主屏幕」</strong>，按提示完成。</li>",
+                "<li>若找不到：请确认是用 <strong>Safari</strong> 打开本站（Chrome 在 iOS 上通常无法安装 PWA）。</li>"
+            );
+        } else if (kind === "android") {
+            rows.push(
+                "<li>点浏览器右上角 <strong>⋮</strong>（菜单）。</li>",
+                "<li>选择<strong>「安装应用」</strong>、<strong>「添加到主屏幕」</strong>或类似项（不同机型文案略有差异）。</li>",
+                "<li>若菜单里没有：可尝试打开菜单里的<strong>「桌面版网站」</strong>后再试，或查看地址栏右侧是否出现安装提示。</li>"
+            );
+        } else if (kind === "safari_mac") {
+            rows.push(
+                "<li>Safari 对 PWA 支持有限：可试顶部菜单 <strong>「文件」</strong> → 若有<strong>「添加到程序坞」</strong>可直接使用。</li>",
+                "<li>更稳妥：用 <strong>Chrome 或 Edge</strong> 打开本站，看地址栏<strong>最右侧</strong>是否出现 <strong>⊕「安装」</strong>或<strong>显示器+箭头</strong>图标并点击。</li>"
+            );
+        } else if (kind === "chrome" || kind === "edge") {
+            rows.push(
+                "<li>看地址栏<strong>最右侧</strong>：若出现 <strong>⊕「安装」</strong>或<strong>带下载箭头的显示器</strong>图标，请点击并按系统窗口确认。</li>",
+                "<li>若没有图标：点浏览器右上角 <strong>⋮</strong> 菜单，查找<strong>「安装…」</strong>或<strong>「应用」→「安装此站点」</strong>。</li>",
+                "<li>仍没有：可能已安装过或被策略禁用——可使用下方<strong>「复制当前网址」</strong>收藏，或换用 Chrome / Edge 再试。</li>"
+            );
+        } else {
+            rows.push(
+                "<li>推荐使用 <strong>Chrome</strong> 或 <strong>Microsoft Edge</strong> 打开本站，查看地址栏右侧是否有<strong>安装</strong>图标。</li>",
+                "<li>Firefox 等对 PWA 支持不完整，可能没有「一键安装」。</li>",
+                "<li>可先<strong>复制当前网址</strong>收藏；换用 Chrome / Edge 后再点「安装App」。</li>"
+            );
         }
-        deferredPrompt = null;
-      });
-    } else {
-      // 如果浏览器不支持自动弹出，给用户引导提示
-      alert('请点击浏览器菜单中的「安装」或「添加到主屏幕」选项来安装。\n\nChrome：地址栏右侧的安装图标或菜单中的「安装 敬拜投屏·专业版...」\nSafari：底部分享按钮 → 添加到主屏幕');
+        return '<ol class="pwa-install-guide__steps">' + rows.join("") + "</ol>";
     }
-  });
-  
-  // 如果3秒后还没触发安装事件（说明已安装过或其他原因），也显示按钮
-  setTimeout(function() {
-    if (deferredPrompt === null && !window.matchMedia('(display-mode: standalone)').matches && !navigator.standalone) {
-      installBtn.style.display = 'inline-flex';
+
+    function openPwaInstallGuide(extraTip) {
+        if (!guideEl || !guideBody) return;
+        guideBody.innerHTML = buildGuideHtml(detectGuideKind());
+        if (guideTip) {
+            if (extraTip) {
+                guideTip.textContent = extraTip;
+                guideTip.hidden = false;
+            } else {
+                guideTip.textContent = "";
+                guideTip.hidden = true;
+            }
+        }
+        guideEl.hidden = false;
+        guideEl.setAttribute("aria-hidden", "false");
+        document.body.style.overflow = "hidden";
+        var xb = guideEl.querySelector(".pwa-install-guide__x");
+        if (xb) xb.focus();
     }
-  }, 3000);
+
+    function closePwaInstallGuide() {
+        if (!guideEl) return;
+        guideEl.hidden = true;
+        guideEl.setAttribute("aria-hidden", "true");
+        document.body.style.overflow = "";
+    }
+
+    if (guideEl) {
+        guideEl.addEventListener("click", function (e) {
+            var t = e.target;
+            if (t && t.getAttribute && t.getAttribute("data-pwa-guide-close") != null) closePwaInstallGuide();
+        });
+        document.addEventListener("keydown", function (e) {
+            if (e.key === "Escape" && guideEl && !guideEl.hidden) {
+                e.preventDefault();
+                closePwaInstallGuide();
+            }
+        });
+    }
+
+    if (copyBtn) {
+        copyBtn.addEventListener("click", function () {
+            var url = String(location.href || "");
+            function ok() {
+                var prev = copyBtn.textContent;
+                copyBtn.textContent = "已复制";
+                window.setTimeout(function () {
+                    copyBtn.textContent = prev;
+                }, 2000);
+            }
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(url).then(ok).catch(function () {
+                    window.prompt("请手动复制网址：", url);
+                });
+            } else {
+                window.prompt("请手动复制网址：", url);
+            }
+        });
+    }
+
+    window.addEventListener("beforeinstallprompt", function (e) {
+        e.preventDefault();
+        deferredPrompt = e;
+        installBtn.style.display = "inline-flex";
+    });
+
+    installBtn.addEventListener("click", function () {
+        if (deferredPrompt) {
+            deferredPrompt.prompt();
+            deferredPrompt.userChoice
+                .then(function (result) {
+                    if (result.outcome === "accepted") {
+                        installBtn.style.display = "none";
+                    } else {
+                        openPwaInstallGuide("若刚才关掉了安装窗口，可按下列步骤在浏览器里手动安装。");
+                    }
+                    deferredPrompt = null;
+                })
+                .catch(function () {
+                    deferredPrompt = null;
+                    openPwaInstallGuide(null);
+                });
+        } else {
+            openPwaInstallGuide(null);
+        }
+    });
+
+    installBtn.style.display = "inline-flex";
 })();
 </script>
 

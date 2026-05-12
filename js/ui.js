@@ -1460,24 +1460,6 @@ function initDisplayMode() {
         document.addEventListener("mousemove", onAudiencePointerMove);
         document.addEventListener("contextmenu", onAudienceContextMenu);
 
-        const cornerHint = document.createElement("div");
-        cornerHint.setAttribute("data-projection-corner-hint", "1");
-        cornerHint.textContent = "F 全屏 · H 帮助 · ESC 退出";
-        cornerHint.style.cssText = [
-            "position:fixed",
-            "right:10px",
-            "bottom:8px",
-            "z-index:99990",
-            "font-size:10px",
-            "line-height:1.25",
-            "color:rgba(255,255,255,0.38)",
-            "pointer-events:none",
-            "white-space:nowrap",
-            "text-shadow:0 1px 8px rgba(0,0,0,0.95)",
-            "letter-spacing:0.02em"
-        ].join(";");
-        document.body.appendChild(cornerHint);
-
         requestProjectionFullscreen().catch(() => {
             showProjectionGuideOverlay();
         });

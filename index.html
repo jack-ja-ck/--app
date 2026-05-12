@@ -764,5 +764,52 @@
     <div id="monitor-resize-handle" aria-hidden="true"></div>
 </div>
 
+<div id="pwa-install-btn" style="position:fixed; bottom:20px; right:20px; z-index:9999; display:none; background:#d4af37; color:#1a1510; border:none; padding:12px 20px; border-radius:12px; font-size:16px; font-weight:700; cursor:pointer; box-shadow:0 4px 16px rgba(0,0,0,0.4);">
+  📲 安装App
+</div>
+
+<script>
+(function() {
+  var deferredPrompt = null;
+  var installBtn = document.getElementById('pwa-install-btn');
+  
+  // 如果已经是PWA独立模式（已安装），隐藏按钮
+  if (window.matchMedia('(display-mode: standalone)').matches || navigator.standalone) {
+    installBtn.style.display = 'none';
+    return;
+  }
+  
+  // 监听安装事件
+  window.addEventListener('beforeinstallprompt', function(e) {
+    e.preventDefault();
+    deferredPrompt = e;
+    installBtn.style.display = 'block';
+  });
+  
+  installBtn.addEventListener('click', function() {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      deferredPrompt.userChoice.then(function(result) {
+        if (result.outcome === 'accepted') {
+          installBtn.style.display = 'none';
+          console.log('✅ 用户接受了安装');
+        }
+        deferredPrompt = null;
+      });
+    } else {
+      // 如果浏览器不支持自动弹出，给用户引导提示
+      alert('请点击浏览器菜单中的「安装」或「添加到主屏幕」选项来安装。\n\nChrome：地址栏右侧的安装图标或菜单中的「安装 敬拜投屏·专业版...」\nSafari：底部分享按钮 → 添加到主屏幕');
+    }
+  });
+  
+  // 如果3秒后还没触发安装事件（说明已安装过或其他原因），也显示按钮
+  setTimeout(function() {
+    if (deferredPrompt === null && !window.matchMedia('(display-mode: standalone)').matches && !navigator.standalone) {
+      installBtn.style.display = 'block';
+    }
+  }, 3000);
+})();
+</script>
+
 </body>
 </html>

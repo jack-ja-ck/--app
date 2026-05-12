@@ -2332,27 +2332,43 @@
         teardownNewUserArrowGuide();
     }
 
-    /** 首次访问：箭头式分步指引（与 worship_visited 共用，完成后不再显示） */
+    /** 首次访问：箭头式分步指引（与 worship_visited 共用，完成后不再显示）——按实际操作顺序 */
     const NEW_USER_ARROW_GUIDE_STEPS = [
         {
+            selector: "#editor-lyrics-drawer-summary",
+            title: "第 1 步：编辑歌词",
+            text:
+                "先展开「编辑歌词」，在中间编辑区粘贴或输入内容（空行或 [page] 分段）。确认歌名后，点上方工具栏「保存」，把本首写入左侧诗歌库。"
+        },
+        {
             selector: "#song-library",
-            title: "诗歌库",
-            text: "在这里搜索、选择诗歌；下方是播放列表，可安排敬拜顺序。"
+            title: "第 2 步：加入播放列表",
+            text:
+                "在上方诗歌列表中，点要唱的诗歌右侧「+」，将其加入下方「播放列表」；可添加多首，并在列表里拖动调整顺序。「在线搜索诗歌」暂不可用；查找本机已保存作品请用「搜索我的诗歌」。"
+        },
+        {
+            selector: "#playlist-start-btn",
+            title: "第 3 步：开始播放",
+            text:
+                "准备开唱时，点「▶ 开始播放」。随后在中间「页面画廊」用 ← → 或空格翻页；需要连播时可勾选「🔄 自动切换」。"
         },
         {
             selector: "#speaker-view",
-            title: "页面画廊",
-            text: "预览各页幻灯片；点击卡片或按键盘 ← → / 空格切换页面。"
+            title: "第 4 步：预览幻灯片",
+            text:
+                "在画廊中点击各页卡片，确认分页与歌词在幻灯片上的显示无误，再进入投屏。"
         },
         {
-            selector: "#editor-lyrics-drawer-summary",
-            title: "编辑歌词",
-            text: "点这里展开，在编辑区粘贴或修改歌词（空行或 [page] 分段）。"
+            selector: "#apply-to-display",
+            title: "第 5 步：同步到演示屏",
+            text:
+                "点「应用到演示屏」，把当前歌词与样式同步给投屏窗口和主领视图。（每次编辑后务必再点一次，会众画面才会更新。）"
         },
         {
             selector: "#open-display-btn",
-            title: "开启投屏",
-            text: "准备好后点此打开投屏窗口，会众即可观看画面。"
+            title: "第 6 步：开启投屏",
+            text:
+                "在右侧点「开启投屏」打开会众窗口；投屏窗口可按 F 全屏。主控台可用「投屏监视」小窗查看现场效果。"
         }
     ];
 
@@ -2488,11 +2504,12 @@
         const vw = window.innerWidth;
         const vh = window.innerHeight;
         const margin = 12;
-        const maxBubbleW = Math.min(320, vw - margin * 2);
+        const maxBubbleW = Math.min(newUserArrowGuideIndex < 2 ? 340 : 320, vw - margin * 2);
         bubble.style.maxWidth = maxBubbleW + "px";
         bubble.style.width = maxBubbleW + "px";
 
-        const estH = 168;
+        const estHeights = [215, 255, 225, 195, 205, 215];
+        const estH = estHeights[newUserArrowGuideIndex] ?? 168;
         let bx = rx + rw / 2 - maxBubbleW / 2;
         bx = Math.max(margin, Math.min(bx, vw - maxBubbleW - margin));
         let by = ry + rh + 16;
@@ -2542,9 +2559,7 @@
         }, 48);
     }
 
-    function maybeStartNewUserArrowGuide() {
-        if (isDisplay || isLeader) return;
-        if (!isWorshipFirstVisit()) return;
+    function startNewUserArrowGuideCore() {
         const root = ensureNewUserArrowGuideDom();
         if (!root) return;
         const prevRelayout = teardownNewUserArrowGuide._onRelayout;
@@ -2575,6 +2590,17 @@
             }
         };
         requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(kick, 280)));
+    }
+
+    function maybeStartNewUserArrowGuide() {
+        if (isDisplay || isLeader) return;
+        if (!isWorshipFirstVisit()) return;
+        startNewUserArrowGuideCore();
+    }
+
+    function replayNewUserArrowGuideFromToolbar() {
+        if (isDisplay || isLeader) return;
+        startNewUserArrowGuideCore();
     }
 
     let shortcutsPanelBackdropEl = null;
@@ -9266,6 +9292,11 @@ ${deleteBtnHtml}
         });
         on("ocr-btn", "click", () => $("ocr-file-input")?.click());
         on("help-btn", "click", openHelpModal);
+        on("usage-guide-btn", "click", () => {
+            const hm = $("help-modal");
+            if (hm) hm.style.display = "none";
+            replayNewUserArrowGuideFromToolbar();
+        });
         on("ocr-file-input", "change", async (e) => {
             const input = e.target;
             const file = input?.files?.[0];

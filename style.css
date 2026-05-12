@@ -1512,15 +1512,17 @@ body.online-search-overlay-open {
     color: #fff;
 }
 
-/* 辅助工具：拍照识歌词、使用帮助 */
+/* 辅助工具：拍照识歌词、使用帮助、使用引导 */
 #editor-action-bar #ocr-btn,
-#editor-action-bar #help-btn {
+#editor-action-bar #help-btn,
+#editor-action-bar #usage-guide-btn {
     border: 1px solid rgba(255, 255, 255, 0.12);
     background: transparent;
     color: rgba(236, 238, 245, 0.82);
 }
 #editor-action-bar #ocr-btn:hover,
-#editor-action-bar #help-btn:hover {
+#editor-action-bar #help-btn:hover,
+#editor-action-bar #usage-guide-btn:hover {
     border-color: rgba(255, 255, 255, 0.28);
     background: rgba(255, 255, 255, 0.05);
     color: rgba(248, 248, 252, 0.95);
@@ -5579,6 +5581,7 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
     .bg-tab,
     .display-control-btn,
     #help-btn,
+    #usage-guide-btn,
     .lyric-bg-thumb-share,
     .note-icon-btn,
     .leader-mode-toggle,

@@ -5,6 +5,78 @@
 (function fontDataModule(global) {
     "use strict";
 
+    /** 下拉框中风格预设的 option value 前缀（同时应用字体、颜色、字重） */
+    const PRESET_SELECT_PREFIX = "__worship_preset__";
+
+    /**
+     * 原「字体风格」四项，并入「字体选择」首组。
+     * @type {{ id: string, label: string, fontFamily: string, fontColor: string, fontWeight: string }[]}
+     */
+    const FONT_STYLE_PRESETS = [
+        {
+            id: "solemn-song",
+            label: "庄重宋体",
+            fontFamily: "'Source Han Serif SC','Noto Serif SC','SimSun','Songti SC',serif",
+            fontColor: "#d4af37",
+            fontWeight: "700"
+        },
+        {
+            id: "modern-sans",
+            label: "现代黑体",
+            fontFamily: "'Microsoft YaHei','PingFang SC',sans-serif",
+            fontColor: "#ffffff",
+            fontWeight: "400"
+        },
+        {
+            id: "handwritten",
+            label: "手写体",
+            fontFamily: "'KaiTi','Kaiti SC','STKaiti',serif",
+            fontColor: "#ffe4a8",
+            fontWeight: "400"
+        },
+        {
+            id: "classical-serif",
+            label: "古典衬线",
+            fontFamily: "'SimSun','Songti SC','NSimSun',serif",
+            fontColor: "#e8dcc4",
+            fontWeight: "700"
+        }
+    ];
+    const FONT_STYLE_PRESET_BY_ID = Object.fromEntries(FONT_STYLE_PRESETS.map((p) => [p.id, p]));
+
+    function normHexColorForPreset(c) {
+        const s = String(c || "").trim().toLowerCase();
+        if (!s.startsWith("#")) return s;
+        if (s.length === 4) {
+            return `#${s[1]}${s[1]}${s[2]}${s[2]}${s[3]}${s[3]}`;
+        }
+        return s;
+    }
+
+    function normFontWeightForPreset(w) {
+        const s = String(w == null ? "700" : w).trim();
+        if (/^normal$/i.test(s) || s === "400") return "400";
+        if (/^bold$/i.test(s) || s === "700") return "700";
+        return s;
+    }
+
+    function findMatchingStylePreset(ui) {
+        if (!ui || typeof ui !== "object") return null;
+        const ff = String(ui.fontFamily || "").trim();
+        const fc = normHexColorForPreset(ui.fontColor);
+        const fw = normFontWeightForPreset(ui.fontWeight);
+        for (const p of FONT_STYLE_PRESETS) {
+            if (
+                ff === String(p.fontFamily).trim() &&
+                normHexColorForPreset(p.fontColor) === fc &&
+                normFontWeightForPreset(p.fontWeight) === fw
+            ) {
+                return p;
+            }
+        }
+        return null;
+    }
+
     /** @type {{ id: string, label: string, fonts: { label: string, value: string, previewFamily: string }[] }[]} */
     const FONT_FAMILY_GROUPS = [
         {
@@ -114,22 +186,36 @@
         FONT_FAMILY_GROUPS.forEach((g) => {
             g.fonts.forEach((f) => s.add(f.value));
         });
+        FONT_STYLE_PRESETS.forEach((p) => s.add(p.fontFamily));
         return s;
     }
 
     /**
      * @param {HTMLSelectElement} selectEl
-     * @param {{ currentValue?: string, onMissing?: (resolved: string) => void }} [opts]
+     * @param {{ currentValue?: string, uiForPresetMatch?: { fontFamily?: string, fontColor?: string, fontWeight?: string }, onMissing?: (resolved: string) => void }} [opts]
      */
     function populateFontFamilySelect(selectEl, opts) {
         if (!selectEl || selectEl.tagName !== "SELECT") return;
         const known = collectKnownValues();
+        const uiSnap = opts && opts.uiForPresetMatch;
+        const presetHit = uiSnap ? findMatchingStylePreset(uiSnap) : null;
         let v = String(opts && opts.currentValue != null ? opts.currentValue : "").trim();
-        if (!known.has(v)) {
+        if (!presetHit && !known.has(v)) {
             v = DEFAULT_FONT_VALUE;
             if (opts && typeof opts.onMissing === "function") opts.onMissing(v);
         }
         selectEl.textContent = "";
+        const presetOg = document.createElement("optgroup");
+        presetOg.label = "版式风格（含配色）";
+        FONT_STYLE_PRESETS.forEach((p) => {
+            const o = document.createElement("option");
+            o.value = PRESET_SELECT_PREFIX + p.id;
+            o.textContent = p.label;
+            o.className = "adv-font-option";
+            o.style.fontFamily = p.fontFamily;
+            presetOg.appendChild(o);
+        });
+        selectEl.appendChild(presetOg);
         FONT_FAMILY_GROUPS.forEach((group) => {
             const og = document.createElement("optgroup");
             og.label = group.label;
@@ -143,9 +229,15 @@
             });
             selectEl.appendChild(og);
         });
+        if (presetHit) {
+            selectEl.value = PRESET_SELECT_PREFIX + presetHit.id;
+            return;
+        }
         let matched = false;
         for (let i = 0; i < selectEl.options.length; i++) {
-            if (selectEl.options[i].value === v) {
+            const val = selectEl.options[i].value;
+            if (val.startsWith(PRESET_SELECT_PREFIX)) continue;
+            if (val === v) {
                 selectEl.selectedIndex = i;
                 matched = true;
                 break;
@@ -157,11 +249,50 @@
         }
     }
 
+    /**
+     * @param {HTMLSelectElement} selectEl
+     * @param {{ fontFamily?: string, fontColor?: string, fontWeight?: string }} ui
+     */
+    function syncFontFamilySelectToState(selectEl, ui) {
+        if (!selectEl || selectEl.tagName !== "SELECT" || !ui) return;
+        const presetHit = findMatchingStylePreset(ui);
+        if (presetHit) {
+            selectEl.value = PRESET_SELECT_PREFIX + presetHit.id;
+            return;
+        }
+        const ff = String(ui.fontFamily || "").trim();
+        for (let i = 0; i < selectEl.options.length; i++) {
+            const val = selectEl.options[i].value;
+            if (val.startsWith(PRESET_SELECT_PREFIX)) continue;
+            if (val === ff) {
+                selectEl.selectedIndex = i;
+                return;
+            }
+        }
+        selectEl.value = ff;
+    }
+
+    function isPresetSelectValue(v) {
+        return String(v || "").startsWith(PRESET_SELECT_PREFIX);
+    }
+
+    function getPresetFromSelectValue(v) {
+        if (!isPresetSelectValue(v)) return null;
+        const id = String(v).slice(PRESET_SELECT_PREFIX.length);
+        return FONT_STYLE_PRESET_BY_ID[id] || null;
+    }
+
     const api = {
         FONT_FAMILY_GROUPS,
+        FONT_STYLE_PRESETS,
+        FONT_STYLE_PRESET_BY_ID,
         DEFAULT_FONT_VALUE,
         collectKnownValues,
-        populateFontFamilySelect
+        populateFontFamilySelect,
+        syncFontFamilySelectToState,
+        isPresetSelectValue,
+        getPresetFromSelectValue,
+        findMatchingStylePreset
     };
     global.WorshipFontData = api;
 })(typeof globalThis !== "undefined" ? globalThis : window);

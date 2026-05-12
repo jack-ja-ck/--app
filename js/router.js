@@ -107,12 +107,14 @@ const AppRouter = {
 const STORAGE_LIVE = "worship.live.v5";
 
 /**
- * 与 app.js 中 broadcastState 等效：写入 live、经频道广播、并尝试持久化诗歌与设置。
- * 仅使用全局 songs、currentSongId、currentPages、currentPageIndex（及可选的 parsePages / setStore / saveSongs / saveSettings）。
+ * 旧版占位：在完整 app.js 加载前可能被调用。若已由 app 注册 __worshipAppBroadcastState，则一律走主程序（含正确歌词字体等）。
  */
 function broadcastState() {
-    const routerGlobal =
-        typeof globalThis !== "undefined" ? globalThis : typeof window !== "undefined" ? window : self;
+    const root = typeof globalThis !== "undefined" ? globalThis : typeof window !== "undefined" ? window : self;
+    if (typeof root.__worshipAppBroadcastState === "function") {
+        return root.__worshipAppBroadcastState();
+    }
+    const routerGlobal = root;
 
     const songList = Array.isArray(routerGlobal.songs) ? routerGlobal.songs : [];
     const sid = routerGlobal.currentSongId;

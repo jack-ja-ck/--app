@@ -45,6 +45,19 @@
         <div id="online-results" style="max-height:150px; overflow-y:auto; margin-bottom:10px;"></div>
         <div id="tag-filter" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px;"></div>
         <ul id="song-list"></ul>
+        <details id="playlist-panel" class="projection-playlist-panel library-playlist-panel" open>
+            <summary class="projection-playlist-summary">📋 播放列表（敬拜顺序）</summary>
+            <div class="projection-playlist-body">
+                <ul id="playlist-list"></ul>
+                <div class="playlist-controls projection-playlist-controls">
+                    <button id="playlist-start-btn" class="small-btn playlist-start-full">▶ 开始播放</button>
+                    <label class="playlist-auto-label">
+                        <input type="checkbox" id="playlist-auto-switch">
+                        🔄 自动切换
+                    </label>
+                </div>
+            </div>
+        </details>
         <button id="add-song-btn" class="add-song-btn">➕ 新建诗歌</button>
         <div class="file-import-export">
             <button id="export-data-btn" class="small-btn">📤 导出</button>
@@ -57,7 +70,7 @@
     <div class="resize-handle" id="resize1"></div>
 
     <!-- 中间：编辑与预览区 -->
-    <div id="editor-area" class="console-zone console-zone--editor">
+    <div id="editor-area" class="console-zone console-zone--editor console-zone--gallery-first">
         <p class="console-zone-label">编辑与预览</p>
         <div id="editor-workspace-header" class="editor-workspace-header">
             <input type="text" id="song-title-input" class="editor-song-title-input" placeholder="请输入歌名..." value="奇异恩典" aria-label="歌名">
@@ -90,46 +103,59 @@
                 <span class="meta-field"><label>🏷️ 标签</label><input type="text" id="song-tags" placeholder="敬拜,感恩" style="width:120px;"></span>
             </div>
         </details>
-        <div class="editor-main-body">
-            <div class="editor-lyric-preview-row" id="editor-lyric-preview-row">
-                <div class="editor-lyric-column">
-                    <textarea id="lyric-editor-large" placeholder="在此粘贴歌词，一行一句，用空行分段"></textarea>
-                </div>
-                <div class="editor-col-resizer" id="editor-col-resizer" role="separator" aria-orientation="vertical" aria-label="调整歌词编辑区与快速预览区宽度" tabindex="0"></div>
-                <div class="editor-quick-preview-column">
-                    <h3 class="quick-preview-heading">👁️ 快速预览 <span id="preview-line-counter"></span></h3>
-                    <div id="first-visit-onboarding" class="first-visit-onboarding" hidden>
-                        <div class="first-visit-onboarding-inner">
-                            <p class="first-visit-onboarding-title">欢迎使用</p>
-                            <ol class="first-visit-onboarding-steps">
-                                <li><span class="first-visit-step-emoji" aria-hidden="true">📝</span> 在此粘贴歌词，一行一句</li>
-                                <li><span class="first-visit-step-emoji" aria-hidden="true">✂️</span> 用空行或 <code>[page]</code> 分段</li>
-                                <li><span class="first-visit-step-emoji" aria-hidden="true">📺</span> 点击「开启投屏」放映</li>
-                            </ol>
-                            <button type="button" id="first-visit-onboarding-dismiss" class="first-visit-onboarding-dismiss">知道了</button>
-                        </div>
-                    </div>
-                    <div id="mini-preview-wrapper">
-                        <div id="mini-preview"></div>
-                        <div id="preview-resize-handle">⋮⋮</div>
-                    </div>
-                </div>
-            </div>
-            <!-- 投屏预览：分页卡片，独立于右侧快速预览 -->
-            <div id="speaker-view">
+        <div class="editor-main-body editor-main-body--gallery-first">
+            <!-- 主区：页面画廊 + 横滑卡片（当前诗歌） -->
+            <div id="speaker-view" class="speaker-view--gallery-hero">
                 <div id="speaker-resize-handle"></div>
-                <div class="speaker-view-label">投屏预览 - 可左右滑动预览各页</div>
-                <h4>
-                    <span>🖥️ 投屏预览：横滑预览各页</span>
-                    <span>
+                <div class="speaker-view-toolbar" role="toolbar" aria-label="页面画廊与页码">
+                    <div class="speaker-view-label">页面画廊 · 播放列表各首诗歌分页（点击卡片切换；键盘 ← → / 空格）</div>
+                    <div class="speaker-view-page-meta">
                         <span class="page-indicator-wrap" title="输入页码后按回车跳转">
                             <input type="text" inputmode="numeric" pattern="[0-9]*" id="page-indicator-input" class="page-indicator-input" value="1" aria-label="当前页码">
                             <span id="page-indicator-total" class="page-indicator-total">/1</span>
                         </span>
-                    </span>
-                </h4>
-                <div id="card-container"></div>
-                <div class="hint-text">← 左右滑动卡片浏览页面</div>
+                    </div>
+                </div>
+                <div id="layout-page-gallery" class="layout-page-gallery--hero" aria-label="分页画廊"></div>
+                <div class="hint-text speaker-view-hint">当前诗歌由左侧播放列表顺序决定；投屏画面请用「投屏监视」小窗查看</div>
+            </div>
+
+            <details id="editor-lyrics-drawer" class="editor-lyrics-drawer">
+                <summary class="editor-lyrics-drawer-summary" id="editor-lyrics-drawer-summary">
+                    <div
+                        class="editor-lyrics-drawer-top-resize"
+                        id="editor-lyrics-drawer-height-handle"
+                        role="separator"
+                        aria-orientation="horizontal"
+                        aria-label="拖动调节歌词编辑区高度（向上拉高）"
+                    ></div>
+                    <span class="editor-lyrics-drawer-summary-label">📝 编辑歌词（展开后粘贴 / 修改）</span>
+                </summary>
+                <p class="editor-lyrics-drawer-collapse-hint" role="note">收起：点击上方「编辑歌词」标题栏即可收回。</p>
+                <div class="editor-lyrics-drawer-body" id="editor-lyrics-drawer-body">
+                    <p class="editor-lyrics-drawer-hint">一行一句；空行或 <code>[page]</code> 分段；正文居中显示。粘贴时会自动去掉行尾与文末多余空格。展开后编辑区会<b>浮在页面画廊之上</b>；将鼠标移到<b>窗口最顶边</b>出现高亮条时，按住向上拖可拉高（不挤压画廊布局）。</p>
+                    <textarea id="lyric-editor-large" placeholder="在此粘贴歌词，一行一句，用空行分段"></textarea>
+                </div>
+            </details>
+
+            <!-- 离屏快速预览：供内部状态与过渡逻辑使用，不在主界面展示 -->
+            <div id="mini-preview-wrapper" class="mini-preview-wrapper--offscreen" aria-hidden="true">
+                <h3 class="quick-preview-heading screen-reader-text">快速预览 <span id="preview-line-counter"></span></h3>
+                <div id="first-visit-onboarding" class="first-visit-onboarding" hidden>
+                    <div class="first-visit-onboarding-inner">
+                        <p class="first-visit-onboarding-title">欢迎使用</p>
+                        <ol class="first-visit-onboarding-steps">
+                            <li><span class="first-visit-step-emoji" aria-hidden="true">📝</span> 展开下方「编辑歌词」粘贴歌词</li>
+                            <li><span class="first-visit-step-emoji" aria-hidden="true">✂️</span> 用空行或 <code>[page]</code> 分段</li>
+                            <li><span class="first-visit-step-emoji" aria-hidden="true">📺</span> 点击「开启投屏」放映</li>
+                        </ol>
+                        <button type="button" id="first-visit-onboarding-dismiss" class="first-visit-onboarding-dismiss">知道了</button>
+                    </div>
+                </div>
+                <div id="mini-preview-inner-wrap">
+                    <div id="mini-preview"></div>
+                    <div id="preview-resize-handle">⋮⋮</div>
+                </div>
             </div>
         </div>
     </div>
@@ -186,19 +212,6 @@
             </div>
             <div class="progress-bar"><div class="progress-fill" id="autoplay-progress"></div></div>
         </div>
-        <details id="playlist-panel" class="projection-playlist-panel">
-            <summary class="projection-playlist-summary">📋 播放列表</summary>
-            <div class="projection-playlist-body">
-                <ul id="playlist-list"></ul>
-                <div class="playlist-controls projection-playlist-controls">
-                    <button id="playlist-start-btn" class="small-btn playlist-start-full">▶ 开始播放</button>
-                    <label class="playlist-auto-label">
-                        <input type="checkbox" id="playlist-auto-switch">
-                        🔄 自动切换
-                    </label>
-                </div>
-            </div>
-        </details>
         </div>
         <div class="projection-actions-row" style="display:flex;gap:8px;margin-top:8px;">
             <button id="open-display-btn" class="btn" style="background:#2e7d32; flex:1; height:42px; display:flex; align-items:center; justify-content:center;">📺 开启投屏</button>
@@ -326,11 +339,19 @@
                                     <select id="page-transition-select">
                                         <option value="none" selected>无过渡</option>
                                         <option value="fade">淡入淡出</option>
-                                        <option value="slide">平滑滑动</option>
-                                        <option value="scale">缩放</option>
+                                        <option value="slide-left">左滑入</option>
+                                        <option value="slide-right">右滑入</option>
+                                        <option value="slide-up">上滑入</option>
+                                        <option value="slide-down">下滑入</option>
+                                        <option value="zoom-in">放大进入</option>
+                                        <option value="zoom-out">缩小进入</option>
+                                        <option value="flip-x">水平翻转</option>
+                                        <option value="flip-y">垂直翻转</option>
+                                        <option value="rotate-left">左侧旋转</option>
+                                        <option value="rotate-right">右侧旋转</option>
                                     </select>
                                     <label class="adv-drawer-field-label" for="page-transition-speed-slider">动画速度 <span id="page-transition-speed-val">0.6</span> 秒</label>
-                                    <input type="range" id="page-transition-speed-slider" class="adv-range" min="0.3" max="1.5" value="0.6" step="0.05" title="翻页过渡时长">
+                                    <input type="range" id="page-transition-speed-slider" class="adv-range" min="0.3" max="1.5" value="0.6" step="0.1" title="翻页过渡时长">
                                 </div>
                             </div>
                         </section>
@@ -378,9 +399,9 @@
 
 <h3>一、界面概览</h3>
 <table>
-<tr><td><b>诗歌库</b></td><td>左侧</td><td>管理所有诗歌：新建、搜索、标签筛选、导入导出</td></tr>
-<tr><td><b>编辑与预览</b></td><td>中间</td><td>歌词编辑与右侧快速预览并排；下方为投屏分页预览卡片</td></tr>
-<tr><td><b>投屏控制</b></td><td>右侧</td><td>背景与字体、行数位置、自动播放、主题、播放列表、开启投屏</td></tr>
+<tr><td><b>诗歌库</b></td><td>左侧</td><td>搜索、标签、诗歌列表；底部为<b>播放列表（敬拜顺序）</b>与新建/导入导出</td></tr>
+<tr><td><b>编辑与预览</b></td><td>中间</td><td>歌词编辑与页面画廊；投屏监视小窗</td></tr>
+<tr><td><b>投屏控制</b></td><td>右侧</td><td>背景、自动播放、开启投屏与主领视图等</td></tr>
 <tr><td><b>快速预览</b></td><td>中间右侧</td><td>与歌词编辑器同高并排，实时预览当前页</td></tr>
 </table>
 
@@ -398,6 +419,7 @@
 
 <h4>2. 播放列表</h4>
 <ul>
+<li><b>位置</b>：左侧诗歌库，诗歌列表下方、「新建诗歌」按钮上方</li>
 <li><b>添加</b>：在诗歌库中点击诗歌右侧的「+」</li>
 <li><b>排序</b>：拖拽播放列表中的诗歌上下调整顺序</li>
 <li><b>删除</b>：点击诗歌旁的「✕」</li>
@@ -727,6 +749,12 @@
     });
 })();
 </script>
+
+<div id="projection-preview-monitor" style="position:fixed;bottom:20px;right:100px;width:280px;height:auto;z-index:999;">
+    <div id="monitor-header">👁️ 投屏监视</div>
+    <div id="monitor-content"></div>
+    <div id="monitor-resize-handle" aria-hidden="true"></div>
+</div>
 
 </body>
 </html>

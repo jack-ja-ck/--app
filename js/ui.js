@@ -12,7 +12,6 @@ function clamp(n, min, max) {
 }
 
 let _eventsBound = false;
-let _keydownBound = false;
 let _autoplayMainTimer = 0;
 let _autoplayProgTimer = 0;
 
@@ -463,37 +462,6 @@ const UI = {
         }
     },
 
-    _onKeyDown(e) {
-        if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA")) return;
-        const g = typeof globalThis !== "undefined" ? globalThis : window;
-        if (e.code === "Space") {
-            e.preventDefault();
-            if (typeof g.nextPage === "function") g.nextPage();
-            UI.renderLyrics();
-            UI._updateAll();
-        } else if (e.key === "ArrowRight") {
-            e.preventDefault();
-            if (typeof g.nextPage === "function") g.nextPage();
-            UI.renderLyrics();
-            UI._updateAll();
-        } else if (e.key === "ArrowLeft") {
-            e.preventDefault();
-            if (typeof g.prevPage === "function") g.prevPage();
-            UI.renderLyrics();
-            UI._updateAll();
-        } else if (e.key === "ArrowUp") {
-            e.preventDefault();
-            if (typeof g.prevPage === "function") g.prevPage();
-            UI.renderLyrics();
-            UI._updateAll();
-        } else if (e.key === "ArrowDown") {
-            e.preventDefault();
-            if (typeof g.nextPage === "function") g.nextPage();
-            UI.renderLyrics();
-            UI._updateAll();
-        }
-    },
-
     renderLyrics() {
         const g = typeof globalThis !== "undefined" ? globalThis : typeof window !== "undefined" ? window : self;
         const AppState = g.AppState;
@@ -521,7 +489,8 @@ const UI = {
             ? pages[idx].map((x) => String(x ?? ""))
             : [];
 
-        if (ta) ta.value = pageLines.join("\n");
+        /* 主控台 app.js 的编辑区始终承载「整首歌词」；勿写入当前页行，否则 updateAll→syncEditorToSong 会截断曲库 */
+        if (ta) ta.value = String(song.lyrics || "");
 
         if (!mini) {
             if (counter) counter.textContent = "";
@@ -603,10 +572,9 @@ const UI = {
         on("search-input", "input", () => UI.filterSongList());
         on("online-search-input", "input", () => UI.runOnlineSearch());
 
-        if (!_keydownBound) {
-            _keydownBound = true;
-            document.addEventListener("keydown", UI._onKeyDown);
-        }
+        /* 翻页键盘由 app.js 统一处理（含 Alt/Ctrl+Shift 组合键与输入框例外）。
+         * 若此处再监听，会与 app.js 重复触发 nextPage，且 renderLyrics 曾把编辑区写成「单页片段」，
+         * syncEditorToSong 会把整首歌词冲掉 → 分页塌成 1 页、始终回到第一张卡片。 */
     },
 
     showToast(msg, triggerEl) {
@@ -947,36 +915,105 @@ globalThis.restartBg = function () {
     globalThis.projectionRaf = requestAnimationFrame(globalThis.drawBg);
 
 };
+function projectionLiveBackgroundSignature(bg) {
+    if (!bg || typeof bg !== "object") return "";
+    const type = String(bg.type || "");
+    const mt = String(bg.mediaType || "");
+    const s = String(bg.imageData || "").trim();
+    if (!s) return [type, mt, "empty"].join("\x1e");
+    const len = s.length;
+    return [type, mt, "len" + len, s.slice(0, 96), s.slice(-96)].join("\x1e");
+}
+function projectionDisplayIsVideoBackground(live) {
+    const ls = live || globalThis.liveState;
+    if (!ls) return false;
+    const bg = ls.background || {};
+    const type = bg.type || "solid-black";
+    const url = String(bg.imageData || "");
+    let mediaType = bg.mediaType;
+    if (mediaType !== "video" && mediaType !== "image") {
+        mediaType =
+            typeof globalThis.inferMediaTypeFromDataUrl === "function"
+                ? globalThis.inferMediaTypeFromDataUrl(url)
+                : /^data:video\//i.test(url)
+                  ? "video"
+                  : "image";
+    }
+    if (!mediaType) mediaType = "image";
+    return type === "image" && mediaType === "video" && !!bg.imageData;
+}
 globalThis.applyLive = function (mode, payload) {
     if (payload === undefined && mode && typeof mode === "object") {
         payload = mode;
         mode = globalThis.projectionMode || "display";
     }
     if (!payload || !payload.pages) return;
+    const prev = globalThis.liveState;
     globalThis.liveState = payload;
-    if ((mode || globalThis.projectionMode) === "display") globalThis.renderDisplayLyric();
-    else globalThis.renderLeaderLyric();
-    globalThis.restartBg();
+    const m = mode || globalThis.projectionMode;
+    if (m === "display") {
+        const prevIdx = Number(prev?.pageIndex) || 0;
+        const newIdx = Number(payload.pageIndex) || 0;
+        const sameSong = !!prev && String(prev.songId || "") === String(payload.songId || "");
+        const navChanged = !!prev && (!sameSong || prevIdx !== newIdx);
+        const trans =
+            typeof globalThis.__worshipCanonicalPageTransition === "function"
+                ? globalThis.__worshipCanonicalPageTransition(payload.pageTransition || "none")
+                : "none";
+        const dur = globalThis.clamp(Number(payload.pageTransitionSpeed ?? 0.6), 0.3, 1.5);
+        const doAnim =
+            navChanged &&
+            !payload.playlistFade &&
+            trans !== "none" &&
+            typeof globalThis.__worshipRunDisplayPageTransitionThenRender === "function";
+        const fontOpForAnim = globalThis.clamp(Number(payload.fontOpacityPct ?? 100), 20, 100);
+        if (doAnim) {
+            globalThis.__worshipRunDisplayPageTransitionThenRender(trans, dur, (o) => globalThis.renderDisplayLyric(o), fontOpForAnim);
+        } else {
+            globalThis.renderDisplayLyric();
+        }
+    } else globalThis.renderLeaderLyric();
+    const skipRestart =
+        m === "display" &&
+        projectionDisplayIsVideoBackground(globalThis.liveState) &&
+        projectionLiveBackgroundSignature(prev?.background) ===
+            projectionLiveBackgroundSignature(globalThis.liveState.background);
+    if (!skipRestart) globalThis.restartBg();
 
 };
-globalThis.renderDisplayLyric = function () {
+globalThis.renderDisplayLyric = function (opts) {
     const layer = document.getElementById("projection-lyric");
     if (!layer || !globalThis.liveState) return;
+    const inner = document.getElementById("projection-lyric-anim");
+    const target = inner || layer;
     const pages = globalThis.liveState.pages || [];
     const idx = globalThis.clamp(globalThis.liveState.pageIndex || 0, 0, Math.max(0, pages.length - 1));
     const lines = pages[idx] || [];
     const t = globalThis.liveState.text || {};
     const fontColor = globalThis.liveState.fontColor || t.color || "#ffffff";
+    const fontOp = globalThis.clamp(Number(globalThis.liveState.fontOpacityPct ?? 100), 20, 100) / 100;
     layer.style.textAlign = "center";
     layer.style.top = (t.topPct || 45) + "%";
     layer.style.fontFamily = t.fontFamily || globalThis.__projectionUi.fontFamily;
     layer.style.fontSize = globalThis.clamp(t.fontSize || 56, 24, 160) + "px";
+    layer.style.fontWeight =
+        t.fontWeight != null && t.fontWeight !== "" ? String(t.fontWeight) : "700";
     layer.style.color = fontColor;
-    const applyFade = !!globalThis.liveState.playlistFade;
-    layer.style.transition = "opacity 300ms ease";
-    if (applyFade) layer.style.opacity = "0";
-    layer.innerHTML = lines.map((line) => `<div>${globalThis.escapeHtml(line)}</div>`).join("");
-    if (applyFade) requestAnimationFrame(() => { layer.style.opacity = "1"; });
+    if (inner) {
+        layer.style.opacity = "1";
+        layer.style.transition = "";
+    }
+    const skipMid = !!(opts && opts.pageTransitionMidSwap);
+    const applyFade = !!globalThis.liveState.playlistFade && !skipMid;
+    target.style.transition = "opacity 300ms ease";
+    if (applyFade) target.style.opacity = "0";
+    else target.style.opacity = String(fontOp);
+    target.innerHTML = lines.map((line) => `<div>${globalThis.escapeHtml(line)}</div>`).join("");
+    if (applyFade) {
+        requestAnimationFrame(() => {
+            target.style.opacity = String(fontOp);
+        });
+    }
     globalThis.updateDisplayCardPreview();
 
 };
@@ -1090,6 +1127,12 @@ globalThis.installProjectionUI = function (mode) {
     ].join(";");
     if (mode === "leader") lyric.style.textAlign = "left";
     host.appendChild(lyric);
+    if (mode === "display") {
+        const anim = document.createElement("div");
+        anim.id = "projection-lyric-anim";
+        anim.style.cssText = "width:100%;transform-origin:center center;";
+        lyric.appendChild(anim);
+    }
 
     if (mode !== "display" || !audienceDisplay) {
         const nav = document.createElement("div");

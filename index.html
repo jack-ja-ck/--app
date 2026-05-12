@@ -95,6 +95,7 @@
                     <div id="upload-history-dropdown-list" style="display:flex;flex-direction:column;gap:10px;"></div>
                 </div>
             </div>
+            <button type="button" id="pwa-install-btn" class="editor-action-bar-btn" style="display:none" title="将本网站安装到手机或电脑主屏幕"><span class="editor-action-bar-btn__icon" aria-hidden="true">📲</span><span class="editor-action-bar-btn__text">安装App</span></button>
             <button type="button" id="ocr-btn" class="editor-action-bar-btn" title="从照片识别歌词"><span class="editor-action-bar-btn__icon" aria-hidden="true">📷</span><span class="editor-action-bar-btn__text">拍照识歌词</span></button>
             <button type="button" id="help-btn" class="editor-action-bar-btn" title="查看使用说明与快捷键"><span class="editor-action-bar-btn__icon" aria-hidden="true">❓</span><span class="editor-action-bar-btn__text">使用帮助</span></button>
             <input type="file" id="ocr-file-input" accept="image/*" capture="environment" hidden>
@@ -112,11 +113,11 @@
             </div>
         </details>
         <div class="editor-main-body editor-main-body--gallery-first">
-            <!-- 主区：页面画廊 + 横滑卡片（当前诗歌） -->
+            <!-- 主区：页面画廊 + 分页卡片（横向换行，无内层滚动） -->
             <div id="speaker-view" class="speaker-view--gallery-hero">
                 <div id="speaker-resize-handle"></div>
                 <div class="speaker-view-toolbar" role="toolbar" aria-label="页面画廊与页码">
-                    <div class="speaker-view-label">页面画廊 · 播放列表各首诗歌分页（点击卡片切换；键盘 ← → / 空格）</div>
+                    <div class="speaker-view-label">页面画廊 · 分页卡片从左到右排列、自动换行（点击卡片；键盘 ← → / 空格）</div>
                     <div class="speaker-view-page-meta">
                         <span class="page-indicator-wrap" title="输入页码后按回车跳转">
                             <input type="text" inputmode="numeric" pattern="[0-9]*" id="page-indicator-input" class="page-indicator-input" value="1" aria-label="当前页码">
@@ -127,24 +128,6 @@
                 <div id="layout-page-gallery" class="layout-page-gallery--hero" aria-label="分页画廊"></div>
                 <div class="hint-text speaker-view-hint">当前诗歌由左侧播放列表顺序决定；投屏画面请用「投屏监视」小窗查看</div>
             </div>
-
-            <details id="editor-lyrics-drawer" class="editor-lyrics-drawer">
-                <summary class="editor-lyrics-drawer-summary" id="editor-lyrics-drawer-summary">
-                    <div
-                        class="editor-lyrics-drawer-top-resize"
-                        id="editor-lyrics-drawer-height-handle"
-                        role="separator"
-                        aria-orientation="horizontal"
-                        aria-label="拖动调节歌词编辑区高度（向上拉高）"
-                    ></div>
-                    <span class="editor-lyrics-drawer-summary-label">📝 编辑歌词（展开后粘贴 / 修改）</span>
-                </summary>
-                <p class="editor-lyrics-drawer-collapse-hint" role="note">收起：点击上方「编辑歌词」标题栏即可收回。</p>
-                <div class="editor-lyrics-drawer-body" id="editor-lyrics-drawer-body">
-                    <p class="editor-lyrics-drawer-hint">一行一句；空行或 <code>[page]</code> 分段；正文居中显示。粘贴时会自动去掉行尾与文末多余空格。展开后编辑区会<b>浮在页面画廊之上</b>；将鼠标移到<b>窗口最顶边</b>出现高亮条时，按住向上拖可拉高（不挤压画廊布局）。</p>
-                    <textarea id="lyric-editor-large" placeholder="在此粘贴歌词，一行一句，用空行分段"></textarea>
-                </div>
-            </details>
 
             <!-- 离屏快速预览：供内部状态与过渡逻辑使用，不在主界面展示 -->
             <div id="mini-preview-wrapper" class="mini-preview-wrapper--offscreen" aria-hidden="true">
@@ -166,6 +149,24 @@
                 </div>
             </div>
         </div>
+
+        <details id="editor-lyrics-drawer" class="editor-lyrics-drawer">
+            <summary class="editor-lyrics-drawer-summary" id="editor-lyrics-drawer-summary">
+                <div
+                    class="editor-lyrics-drawer-top-resize"
+                    id="editor-lyrics-drawer-height-handle"
+                    role="separator"
+                    aria-orientation="horizontal"
+                    aria-label="拖动调节歌词编辑区高度（向上拉高）"
+                ></div>
+                <span class="editor-lyrics-drawer-summary-label">📝 编辑歌词（展开后粘贴 / 修改）</span>
+            </summary>
+            <p class="editor-lyrics-drawer-collapse-hint" role="note">收起：点击上方「编辑歌词」标题栏即可收回。</p>
+            <div class="editor-lyrics-drawer-body" id="editor-lyrics-drawer-body">
+                <p class="editor-lyrics-drawer-hint">一行一句；空行或 <code>[page]</code> 分段；正文居中显示。粘贴时会自动去掉行尾与文末多余空格。展开后编辑区会<b>浮在页面画廊之上</b>；将鼠标移到<b>窗口最顶边</b>出现高亮条时，按住向上拖可拉高（不挤压画廊布局）。</p>
+                <textarea id="lyric-editor-large" placeholder="在此粘贴歌词，一行一句，用空行分段"></textarea>
+            </div>
+        </details>
     </div>
 
     <div class="resize-handle" id="resize2"></div>
@@ -386,7 +387,7 @@
 </div>
 <div id="popup-blocked-banner" class="popup-blocked-banner" hidden>
     <span class="popup-blocked-banner__icon" aria-hidden="true">⚠️</span>
-    <p class="popup-blocked-banner__text">弹窗已被浏览器拦截，请点击浏览器地址栏的拦截图标并选择「始终允许」，然后重新点击按钮。</p>
+    <p class="popup-blocked-banner__text">弹窗已被浏览器拦截。Chrome / Edge：点击地址栏右侧的拦截图标，将本站设为「始终允许弹出窗口」。Safari（Mac）：Safari 菜单 → 设置 → 网站 → 弹出式窗口 → 把本站改为「允许」，然后再次点击「开启投屏」。</p>
     <button type="button" class="popup-blocked-banner__close" aria-label="关闭">✕</button>
 </div>
 <!-- 批量导入弹窗 -->
@@ -764,14 +765,11 @@
     <div id="monitor-resize-handle" aria-hidden="true"></div>
 </div>
 
-<div id="pwa-install-btn" style="position:fixed; bottom:20px; right:20px; z-index:9999; display:none; background:#d4af37; color:#1a1510; border:none; padding:12px 20px; border-radius:12px; font-size:16px; font-weight:700; cursor:pointer; box-shadow:0 4px 16px rgba(0,0,0,0.4);">
-  📲 安装App
-</div>
-
 <script>
 (function() {
   var deferredPrompt = null;
   var installBtn = document.getElementById('pwa-install-btn');
+  if (!installBtn) return;
   
   // 如果已经是PWA独立模式（已安装），隐藏按钮
   if (window.matchMedia('(display-mode: standalone)').matches || navigator.standalone) {
@@ -783,7 +781,7 @@
   window.addEventListener('beforeinstallprompt', function(e) {
     e.preventDefault();
     deferredPrompt = e;
-    installBtn.style.display = 'block';
+    installBtn.style.display = 'inline-flex';
   });
   
   installBtn.addEventListener('click', function() {
@@ -805,7 +803,7 @@
   // 如果3秒后还没触发安装事件（说明已安装过或其他原因），也显示按钮
   setTimeout(function() {
     if (deferredPrompt === null && !window.matchMedia('(display-mode: standalone)').matches && !navigator.standalone) {
-      installBtn.style.display = 'block';
+      installBtn.style.display = 'inline-flex';
     }
   }, 3000);
 })();

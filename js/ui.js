@@ -382,22 +382,39 @@ const UI = {
     },
 
     _getDisplayWindowPlacement() {
+        const g = typeof globalThis !== "undefined" ? globalThis : window;
+        if (typeof g.__worshipGetProjectionWindowPlacement === "function") {
+            return g.__worshipGetProjectionWindowPlacement();
+        }
         const scr = window.screen;
         const availLeft = Number(scr.availLeft) || 0;
         const availTop = Number(scr.availTop) || 0;
-        const availWidth = Number(scr.availWidth) || 1280;
-        const availHeight = Number(scr.availHeight) || 720;
-        const screenWidth = Number(scr.width) || availWidth;
-        const likelySingleScreen = availLeft === 0 && screenWidth <= availWidth;
-        if (likelySingleScreen) {
-            return { left: availLeft, top: availTop, width: availWidth, height: availHeight };
-        }
-        return { left: availLeft + availWidth, top: 0, width: availWidth, height: availHeight };
+        const availWidth = Math.max(400, Number(scr.availWidth) || 1280);
+        const availHeight = Math.max(300, Number(scr.availHeight) || 720);
+        const maxW = Math.floor(availWidth * 0.96);
+        const maxH = Math.floor(availHeight * 0.96);
+        const w = clamp(Math.floor(availWidth * 0.92), 800, maxW);
+        const h = clamp(Math.floor(availHeight * 0.92), 540, maxH);
+        return {
+            left: availLeft + Math.max(0, Math.floor((availWidth - w) / 2)),
+            top: availTop + Math.max(0, Math.floor((availHeight - h) / 2)),
+            width: w,
+            height: h
+        };
     },
 
     _openAuxWindow(pathWithQuery, anchorEl) {
         const { left, top, width, height } = UI._getDisplayWindowPlacement();
-        const feats = `left=${left},top=${top},width=${width},height=${height}`;
+        const feats = [
+            `left=${left}`,
+            `top=${top}`,
+            `width=${width}`,
+            `height=${height}`,
+            "menubar=no",
+            "toolbar=no",
+            "status=no",
+            "scrollbars=yes"
+        ].join(",");
         const name = `worship_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
         let url;
         try {
@@ -412,17 +429,31 @@ const UI = {
             UI.showToast("无法打开窗口，请允许弹窗", anchorEl);
             return null;
         }
-        try {
-            win.moveTo(left, top);
-            win.resizeTo(width, height);
-        } catch (_e) {
-            /* ignore */
+        const applyPlacement = () => {
+            try {
+                win.moveTo(left, top);
+                win.resizeTo(width, height);
+            } catch (_e) {
+                /* ignore */
+            }
+        };
+        applyPlacement();
+        const ua = navigator.userAgent || "";
+        const p = navigator.platform || "";
+        const mac = /^Mac/i.test(p) || /Mac OS X/i.test(ua);
+        if (mac) {
+            window.setTimeout(applyPlacement, 100);
+            window.setTimeout(applyPlacement, 380);
         }
         return win;
     },
 
     createDisplayWindow() {
         const g = typeof globalThis !== "undefined" ? globalThis : window;
+        if (typeof g.__worshipOpenDisplayWindow === "function") {
+            g.__worshipOpenDisplayWindow();
+            return;
+        }
         const R = g.AppRouter;
         if (R && typeof R.init === "function") R.init();
         if (R && typeof R.broadcastState === "function") R.broadcastState();
@@ -431,6 +462,10 @@ const UI = {
 
     createLeaderWindow() {
         const g = typeof globalThis !== "undefined" ? globalThis : window;
+        if (typeof g.__worshipOpenLeaderWindow === "function") {
+            g.__worshipOpenLeaderWindow();
+            return;
+        }
         const R = g.AppRouter;
         if (R && typeof R.init === "function") R.init();
         if (R && typeof R.broadcastState === "function") R.broadcastState();
@@ -566,8 +601,7 @@ const UI = {
             UI.showToast("自动播放已停止", document.getElementById("autoplay-stop"));
         });
 
-        on("open-display-btn", "click", () => UI.createDisplayWindow());
-        on("open-leader-btn", "click", () => UI.createLeaderWindow());
+        /* 开启投屏 / 主领：由 app.js 绑定（含 Mac 兼容的 window.open 参数与固定窗口名），此处勿重复监听以免连开两窗 */
 
         on("search-input", "input", () => UI.filterSongList());
         on("online-search-input", "input", () => UI.runOnlineSearch());

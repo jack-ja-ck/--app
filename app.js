@@ -2321,88 +2321,6 @@
         main.appendChild(rng);
     }
 
-    function ensureFirstVisitOnboardingDom() {
-        const wrap = $("mini-preview-wrapper") || $("editor-lyrics-drawer-body");
-        if (!wrap) return null;
-        let el = $("first-visit-onboarding");
-        if (!el) {
-            el = document.createElement("div");
-            el.id = "first-visit-onboarding";
-            el.innerHTML =
-                '<div class="first-visit-onboarding-inner">' +
-                '<p class="first-visit-onboarding-title" style="margin:0 0 8px;font-weight:600;color:#f5e6c8;">欢迎使用</p>' +
-                '<ol class="first-visit-onboarding-steps" style="margin:0;padding:0 0 0 1.1em;">' +
-                "<li><span aria-hidden=\"true\">📝</span> 在此粘贴歌词，一行一句</li>" +
-                "<li><span aria-hidden=\"true\">✂️</span> 用空行或 <code>[page]</code> 分段</li>" +
-                "<li><span aria-hidden=\"true\">📺</span> 点击&ldquo;开启投屏&rdquo;放映</li>" +
-                "</ol>" +
-                '<button type="button" id="first-visit-onboarding-dismiss" class="first-visit-onboarding-dismiss">知道了</button>' +
-                "</div>";
-            wrap.insertBefore(el, wrap.firstChild);
-            const btn = $("first-visit-onboarding-dismiss");
-            if (btn && !btn.dataset.boundDismiss) {
-                btn.dataset.boundDismiss = "1";
-                btn.addEventListener("click", dismissFirstVisitOnboarding);
-            }
-        } else if (el.parentNode !== wrap) {
-            wrap.insertBefore(el, wrap.firstChild);
-        }
-        wrap.style.position = "relative";
-        el.style.cssText = [
-            "position:absolute",
-            "left:0",
-            "right:0",
-            "bottom:100%",
-            "margin-bottom:10px",
-            "z-index:120",
-            "box-sizing:border-box",
-            "padding:14px 16px 12px",
-            "border-radius:14px",
-            "background:rgba(18,20,28,0.82)",
-            "backdrop-filter:saturate(1.1) blur(10px)",
-            "-webkit-backdrop-filter:saturate(1.1) blur(10px)",
-            "border:1px solid rgba(212,175,119,0.55)",
-            "box-shadow:0 10px 32px rgba(0,0,0,0.42)",
-            "color:#ececec",
-            "font-size:14px",
-            "line-height:1.55"
-        ].join(";");
-        const inner = el.querySelector(".first-visit-onboarding-inner");
-        if (inner) {
-            inner.style.cssText =
-                "display:flex;flex-direction:column;gap:8px;align-items:stretch;margin:0;";
-        }
-        const ol = el.querySelector(".first-visit-onboarding-steps");
-        if (ol) {
-            ol.style.listStyle = "decimal";
-            ol.style.paddingLeft = "1.25em";
-            ol.style.margin = "0";
-        }
-        const btn = $("first-visit-onboarding-dismiss");
-        if (btn) {
-            btn.style.cssText = [
-                "align-self:flex-end",
-                "margin-top:4px",
-                "padding:8px 18px",
-                "border-radius:10px",
-                "border:1px solid rgba(212,175,119,0.45)",
-                "background:rgba(255,255,255,0.08)",
-                "color:#f5e6c8",
-                "cursor:pointer",
-                "font:inherit"
-            ].join(";");
-        }
-        return el;
-    }
-
-    function maybeShowFirstVisitOnboarding() {
-        if (isDisplay || isLeader) return;
-        if (!isWorshipFirstVisit()) return;
-        const el = ensureFirstVisitOnboardingDom();
-        if (!el) return;
-        el.hidden = false;
-    }
-
     function dismissFirstVisitOnboarding() {
         try {
             localStorage.setItem(WORSHIP_VISITED_LS, "true");
@@ -2411,6 +2329,252 @@
         }
         const el = $("first-visit-onboarding");
         if (el) el.hidden = true;
+        teardownNewUserArrowGuide();
+    }
+
+    /** 首次访问：箭头式分步指引（与 worship_visited 共用，完成后不再显示） */
+    const NEW_USER_ARROW_GUIDE_STEPS = [
+        {
+            selector: "#song-library",
+            title: "诗歌库",
+            text: "在这里搜索、选择诗歌；下方是播放列表，可安排敬拜顺序。"
+        },
+        {
+            selector: "#speaker-view",
+            title: "页面画廊",
+            text: "预览各页幻灯片；点击卡片或按键盘 ← → / 空格切换页面。"
+        },
+        {
+            selector: "#editor-lyrics-drawer-summary",
+            title: "编辑歌词",
+            text: "点这里展开，在编辑区粘贴或修改歌词（空行或 [page] 分段）。"
+        },
+        {
+            selector: "#open-display-btn",
+            title: "开启投屏",
+            text: "准备好后点此打开投屏窗口，会众即可观看画面。"
+        }
+    ];
+
+    let newUserArrowGuideIndex = 0;
+    let newUserArrowGuideRelayoutTimer = 0;
+
+    function teardownNewUserArrowGuide() {
+        const root = $("new-user-arrow-guide");
+        if (root) {
+            root.hidden = true;
+            root.setAttribute("aria-hidden", "true");
+        }
+        if (newUserArrowGuideRelayoutTimer) {
+            clearTimeout(newUserArrowGuideRelayoutTimer);
+            newUserArrowGuideRelayoutTimer = 0;
+        }
+        const fn = teardownNewUserArrowGuide._onRelayout;
+        if (fn) {
+            window.removeEventListener("resize", fn);
+            window.removeEventListener("scroll", fn, true);
+            teardownNewUserArrowGuide._onRelayout = null;
+        }
+    }
+
+    function ensureNewUserArrowGuideDom() {
+        let root = $("new-user-arrow-guide");
+        if (root) return root;
+        root = document.createElement("div");
+        root.id = "new-user-arrow-guide";
+        root.className = "new-user-arrow-guide";
+        root.setAttribute("role", "dialog");
+        root.setAttribute("aria-modal", "true");
+        root.setAttribute("aria-labelledby", "new-user-arrow-guide-title");
+        root.innerHTML =
+            '<div class="new-user-arrow-guide__block" aria-hidden="true"></div>' +
+            '<div class="new-user-arrow-guide__ring" aria-hidden="true"></div>' +
+            '<div class="new-user-arrow-guide__shaft" aria-hidden="true"></div>' +
+            '<div class="new-user-arrow-guide__bubble">' +
+            '<div class="new-user-arrow-guide__meta" id="new-user-arrow-guide-meta"></div>' +
+            '<p class="new-user-arrow-guide__title" id="new-user-arrow-guide-title"></p>' +
+            '<p class="new-user-arrow-guide__text" id="new-user-arrow-guide-text"></p>' +
+            '<div class="new-user-arrow-guide__actions">' +
+            '<button type="button" class="new-user-arrow-guide__skip" id="new-user-arrow-guide-skip">跳过</button>' +
+            '<button type="button" class="new-user-arrow-guide__next" id="new-user-arrow-guide-next">下一步</button>' +
+            "</div></div>";
+        document.body.appendChild(root);
+        const onSkip = () => {
+            dismissFirstVisitOnboarding();
+        };
+        const onNext = () => {
+            newUserArrowGuideIndex += 1;
+            if (newUserArrowGuideIndex >= NEW_USER_ARROW_GUIDE_STEPS.length) {
+                dismissFirstVisitOnboarding();
+                return;
+            }
+            layoutNewUserArrowGuideStep();
+        };
+        root.querySelector("#new-user-arrow-guide-skip")?.addEventListener("click", onSkip);
+        root.querySelector("#new-user-arrow-guide-next")?.addEventListener("click", onNext);
+        if (!teardownNewUserArrowGuide._escBound) {
+            teardownNewUserArrowGuide._escBound = true;
+            document.addEventListener(
+                "keydown",
+                (e) => {
+                    if (e.key !== "Escape") return;
+                    const g = $("new-user-arrow-guide");
+                    if (!g || g.hidden) return;
+                    e.preventDefault();
+                    dismissFirstVisitOnboarding();
+                },
+                true
+            );
+        }
+        return root;
+    }
+
+    function layoutNewUserArrowGuideStep() {
+        const root = $("new-user-arrow-guide");
+        if (!root || root.hidden) return;
+        const step = NEW_USER_ARROW_GUIDE_STEPS[newUserArrowGuideIndex];
+        const ring = root.querySelector(".new-user-arrow-guide__ring");
+        const shaft = root.querySelector(".new-user-arrow-guide__shaft");
+        const bubble = root.querySelector(".new-user-arrow-guide__bubble");
+        const meta = $("new-user-arrow-guide-meta");
+        const titleEl = $("new-user-arrow-guide-title");
+        const textEl = $("new-user-arrow-guide-text");
+        const nextBtn = $("new-user-arrow-guide-next");
+        if (!step || !ring || !shaft || !bubble || !meta || !titleEl || !textEl || !nextBtn) return;
+
+        let target = document.querySelector(step.selector);
+        if (!target) {
+            for (let j = newUserArrowGuideIndex + 1; j < NEW_USER_ARROW_GUIDE_STEPS.length; j++) {
+                const t2 = document.querySelector(NEW_USER_ARROW_GUIDE_STEPS[j].selector);
+                if (t2) {
+                    newUserArrowGuideIndex = j;
+                    return layoutNewUserArrowGuideStep();
+                }
+            }
+            dismissFirstVisitOnboarding();
+            return;
+        }
+
+        try {
+            target.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "instant" });
+        } catch (_e) {
+            /* ignore */
+        }
+
+        const r = target.getBoundingClientRect();
+        const pad = 8;
+        const rx = r.left - pad;
+        const ry = r.top - pad;
+        const rw = r.width + pad * 2;
+        const rh = r.height + pad * 2;
+
+        ring.style.display = "block";
+        ring.style.left = rx + "px";
+        ring.style.top = ry + "px";
+        ring.style.width = rw + "px";
+        ring.style.height = rh + "px";
+
+        meta.textContent = newUserArrowGuideIndex + 1 + " / " + NEW_USER_ARROW_GUIDE_STEPS.length;
+        titleEl.textContent = step.title;
+        textEl.textContent = step.text;
+        const last = newUserArrowGuideIndex >= NEW_USER_ARROW_GUIDE_STEPS.length - 1;
+        nextBtn.textContent = last ? "完成" : "下一步";
+
+        bubble.style.visibility = "hidden";
+        bubble.style.left = "0px";
+        bubble.style.top = "0px";
+        void bubble.offsetWidth;
+
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+        const margin = 12;
+        const maxBubbleW = Math.min(320, vw - margin * 2);
+        bubble.style.maxWidth = maxBubbleW + "px";
+        bubble.style.width = maxBubbleW + "px";
+
+        const estH = 168;
+        let bx = rx + rw / 2 - maxBubbleW / 2;
+        bx = Math.max(margin, Math.min(bx, vw - maxBubbleW - margin));
+        let by = ry + rh + 16;
+        if (by + estH > vh - margin) {
+            by = ry - estH - 16;
+        }
+        if (by < margin) {
+            by = margin;
+        }
+        bubble.style.left = bx + "px";
+        bubble.style.top = by + "px";
+        bubble.style.visibility = "visible";
+
+        const br = bubble.getBoundingClientRect();
+        const tcx = r.left + r.width / 2;
+        const tcy = r.top + r.height / 2;
+        const bubbleCx = br.left + br.width / 2;
+        const ringBottom = ry + rh;
+        let x1 = bubbleCx;
+        let y1 = br.top;
+        if (br.top >= ringBottom - 4) {
+            y1 = br.top;
+        } else if (br.bottom <= ry + 4) {
+            y1 = br.bottom;
+        } else {
+            y1 = br.top + br.height / 2;
+            x1 = br.left > rx + rw ? br.left : br.right;
+        }
+        const x2 = tcx;
+        const y2 = tcy;
+        const dx = x2 - x1;
+        const dy = y2 - y1;
+        const len = Math.hypot(dx, dy) || 1;
+        const ang = (Math.atan2(dy, dx) * 180) / Math.PI;
+        shaft.style.display = len < 24 ? "none" : "block";
+        shaft.style.left = x1 + "px";
+        shaft.style.top = y1 - 2 + "px";
+        shaft.style.width = len + "px";
+        shaft.style.transform = "rotate(" + ang + "deg)";
+    }
+
+    function scheduleNewUserArrowGuideRelayout() {
+        if (newUserArrowGuideRelayoutTimer) clearTimeout(newUserArrowGuideRelayoutTimer);
+        newUserArrowGuideRelayoutTimer = setTimeout(() => {
+            newUserArrowGuideRelayoutTimer = 0;
+            layoutNewUserArrowGuideStep();
+        }, 48);
+    }
+
+    function maybeStartNewUserArrowGuide() {
+        if (isDisplay || isLeader) return;
+        if (!isWorshipFirstVisit()) return;
+        const root = ensureNewUserArrowGuideDom();
+        if (!root) return;
+        const prevRelayout = teardownNewUserArrowGuide._onRelayout;
+        if (prevRelayout) {
+            window.removeEventListener("resize", prevRelayout);
+            window.removeEventListener("scroll", prevRelayout, true);
+            teardownNewUserArrowGuide._onRelayout = null;
+        }
+        if (newUserArrowGuideRelayoutTimer) {
+            clearTimeout(newUserArrowGuideRelayoutTimer);
+            newUserArrowGuideRelayoutTimer = 0;
+        }
+        newUserArrowGuideIndex = 0;
+        root.hidden = false;
+        root.setAttribute("aria-hidden", "false");
+        const fn = () => scheduleNewUserArrowGuideRelayout();
+        teardownNewUserArrowGuide._onRelayout = fn;
+        window.addEventListener("resize", fn);
+        window.addEventListener("scroll", fn, true);
+        const elOld = $("first-visit-onboarding");
+        if (elOld) elOld.hidden = true;
+        const kick = () => {
+            layoutNewUserArrowGuideStep();
+            try {
+                $("new-user-arrow-guide-next")?.focus({ preventScroll: true });
+            } catch (_e) {
+                $("new-user-arrow-guide-next")?.focus();
+            }
+        };
+        requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(kick, 280)));
     }
 
     let shortcutsPanelBackdropEl = null;
@@ -4940,22 +5104,11 @@
         requestAnimationFrame(() => {
             const active = gal.querySelector(".gallery-page-card.is-active");
             if (!active || !gal.isConnected) return;
-            const scrollRow = active.closest(".layout-page-gallery-pages");
-            if (!scrollRow) return;
-            const cr = active.getBoundingClientRect();
-            const br = scrollRow.getBoundingClientRect();
-            const margin = 16;
-            let sl = scrollRow.scrollLeft;
-            const viewL = sl;
-            const viewR = sl + scrollRow.clientWidth;
-            const cardL = sl + (cr.left - br.left);
-            const cardR = cardL + cr.width;
-            if (cardR > viewR - margin) sl = cardR - scrollRow.clientWidth + margin;
-            else if (cardL < viewL + margin) sl = cardL - margin;
-            scrollRow.scrollTo({
-                left: clamp(sl, 0, Math.max(0, scrollRow.scrollWidth - scrollRow.clientWidth)),
-                behavior: "smooth"
-            });
+            try {
+                active.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
+            } catch (_e) {
+                active.scrollIntoView(false);
+            }
         });
     }
 
@@ -5129,10 +5282,6 @@
                     ? lines.map((x) => String(x ?? "").trim()).filter((s) => s.length > 0)
                     : [];
                 if (!lineList.length) lineList = ["…"];
-                const galFontPx = Math.max(
-                    9,
-                    Math.min(18, Math.round(speakerPreviewCardFontPx(lineList.length) * 0.72))
-                );
                 const prevBgSig = card.getAttribute("data-gallery-bg-sig") || "";
                 if (prevBgSig !== wantBgSig) {
                     applyCardBackground(card, {
@@ -5144,7 +5293,6 @@
                 lineList.forEach((l) => {
                     const row = document.createElement("div");
                     row.className = "gallery-card-line";
-                    row.style.fontSize = galFontPx + "px";
                     row.style.lineHeight = "1.45";
                     row.style.position = "relative";
                     row.style.zIndex = "2";
@@ -5267,14 +5415,9 @@
                     ? lines.map((x) => String(x ?? "").trim()).filter((s) => s.length > 0)
                     : [];
                 if (!lineList.length) lineList = ["…"];
-                const galFontPx = Math.max(
-                    9,
-                    Math.min(18, Math.round(speakerPreviewCardFontPx(lineList.length) * 0.72))
-                );
                 lineList.forEach((l) => {
                     const row = document.createElement("div");
                     row.className = "gallery-card-line";
-                    row.style.fontSize = galFontPx + "px";
                     row.style.lineHeight = "1.45";
                     row.style.position = "relative";
                     row.style.zIndex = "2";
@@ -8624,33 +8767,75 @@ ${deleteBtnHtml}
         }, 100);
     }
 
+    /** 投屏/主领弹窗：用于窗口尺寸与 Safari（macOS）兼容策略 */
+    function isWorshipMacLikePlatform() {
+        const p = navigator.platform || "";
+        const ua = navigator.userAgent || "";
+        if (/^Win/i.test(p)) return false;
+        if (/^Mac/i.test(p)) return true;
+        return /Mac OS X|iPhone|iPad/i.test(ua);
+    }
+
     /**
-     * 基于 window.screen 估算投屏窗口位置（无需异步 API）：扩展桌面时常用技巧是将 left 置于主屏右侧（availLeft+availWidth），
-     * 超出主屏可见范围时由系统将窗口放到第二块屏幕。单屏时在当前可用区域内打开。
+     * 估算投屏窗口位置与大小。
+     * macOS / Safari：用当前工作区内「居中、略小于满屏」的尺寸打开，避免整屏 window.open + resizeTo 被忽略或窗口落到错误桌面空间。
+     * Windows / Linux 多屏：在疑似扩展屏时仍将窗口起点放在主屏工作区右侧（便于拖到投影仪），尺寸同样略小于满屏以提升弹窗通过率。
      */
     function getDisplayWindowPlacement() {
         const scr = window.screen;
         const availLeft = Number(scr.availLeft) || 0;
         const availTop = Number(scr.availTop) || 0;
-        const availWidth = Number(scr.availWidth) || 1280;
-        const availHeight = Number(scr.availHeight) || 720;
+        const availWidth = Math.max(400, Number(scr.availWidth) || 1280);
+        const availHeight = Math.max(300, Number(scr.availHeight) || 720);
         const screenWidth = Number(scr.width) || availWidth;
 
-        const likelySingleScreen = availLeft === 0 && screenWidth <= availWidth;
+        const maxW = Math.floor(availWidth * 0.96);
+        const maxH = Math.floor(availHeight * 0.96);
+        const w = clamp(Math.floor(availWidth * 0.92), 800, maxW);
+        const h = clamp(Math.floor(availHeight * 0.92), 540, maxH);
+
+        const centerIn = (workLeft, workTop, workW, workH) => ({
+            left: workLeft + Math.max(0, Math.floor((workW - w) / 2)),
+            top: workTop + Math.max(0, Math.floor((workH - h) / 2)),
+            width: w,
+            height: h
+        });
+
+        const mac = isWorshipMacLikePlatform();
+        if (mac) {
+            return centerIn(availLeft, availTop, availWidth, availHeight);
+        }
+
+        const likelySingleScreen = availLeft === 0 && screenWidth <= availWidth + 2;
         if (likelySingleScreen) {
-            return { left: availLeft, top: availTop, width: availWidth, height: availHeight };
+            return centerIn(availLeft, availTop, availWidth, availHeight);
         }
         return {
             left: availLeft + availWidth,
-            top: 0,
-            width: availWidth,
-            height: availHeight
+            top: availTop + Math.max(0, Math.floor((availHeight - h) / 2)),
+            width: w,
+            height: h
         };
+    }
+
+    try {
+        globalThis.__worshipGetProjectionWindowPlacement = getDisplayWindowPlacement;
+    } catch (_e) {
+        /* ignore */
     }
 
     function openDisplayOnSecondScreen(url, windowName, toastAnchor) {
         const { left, top, width, height } = getDisplayWindowPlacement();
-        const feats = `left=${left},top=${top},width=${width},height=${height}`;
+        const feats = [
+            `left=${left}`,
+            `top=${top}`,
+            `width=${width}`,
+            `height=${height}`,
+            "menubar=no",
+            "toolbar=no",
+            "status=no",
+            "scrollbars=yes"
+        ].join(",");
         const name =
             String(windowName || "").trim() ||
             "worship_proj_" + Date.now() + "_" + Math.random().toString(36).slice(2, 10);
@@ -8667,11 +8852,18 @@ ${deleteBtnHtml}
             if (toastAnchor) showToast("无法打开窗口，请允许弹窗", toastAnchor);
             return null;
         }
-        try {
-            win.moveTo(left, top);
-            win.resizeTo(width, height);
-        } catch (e) {
-            console.log("定位投屏窗口失败", e);
+        const applyPlacement = () => {
+            try {
+                win.moveTo(left, top);
+                win.resizeTo(width, height);
+            } catch (e) {
+                console.log("定位投屏窗口失败", e);
+            }
+        };
+        applyPlacement();
+        if (isWorshipMacLikePlatform()) {
+            window.setTimeout(applyPlacement, 100);
+            window.setTimeout(applyPlacement, 380);
         }
         if (!isDisplay && !isLeader) refocusMainWindowForOperator();
         return win;
@@ -8707,21 +8899,19 @@ ${deleteBtnHtml}
         hideRestoreProjectionBanner();
     }
 
-    try {
-        globalThis.__worshipOpenDisplayWindow = openDisplayWindow;
-    } catch (_e) {
-        /* ignore */
-    }
-
     function openLeaderWindow() {
-        if (typeof UI !== "undefined" && typeof UI.createLeaderWindow === "function") {
-            return UI.createLeaderWindow();
-        }
         const anchor = $("open-leader-btn");
         const leaderWinName =
             "worship_leader_" + Date.now() + "_" + Math.random().toString(36).slice(2, 10);
         openDisplayOnSecondScreen(projectionEntryUrl("leader"), leaderWinName, anchor);
         safeBroadcastState("openLeaderWindow:after-open");
+    }
+
+    try {
+        globalThis.__worshipOpenDisplayWindow = openDisplayWindow;
+        globalThis.__worshipOpenLeaderWindow = openLeaderWindow;
+    } catch (_e) {
+        /* ignore */
     }
 
     function initResizable() {
@@ -8903,10 +9093,10 @@ ${deleteBtnHtml}
             '<div style="color:rgba(255,255,255,0.92);">' +
             '<p style="margin:0 0 10px;font-weight:600;">第一步：移动窗口到投影仪屏幕</p>' +
             "<p style=\"margin:0 0 6px;\">Windows：按 Win + Shift + → 将窗口移动到投影仪，或直接用鼠标拖拽。</p>" +
-            "<p style=\"margin:0 0 6px;\">macOS：将鼠标移到窗口左上角，当光标变为 Move 后，将窗口直接拖拽到副屏。</p>" +
+            "<p style=\"margin:0 0 6px;\">macOS：投屏页会在当前屏幕居中打开，请拖到投影仪或副屏；若未弹出，请在 Safari「设置 → 网站 → 弹出式窗口」中将本站设为「允许」，再点一次「开启投屏」。</p>" +
             "<p style=\"margin:0 0 14px;\">Linux：请使用桌面环境的窗口管理快捷键，或将窗口拖拽到副屏（各发行版可能不同）。</p>" +
             '<p style="margin:0 0 10px;font-weight:600;">第二步：在投影仪上全屏</p>' +
-            "<p style=\"margin:0 0 14px;\">按键盘的 F 键（或点击画面中央的 □ 按钮）。</p>" +
+            "<p style=\"margin:0 0 14px;\">按键盘的 F 键（macOS 亦可 Control+Command+F），或点击画面中央的 □ 按钮。</p>" +
             '<p style="margin:0 0 10px;font-weight:600;">第三步：在控制台翻页</p>' +
             "<p style=\"margin:0 0 10px;\">在控制台页面，使用 ← → 方向键或空格 控制下一页/上一页。</p>" +
             "<p style=\"margin:0 0 6px;\">此窗口仅您可见，投屏画面保持干净。</p>" +
@@ -12248,7 +12438,7 @@ ${deleteBtnHtml}
                 window.addEventListener("pagehide", persistStateBeforeHide);
             }
             maybeShowWelcomeToast();
-            maybeShowFirstVisitOnboarding();
+            maybeStartNewUserArrowGuide();
             ensureWorshipVersionFooter();
             if (typeof UI !== "undefined" && UI.init) UI.init();
             // ====== 强制初始化页面画廊 ======

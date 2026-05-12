@@ -248,7 +248,7 @@ body[data-theme-custom-bg="1"]::before {
     margin-top: 4px;
     padding-top: 12px;
     border-top: 1px solid rgba(255, 255, 255, 0.08);
-    /* 禁止 overflow:hidden：会把下方 #speaker-view 页面画廊裁没；由 #editor-area 承担纵向滚动 */
+    /* 画廊优先布局时由 .editor-main-body--gallery-first 承担纵向滚动，见该修饰类 */
     overflow: visible;
 }
 .editor-lyric-preview-row {
@@ -1415,7 +1415,7 @@ body.online-search-overlay-open {
     pointer-events: none;
 }
 
-#editor-area { flex:1 1 0; min-width:0; min-height:0; padding:16px 20px; overflow-x:hidden; overflow-y:auto; background:rgba(20,20,30,0.2); backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px); display:flex !important; flex-direction:column !important; gap:10px; will-change:transform; -webkit-overflow-scrolling:touch; }
+#editor-area { flex:1 1 0; min-width:0; min-height:0; padding:16px 20px; overflow-x:hidden; overflow-y:hidden; background:rgba(20,20,30,0.2); backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px); display:flex !important; flex-direction:column !important; gap:10px; will-change:transform; position:relative; -webkit-overflow-scrolling:touch; }
 .editor-area-title { font-size:0.8rem; color:var(--text-secondary); margin-right:12px; vertical-align:middle; background:transparent; font-weight:normal; }
 .editor-workspace-header {
     width: 100%;
@@ -1524,6 +1524,18 @@ body.online-search-overlay-open {
     border-color: rgba(255, 255, 255, 0.28);
     background: rgba(255, 255, 255, 0.05);
     color: rgba(248, 248, 252, 0.95);
+}
+
+/* PWA：安装 App（与「使用帮助」同排） */
+#editor-action-bar #pwa-install-btn {
+    border: 1px solid rgba(212, 175, 55, 0.45);
+    background: rgba(212, 175, 55, 0.12);
+    color: rgba(252, 250, 245, 0.96);
+}
+#editor-action-bar #pwa-install-btn:hover {
+    border-color: rgba(212, 175, 55, 0.78);
+    background: rgba(212, 175, 55, 0.22);
+    color: #fff;
 }
 
 .editor-action-bar-btn__icon {
@@ -1984,6 +1996,124 @@ body.online-search-overlay-open {
 }
 .first-visit-onboarding-dismiss:hover {
     background: rgba(255, 255, 255, 0.16);
+}
+
+/* 首次访问：箭头式分步指引（仅新用户，完成后写入 worship_visited） */
+.new-user-arrow-guide {
+    position: fixed;
+    inset: 0;
+    z-index: 100080;
+    pointer-events: none;
+    box-sizing: border-box;
+}
+.new-user-arrow-guide[hidden] {
+    display: none !important;
+}
+.new-user-arrow-guide__block {
+    position: absolute;
+    inset: 0;
+    background: rgba(6, 8, 14, 0.66);
+    pointer-events: auto;
+}
+.new-user-arrow-guide__ring {
+    position: fixed;
+    z-index: 1;
+    box-sizing: border-box;
+    border-radius: 14px;
+    border: 3px solid rgba(232, 196, 120, 0.92);
+    box-shadow:
+        0 0 0 2px rgba(0, 0, 0, 0.35),
+        0 0 28px rgba(212, 175, 55, 0.45);
+    pointer-events: none;
+    animation: new-user-arrow-guide-pulse 1.6s ease-in-out infinite;
+}
+@keyframes new-user-arrow-guide-pulse {
+    0%,
+    100% {
+        border-color: rgba(232, 196, 120, 0.75);
+        box-shadow:
+            0 0 0 2px rgba(0, 0, 0, 0.3),
+            0 0 18px rgba(212, 175, 55, 0.28);
+    }
+    50% {
+        border-color: rgba(255, 220, 150, 0.98);
+        box-shadow:
+            0 0 0 2px rgba(0, 0, 0, 0.35),
+            0 0 36px rgba(212, 175, 55, 0.55);
+    }
+}
+.new-user-arrow-guide__shaft {
+    position: fixed;
+    z-index: 1;
+    height: 4px;
+    margin-top: 0;
+    pointer-events: none;
+    transform-origin: 0 50%;
+    border-radius: 2px;
+    background: linear-gradient(90deg, rgba(212, 175, 55, 0.15), rgba(255, 214, 140, 0.95), rgba(212, 175, 55, 0.35));
+    box-shadow: 0 0 10px rgba(212, 175, 55, 0.35);
+}
+.new-user-arrow-guide__bubble {
+    position: fixed;
+    z-index: 2;
+    box-sizing: border-box;
+    padding: 14px 16px 12px;
+    border-radius: 14px;
+    background: rgba(22, 24, 34, 0.94);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(212, 175, 119, 0.45);
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+    color: var(--text-primary);
+    pointer-events: auto;
+}
+.new-user-arrow-guide__meta {
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+    color: rgba(255, 255, 255, 0.45);
+    margin-bottom: 6px;
+}
+.new-user-arrow-guide__title {
+    margin: 0 0 8px;
+    font-size: 1rem;
+    font-weight: 700;
+    color: #f5e6c8;
+}
+.new-user-arrow-guide__text {
+    margin: 0 0 12px;
+    font-size: 0.86rem;
+    line-height: 1.55;
+    color: rgba(255, 255, 255, 0.82);
+}
+.new-user-arrow-guide__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+.new-user-arrow-guide__skip,
+.new-user-arrow-guide__next {
+    font: inherit;
+    font-size: 0.84rem;
+    padding: 8px 16px;
+    border-radius: 10px;
+    cursor: pointer;
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-primary);
+}
+.new-user-arrow-guide__skip:hover,
+.new-user-arrow-guide__next:hover {
+    background: rgba(255, 255, 255, 0.14);
+}
+.new-user-arrow-guide__next {
+    border-color: rgba(212, 175, 119, 0.55);
+    background: rgba(212, 175, 55, 0.18);
+    color: #f8ecd4;
+    font-weight: 600;
+}
+.new-user-arrow-guide__next:hover {
+    background: rgba(212, 175, 55, 0.28);
 }
 
 /* 播放列表空状态 */
@@ -4960,7 +5090,7 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
     .leader-host .leader-btn-label { font-size:0.65rem; }
     #app { flex-direction:column; }
     #song-library { width:100%; max-height:200px; overflow-y:auto; border-right:none; border-bottom:1px solid rgba(255,255,255,0.08); }
-    #editor-area { width:100%; flex:1; min-height:300px; display:flex; flex-direction:column; }
+    #editor-area { width:100%; flex:1; min-height:300px; display:flex; flex-direction:column; overflow-y:hidden; }
     #preview-panel { width:100%; max-width:none; max-height:min(320px, 42vh); overflow-y:auto; border-left:none; border-top:1px solid rgba(255,255,255,0.08); }
     .editor-main-body { border-top: none; padding-top: 8px; overflow: visible; }
     .editor-lyric-preview-row { max-height: none; flex: 1 1 auto; }
@@ -5368,7 +5498,8 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
     min-height: 120px !important;
     position: relative !important;
     z-index: 1 !important;
-    overflow: visible !important;
+    overflow-x: visible !important;
+    overflow-y: visible !important;
     width: 100% !important;
     height: auto !important;
     margin-bottom: 10px !important;
@@ -5381,6 +5512,9 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
     flex-basis: auto !important;
     max-width: 100% !important;
     display: flex !important;
+    flex-wrap: wrap !important;
+    overflow-x: visible !important;
+    overflow-y: visible !important;
     order: -1 !important;
 }
 
@@ -5395,7 +5529,8 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
     min-height: 120px !important;
     position: relative !important;
     z-index: 1 !important;
-    overflow: visible !important;
+    overflow-x: visible !important;
+    overflow-y: visible !important;
     height: auto !important;
     margin-bottom: 10px !important;
     box-sizing: border-box !important;
@@ -5419,10 +5554,14 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
 
 #layout-page-gallery .gallery-page-card {
     flex: 0 0 auto !important;
-    width: 152px !important;
-    height: 108px !important;
-    min-height: 108px !important;
-    max-height: 108px !important;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    aspect-ratio: 8 / 5;
+    min-height: 112px;
+    max-height: min(34vh, 260px);
+    height: auto !important;
     opacity: 1 !important;
     display: flex !important;
     flex-direction: column !important;
@@ -5467,7 +5606,7 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
     box-sizing: border-box;
 }
 
-/* 画廊在 #speaker-view 纵向布局中：占满中间栏剩余高度，内层按诗歌分区纵向滚动 */
+/* 画廊在 #speaker-view 中：横向换行展示分页卡片，高度随内容增高（不在画廊内纵向滚动） */
 #speaker-view #layout-page-gallery {
     order: 0 !important;
     flex: 0 0 auto !important;
@@ -5477,10 +5616,11 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
     align-self: stretch !important;
 }
 #speaker-view #layout-page-gallery.layout-page-gallery--hero {
-    flex: 1 1 auto !important;
-    min-height: 0 !important;
-    overflow-y: auto !important;
-    overflow-x: hidden !important;
+    flex: 0 0 auto !important;
+    min-height: auto !important;
+    flex-wrap: wrap !important;
+    overflow-x: visible !important;
+    overflow-y: visible !important;
 }
 
 #mini-preview .mini-preview-lyric-stage .preview-line {
@@ -5506,6 +5646,9 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
     flex: 1 1 auto;
     min-height: 0;
     gap: 12px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
 }
 #speaker-view.speaker-view--gallery-hero {
     position: relative;
@@ -5516,22 +5659,22 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
     margin-top: 0;
     padding-top: 8px;
     border-top: none;
-    overflow: hidden;
+    overflow-x: hidden;
+    overflow-y: visible;
     display: flex;
     flex-direction: column;
 }
 #layout-page-gallery.layout-page-gallery--hero {
     display: flex !important;
     flex-direction: column;
-    flex-wrap: nowrap !important;
+    flex-wrap: wrap !important;
     gap: 0 !important;
     padding: 4px 0 10px !important;
-    min-height: 0 !important;
-    overflow-x: hidden !important;
-    overflow-y: auto !important;
+    min-height: auto !important;
+    overflow-x: visible !important;
+    overflow-y: visible !important;
     order: 0 !important;
-    flex: 1 1 auto !important;
-    -webkit-overflow-scrolling: touch;
+    flex: 0 0 auto !important;
 }
 .gallery-song-section {
     width: 100%;
@@ -5569,34 +5712,36 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
     padding-right: 2px;
 }
 .layout-page-gallery-pages {
-    display: flex;
-    flex-direction: row;
-    flex-wrap: nowrap;
-    gap: 14px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr));
+    gap: 12px;
     width: 100%;
-    overflow-x: auto;
-    overflow-y: hidden;
-    scroll-snap-type: x mandatory;
-    scroll-behavior: smooth;
-    padding: 6px 2px 12px;
+    align-content: start;
+    justify-items: stretch;
+    overflow: visible;
+    padding: 8px 2px 12px;
     box-sizing: border-box;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: thin;
 }
-.layout-page-gallery-pages::-webkit-scrollbar {
-    height: 6px;
+@media (min-width: 1200px) {
+    .layout-page-gallery-pages {
+        grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
+    }
 }
-.layout-page-gallery-pages::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.2);
-    border-radius: 4px;
+@media (max-width: 360px) {
+    .layout-page-gallery-pages {
+        grid-template-columns: 1fr;
+    }
 }
 #layout-page-gallery.layout-page-gallery--hero .gallery-page-card {
-    width: min(360px, 86vw) !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    align-self: stretch !important;
     height: auto !important;
-    min-height: 168px !important;
-    max-height: min(42vh, 320px) !important;
+    aspect-ratio: 8 / 5;
+    min-height: 120px !important;
+    max-height: min(34vh, 260px) !important;
     flex-shrink: 0 !important;
-    scroll-snap-align: center;
     justify-content: center !important;
 }
 #layout-page-gallery.layout-page-gallery--hero .gallery-card-line {
@@ -5605,6 +5750,13 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
     overflow: visible !important;
     text-overflow: unset !important;
     max-width: 100%;
+    font-size: clamp(11px, 0.55vw + 10px, 15px) !important;
+    line-height: 1.45 !important;
+}
+#layout-page-gallery .card,
+#layout-page-gallery > div[style*="width:152px"] {
+    flex-shrink: 0 !important;
+    min-width: 0 !important;
 }
 .gallery-playlist-strip {
     display: flex;
@@ -5636,6 +5788,7 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
 }
 .editor-lyrics-drawer {
     flex: 0 0 auto;
+    width: 100%;
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 14px;
     background: rgba(12, 14, 22, 0.55);

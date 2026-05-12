@@ -1,17 +1,25 @@
 {
   "name": "敬拜投屏·专业版",
   "short_name": "敬拜投屏",
+  "description": "教会敬拜歌词管理与投屏",
   "start_url": "./",
+  "scope": "./",
   "display": "standalone",
-  "orientation": "landscape",
+  "orientation": "any",
   "background_color": "#0a0f1f",
   "theme_color": "#0a0f1f",
   "icons": [
     {
-      "src": "./cross.jpg",
+      "src": "./icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icon-512.png",
       "sizes": "512x512",
-      "type": "image/jpeg",
-      "purpose": "any maskable"
+      "type": "image/png",
+      "purpose": "any"
     }
   ]
 }

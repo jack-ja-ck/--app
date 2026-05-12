@@ -784,9 +784,26 @@
             </div>
         </div>
         <h2 id="pwa-install-guide-title" class="pwa-install-guide__title">获取此应用</h2>
-        <p class="pwa-install-guide__lead">
-            请按下面<strong>三步</strong>完成。若曾看到只有「确定」的系统提示，那只是说明文字；<strong>真正的安装</strong>发生在您点击本页的<strong>「立即安装」</strong>之后、在浏览器给出的<strong>小安装窗</strong>里点「安装」。
+        <p class="pwa-install-guide__lead" id="pwa-install-guide-lead">
+            安装确认窗只能由<strong>浏览器</strong>打开：要么点本页绿色<strong>「立即安装」</strong>，要么直接点<strong>窗口最顶部地址栏右侧</strong>的安装图标（见下方示意图）。出于安全，网页<strong>不能</strong>替您自动去点地址栏。
         </p>
+        <div id="pwa-install-guide-omnibox-wrap" class="pwa-install-guide__omnibox-wrap" hidden>
+            <p class="pwa-install-guide__omnibox-title">请先看我这里，再去点您浏览器「最顶上那一行」</p>
+            <p class="pwa-install-guide__omnibox-text">
+                下图只是<strong>示意图</strong>。请您抬头看浏览器窗口<strong>真正的地址栏</strong>最右侧：是否有 <strong>⊕</strong>、<strong>向下箭头进托盘</strong> 或 <strong>「安装」</strong>字样——<strong>用鼠标在那里点一下</strong>，才会出现安装小窗（本灰色弹窗里点任何地方都不会打开安装窗）。
+            </p>
+            <div class="pwa-install-guide__bar-mock" aria-hidden="true">
+                <span class="pwa-install-guide__bar-lock" title="安全连接">🔒</span>
+                <span class="pwa-install-guide__bar-url">jack-ja-ck.github.io / …</span>
+                <span class="pwa-install-guide__bar-hit"><span class="pwa-install-guide__bar-icon">📥</span>安装 <span class="pwa-install-guide__bar-arrow">← 点这里</span></span>
+            </div>
+            <p id="pwa-install-guide-omnibox-edge" class="pwa-install-guide__omnibox-edge" hidden>
+                <strong>Microsoft Edge：</strong>很多情况下地址栏右侧<strong>本来就没有</strong>安装图标，这不代表无法安装。请直接看下方「标准安装流程」里针对 Edge 的<strong>⋯ → 应用</strong>步骤。
+            </p>
+            <p class="pwa-install-guide__omnibox-foot">
+                若地址栏<strong>没有</strong>安装图标：<strong>Chrome</strong> 可试刷新、退出无痕；<strong>Edge</strong> 请优先用菜单 <strong>⋯ → 应用 → 将此站点作为应用安装</strong>。仍不行时用下方「复制链接」换浏览器打开。
+            </p>
+        </div>
         <p class="pwa-install-guide__flow-label">标准安装流程（与浏览器安装其他网页应用一致）</p>
         <div id="pwa-install-guide-flow" class="pwa-install-guide__flow" aria-live="polite"></div>
         <div id="pwa-install-guide-cta" class="pwa-install-guide__cta" hidden>
@@ -821,6 +838,8 @@
     var guideDoPrompt = document.getElementById("pwa-install-guide-do-prompt");
     var guideUrlFallback = document.getElementById("pwa-install-guide-url-fallback");
     var guideUrlField = document.getElementById("pwa-install-guide-url-field");
+    var guideOmniboxWrap = document.getElementById("pwa-install-guide-omnibox-wrap");
+    var guideOmniboxEdge = document.getElementById("pwa-install-guide-omnibox-edge");
     var copyBtn = document.getElementById("pwa-install-guide-copy");
     var COPY_LINK_LABEL = "复制链接（换设备或换浏览器时用）";
     if (!installBtn) return;
@@ -897,6 +916,24 @@
                 olEnd
             );
         }
+        if (kind === "edge") {
+            return (
+                olStart +
+                mk(
+                    "1",
+                    "点浏览器窗口<strong>右上角 ⋯</strong>（<strong>设置与更多</strong>），打开菜单。"
+                ) +
+                mk(
+                    "2",
+                    "依次点 <strong>应用</strong> → <strong>将此站点作为应用安装</strong>（部分版本显示为<strong>安装此站点</strong>或<strong>安装应用</strong>）。"
+                ) +
+                mk(
+                    "3",
+                    "在弹出的小窗中点<strong>安装</strong>；完成后在 <strong>Windows「开始」</strong>菜单或 Edge 的「应用」列表中打开<strong>敬拜投屏</strong>。"
+                ) +
+                olEnd
+            );
+        }
         return (
             olStart +
             mk(
@@ -926,7 +963,13 @@
                 "<li>Mac 上 Safari 对网页应用支持有限：可试菜单栏 <strong>「文件」→「添加到程序坞」</strong>。</li>",
                 "<li>更推荐：用 <strong>Chrome 或 Edge</strong> 打开本站，按上方「商店式」三步获取（与 Windows 上安装其他浏览器应用相同）。</li>"
             );
-        } else if (kind === "chrome" || kind === "edge") {
+        } else if (kind === "edge") {
+            rows.push(
+                "<li><strong>Edge 常见情况：</strong>地址栏右侧<strong>可能没有</strong>安装图标，请用 <strong>⋯ → 应用 → 将此站点作为应用安装</strong>（与 Chrome 不一定相同）。</li>",
+                "<li>若本页出现绿色<strong>「立即安装」</strong>，优先点击亦可。</li>",
+                "<li>若提示已安装：在「开始」菜单或 Edge 内搜索「敬拜」；也可在地址栏输入 <code>edge://apps</code> 查看已装应用。</li>"
+            );
+        } else if (kind === "chrome") {
             rows.push(
                 "<li>若未出现安装小窗：看地址栏<strong>最右侧</strong>是否有 <strong>⊕</strong> 或<strong>显示器+箭头</strong>图标，直接点击。</li>",
                 "<li>仍没有：打开浏览器 <strong>⋮</strong> 菜单 → 查找<strong>「安装…」</strong>或<strong>「应用」→「安装此站点」</strong>。</li>",
@@ -945,6 +988,14 @@
         if (!guideEl || !guideBody) return;
         var kind = detectGuideKind();
         var flowEl = document.getElementById("pwa-install-guide-flow");
+        if (guideOmniboxWrap) {
+            var showOm =
+                kind === "chrome" || kind === "edge" || kind === "generic" || kind === "safari_mac";
+            guideOmniboxWrap.hidden = !showOm;
+        }
+        if (guideOmniboxEdge) {
+            guideOmniboxEdge.hidden = kind !== "edge";
+        }
         if (flowEl) flowEl.innerHTML = buildFlowStepsHtml(kind, !!deferredPrompt);
         if (guideDoPrompt) {
             guideDoPrompt.disabled = false;
@@ -1069,7 +1120,7 @@
     }
 
     window.addEventListener("beforeinstallprompt", function (e) {
-        e.preventDefault();
+        /* 不调用 preventDefault：让 Chrome/Edge 继续在地址栏显示「安装」提示；仍可保留事件供本页「立即安装」调用 .prompt() */
         deferredPrompt = e;
         installBtn.style.display = "inline-flex";
         if (guideEl && !guideEl.hidden) {

@@ -1,10 +1,13 @@
-const CACHE_NAME = "worship-app-v2";
+const CACHE_NAME = "worship-app-v3";
 const ASSETS = [
   "./",
   "index.html",
+  "manifest.json",
   "app.js",
   "style.css",
   "cross.jpg",
+  "icon-192.png",
+  "icon-512.png",
   "js/utils.js",
   "js/state.js",
   "js/router.js",
@@ -18,8 +21,14 @@ self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       console.log("缓存核心文件...");
-      return cache.addAll(ASSETS);
-    })
+      return Promise.all(
+        ASSETS.map((url) =>
+          cache.add(url).catch(function (err) {
+            console.warn("[SW] 跳过缓存:", url, err);
+          })
+        )
+      );
+    }).then(() => self.skipWaiting())
   );
 });
 
@@ -39,6 +48,6 @@ self.addEventListener("activate", (event) => {
           .filter((name) => name !== CACHE_NAME)
           .map((name) => caches.delete(name))
       );
-    })
+    }).then(() => self.clients.claim())
   );
 });

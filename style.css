@@ -2064,6 +2064,95 @@ body.online-search-overlay-open {
     border-radius: 6px;
     background: rgba(255, 255, 255, 0.08);
 }
+.pwa-install-guide__omnibox-wrap {
+    margin: 0 0 18px;
+    padding: 14px 14px 12px;
+    border-radius: 12px;
+    background: rgba(212, 175, 55, 0.1);
+    border: 1px solid rgba(212, 175, 55, 0.38);
+}
+.pwa-install-guide__omnibox-title {
+    margin: 0 0 8px;
+    font-size: 0.92rem;
+    font-weight: 800;
+    color: #f8ecd4;
+}
+.pwa-install-guide__omnibox-text {
+    margin: 0 0 12px;
+    font-size: 0.84rem;
+    line-height: 1.55;
+    color: rgba(255, 255, 255, 0.88);
+}
+.pwa-install-guide__bar-mock {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    margin-bottom: 10px;
+    border-radius: 10px;
+    background: linear-gradient(180deg, #3d4456 0%, #2a2f3d 100%);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    font-size: 0.78rem;
+}
+.pwa-install-guide__bar-lock {
+    flex-shrink: 0;
+    opacity: 0.85;
+}
+.pwa-install-guide__bar-url {
+    flex: 1;
+    min-width: 0;
+    color: rgba(255, 255, 255, 0.55);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.pwa-install-guide__bar-hit {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    border-radius: 8px;
+    background: rgba(46, 125, 50, 0.55);
+    color: #fff;
+    font-weight: 700;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    animation: pwa-install-guide-bar-pulse 1.4s ease-in-out infinite;
+}
+.pwa-install-guide__bar-icon {
+    font-size: 0.85rem;
+}
+.pwa-install-guide__bar-arrow {
+    font-size: 0.72rem;
+    font-weight: 800;
+    color: #ffecb3;
+}
+@keyframes pwa-install-guide-bar-pulse {
+    0%,
+    100% {
+        box-shadow: 0 0 0 0 rgba(129, 199, 132, 0.35);
+    }
+    50% {
+        box-shadow: 0 0 0 6px rgba(129, 199, 132, 0);
+    }
+}
+.pwa-install-guide__omnibox-foot {
+    margin: 0;
+    font-size: 0.78rem;
+    line-height: 1.5;
+    color: rgba(255, 255, 255, 0.62);
+}
+.pwa-install-guide__omnibox-edge {
+    margin: 0.65rem 0 0;
+    padding: 0.55rem 0.65rem;
+    font-size: 0.82rem;
+    line-height: 1.5;
+    color: rgba(255, 255, 255, 0.9);
+    background: rgba(59, 130, 246, 0.14);
+    border-radius: 8px;
+    border: 1px solid rgba(59, 130, 246, 0.32);
+}
 .pwa-install-guide__cta {
     margin: 0 0 16px;
     padding: 14px 14px 16px;

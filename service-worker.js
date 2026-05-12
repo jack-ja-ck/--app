@@ -1,8 +1,8 @@
-const CACHE_NAME = "worship-app-v3";
+const CACHE_NAME = "worship-app-v5";
 const ASSETS = [
-  "./",
   "index.html",
   "manifest.json",
+  "manifest.github.json",
   "app.js",
   "style.css",
   "cross.jpg",

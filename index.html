@@ -21,13 +21,24 @@
     <script src="js/ui.js"></script>
     <script src="js/fonts.js"></script>
     <script src="app.js" defer></script>
-    <link rel="manifest" href="./manifest.json">
     <script>
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('./service-worker.js');
-        });
-      }
+      (function () {
+        var manifestHref = "./manifest.json";
+        if (
+          location.protocol === "https:" &&
+          location.hostname === "jack-ja-ck.github.io" &&
+          /^\/--app(\/|$)/.test(location.pathname || "")
+        ) {
+          manifestHref = "./manifest.github.json";
+        }
+        var link = document.createElement("link");
+        link.rel = "manifest";
+        link.href = manifestHref;
+        document.head.appendChild(link);
+        if ("serviceWorker" in navigator) {
+          navigator.serviceWorker.register("./service-worker.js").catch(function () {});
+        }
+      })();
     </script>
 </head>
 <body data-theme="dark">
@@ -771,7 +782,7 @@
         <button type="button" class="pwa-install-guide__x" data-pwa-guide-close aria-label="关闭">✕</button>
         <div class="pwa-install-guide__store-card">
             <div class="pwa-install-guide__icon-wrap">
-                <img class="pwa-install-guide__icon-img" src="./cross.jpg" width="56" height="56" alt="" decoding="async">
+                <img class="pwa-install-guide__icon-img" src="./icon-192.png" width="56" height="56" alt="" decoding="async">
             </div>
             <div class="pwa-install-guide__store-meta">
                 <p class="pwa-install-guide__app-name">敬拜投屏·专业版</p>
@@ -925,7 +936,7 @@
                 ) +
                 mk(
                     "2",
-                    "依次点 <strong>应用</strong> → <strong>将此站点作为应用安装</strong>（部分版本显示为<strong>安装此站点</strong>或<strong>安装应用</strong>）。"
+                    "依次点 <strong>应用</strong> → <strong>将此站点作为应用安装</strong>（部分版本显示为<strong>安装此站点</strong>或<strong>安装应用</strong>）。<strong>若这里没有「安装」类选项</strong>：先按 <strong>Ctrl+F5</strong> 硬性刷新，或关掉本标签再打开（勿用 InPrivate），等几秒后再打开 ⋯ 查看。"
                 ) +
                 mk(
                     "3",
@@ -966,6 +977,7 @@
         } else if (kind === "edge") {
             rows.push(
                 "<li><strong>Edge 常见情况：</strong>地址栏右侧<strong>可能没有</strong>安装图标，请用 <strong>⋯ → 应用 → 将此站点作为应用安装</strong>（与 Chrome 不一定相同）。</li>",
+                "<li><strong>若「应用」里没有安装项：</strong>多半是浏览器还没完成 PWA 检测。请 <strong>Ctrl+F5</strong> 硬性刷新、或完全关闭本标签再打开，并避免 InPrivate，等几秒后再试。</li>",
                 "<li>若本页出现绿色<strong>「立即安装」</strong>，优先点击亦可。</li>",
                 "<li>若提示已安装：在「开始」菜单或 Edge 内搜索「敬拜」；也可在地址栏输入 <code>edge://apps</code> 查看已装应用。</li>"
             );
@@ -1019,6 +1031,10 @@
         if (guideTip) {
             if (extraTip) {
                 guideTip.textContent = extraTip;
+                guideTip.hidden = false;
+            } else if (!deferredPrompt && (kind === "edge" || kind === "chrome")) {
+                guideTip.textContent =
+                    "若一直没有绿色「立即安装」、系统也没有任何安装小窗：请先按 Ctrl+F5 硬性刷新，或关掉本标签再打开，并避免 InPrivate，让 Service Worker 与安装检测跑完后再试。";
                 guideTip.hidden = false;
             } else {
                 guideTip.textContent = "";

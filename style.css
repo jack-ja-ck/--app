@@ -1588,7 +1588,7 @@ body.worship-audience-projection #popup-blocked-banner {
     color: #fff;
 }
 
-/* 次要操作：存为模板、重置示例 */
+/* 次要操作：存为存档、重置示例 */
 #editor-inline-actions #save-as-template-btn,
 #editor-inline-actions #reset-current-song {
     border: 1px solid rgba(255, 255, 255, 0.25);
@@ -2818,6 +2818,13 @@ body.worship-audience-projection #popup-blocked-banner {
     align-items: center;
     gap: 4px;
 }
+.song-library-archive-btn {
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 5px 8px;
+    line-height: 1.2;
+    white-space: nowrap;
+}
 .icon-btn--text {
     font-size: 1.05rem;
     padding: 2px 4px;
@@ -2860,7 +2867,19 @@ body.worship-audience-projection #popup-blocked-banner {
     user-select: none;
 }
 
-/* 歌词模板选择 */
+/* 歌词诗歌存档选择弹窗 */
+.lyric-template-modal-desc {
+    margin: 0;
+    padding: 10px 16px 12px;
+    font-size: 0.8rem;
+    line-height: 1.55;
+    color: rgba(255, 255, 255, 0.62);
+    border-bottom: 1px solid var(--border-color);
+}
+.lyric-template-modal-desc b {
+    color: var(--text-primary);
+    font-weight: 600;
+}
 .lyric-template-modal {
     position: fixed;
     inset: 0;
@@ -4548,6 +4567,12 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
 }
 .setting-tip { margin-top:6px; color:var(--text-secondary); font-size:0.78rem; line-height:1.4; }
 #toast { position:fixed; bottom:30px; left:50%; transform:translateX(-50%); background:rgba(35,35,40,0.92); color:#fff; padding:8px 16px; border-radius:24px; z-index:22550; opacity:0; transition:opacity 0.3s ease; font-size:0.72rem; line-height:1.35; max-width:min(280px,calc(100vw - 24px)); box-shadow:0 2px 12px rgba(0,0,0,0.25); pointer-events:none; word-break:break-word; }
+#toast.toast--success {
+    background:rgba(22, 72, 54, 0.94);
+    color:#e8fff0;
+    border:1px solid rgba(120, 200, 150, 0.45);
+    box-shadow:0 4px 18px rgba(0, 0, 0, 0.28);
+}
 
 /* 主站欢迎提示（全屏透明命中层 + 可点提示框；不拦截页面其余操作） */
 .welcome-toast-overlay {

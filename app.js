@@ -1685,94 +1685,14 @@
         }
     }
 
-    function showToast(text, triggerElement) {
-        /* ==========================================================
-           [迁移标记 round1] 已迁移至 js/utils.js；以下为旧实现，保留作安全网。
-           当 globalThis.showToast 不可用时可恢复块内逻辑。
-           ==========================================================
-        const t = $("toast");
-        if (!t) return;
-        t.textContent = text;
-        t.style.position = "fixed";
-        t.classList.remove("bounceIn");
-        const anchor = triggerElement && typeof triggerElement.getBoundingClientRect === "function" ? triggerElement : null;
-        if (anchor) {
-            const rect = anchor.getBoundingClientRect();
-            const pad = 8;
-            const estW = Math.min(280, window.innerWidth - 16);
-            let left = rect.right + pad;
-            if (left + estW > window.innerWidth - 8) {
-                left = rect.left - estW - pad;
-            }
-            left = clamp(left, 8, Math.max(8, window.innerWidth - estW - 8));
-            const top = rect.top + rect.height / 2;
-            t.style.left = `${left}px`;
-            t.style.top = `${clamp(top, 24, window.innerHeight - 24)}px`;
-            t.style.bottom = "auto";
-            t.style.right = "auto";
-            t.style.transform = "translateY(-50%)";
-            void t.offsetHeight;
-            t.style.opacity = "1";
-        } else {
-            t.style.left = "50%";
-            t.style.bottom = "30px";
-            t.style.top = "auto";
-            t.style.right = "auto";
-            t.style.transform = "translateX(-50%)";
-            t.classList.add("bounceIn");
-            t.style.opacity = "1";
-        }
-        setTimeout(() => {
-            t.style.opacity = "0";
-            t.classList.remove("bounceIn");
-        }, 1500);
-        */
-        return globalThis.showToast(text, triggerElement);
+    function showToast(text, triggerElement, opts) {
+        /* 实现见 js/utils.js 的 globalThis.showToast（支持 opts.variant、就近定位） */
+        return globalThis.showToast(text, triggerElement, opts);
     }
 
-    /** 右下角成功提示：单条可见；显示中下一条入队；等待期间新消息替换待播队列 */
-    let cornerSuccessToastShowTimer = 0;
-    let cornerSuccessToastFadeTimer = 0;
-    let cornerToastQueue = [];
-    let cornerToastShowing = false;
-
-    function drainCornerSuccessToastQueue() {
-        const el = $("corner-success-toast");
-        if (!el) return;
-        if (cornerToastShowing) return;
-        if (!cornerToastQueue.length) return;
-        const msg = cornerToastQueue.shift();
-        cornerToastShowing = true;
-        el.textContent = String(msg || "");
-        el.hidden = false;
-        el.classList.remove("corner-success-toast--out");
-        el.classList.add("corner-success-toast--in");
-        void el.offsetWidth;
-        if (cornerSuccessToastShowTimer) clearTimeout(cornerSuccessToastShowTimer);
-        if (cornerSuccessToastFadeTimer) clearTimeout(cornerSuccessToastFadeTimer);
-        cornerSuccessToastShowTimer = setTimeout(() => {
-            cornerSuccessToastShowTimer = 0;
-            el.classList.remove("corner-success-toast--in");
-            el.classList.add("corner-success-toast--out");
-            cornerSuccessToastFadeTimer = setTimeout(() => {
-                cornerSuccessToastFadeTimer = 0;
-                el.hidden = true;
-                cornerToastShowing = false;
-                drainCornerSuccessToastQueue();
-            }, 360);
-        }, 1500);
-    }
-
-    function showCornerSuccessToast(message) {
-        const el = $("corner-success-toast");
-        if (!el) return;
-        const m = String(message || "");
-        if (cornerToastShowing) {
-            cornerToastQueue = [m];
-            return;
-        }
-        cornerToastQueue.push(m);
-        drainCornerSuccessToastQueue();
+    /** 成功类提示：与 showToast 共用 #toast，在触发控件旁显示（不再使用右下角独立条） */
+    function showCornerSuccessToast(message, anchorEl) {
+        showToast(String(message || "").trim(), anchorEl || null, { variant: "success" });
     }
 
     /** 从歌词纯文本中移除内嵌 data:*;base64，避免误传大图导致 POST 过大 */
@@ -1867,6 +1787,28 @@
         updateCloudUploadBtnState();
     }
 
+    function positionFixedPanelNearElement(panel, anchor) {
+        if (!panel || !anchor || typeof anchor.getBoundingClientRect !== "function") return;
+        const r = anchor.getBoundingClientRect();
+        const pad = 10;
+        const w = Math.min(400, window.innerWidth - 20);
+        let left = r.left + r.width / 2 - w / 2;
+        left = Math.max(10, Math.min(left, window.innerWidth - w - 10));
+        let top = r.bottom + pad;
+        const reserve = Math.min(280, window.innerHeight * 0.5);
+        if (top + reserve > window.innerHeight - 8) {
+            top = Math.max(8, r.top - reserve - pad);
+        }
+        panel.style.position = "fixed";
+        panel.style.left = `${left}px`;
+        panel.style.top = `${top}px`;
+        panel.style.width = `${w}px`;
+        panel.style.right = "auto";
+        panel.style.bottom = "auto";
+        panel.style.transform = "none";
+        panel.style.zIndex = "100051";
+    }
+
     function dismissCloudUploadFeedbackToast() {
         const root = $("corner-cloud-upload-toast");
         if (!root) return;
@@ -1885,6 +1827,7 @@
         const wrap = $("corner-cloud-upload-link-wrap");
         const link = $("corner-cloud-upload-link");
         if (!root || !msg) return;
+        positionFixedPanelNearElement(root, $("upload-cloud-btn") || $("upload-history-toggle-btn"));
         if (cloudUploadToastShowTimer) {
             clearTimeout(cloudUploadToastShowTimer);
             cloudUploadToastShowTimer = 0;
@@ -2461,13 +2404,13 @@
             selector: "#editor-lyrics-drawer-summary",
             title: "第 1 步：编辑歌词",
             text:
-                "点中间栏下方的「📝 编辑歌词」标题栏展开。展开后自上而下为：歌名与字号（右侧有收起提示）；接着是「保存」「存为模板」「应用到演示屏」等按钮；下方是大块歌词编辑区（可用空行或 [page] 分段）。编辑区会浮在页面画廊之上，可向上拖动顶边加高。"
+                "点中间栏下方的「📝 编辑歌词」标题栏展开。展开后自上而下为：歌名与字号（右侧有收起提示）；接着是「保存」「存为存档」「应用到演示屏」等按钮；下方是大块歌词编辑区（可用空行或 [page] 分段）。编辑区会浮在页面画廊之上，可向上拖动顶边加高。"
         },
         {
             selector: "#song-library",
             title: "第 2 步：加入播放列表",
             text:
-                "在左侧「诗歌库」里选中要唱的诗歌，点该行右侧「+」，加入下方的「播放列表（敬拜顺序）」；可多首并拖拽排序。列表下方「💾 保存歌单」与「📂 加载歌单」并排，用于写入或读取本机歌单。（「在线搜索诗歌」当前为占位。）"
+                "在左侧「诗歌库」里选中要唱的诗歌，点该行右侧「+」，加入下方的「播放列表（敬拜顺序）」；可多首并拖拽排序。列表下方「💾 保存歌单」与「📋 我的歌单」并排，用于命名保存或打开本机已存歌单。（「在线搜索诗歌」当前为占位。）"
         },
         {
             selector: "#playlist-start-btn",
@@ -2779,7 +2722,18 @@
     }
 
     function saveLyricTemplates(list) {
-        setStore(LYRIC_TEMPLATES_KEY, Array.isArray(list) ? list : []);
+        try {
+            setStore(LYRIC_TEMPLATES_KEY, Array.isArray(list) ? list : []);
+            return true;
+        } catch (err) {
+            console.warn("saveLyricTemplates", err);
+            if (isStorageQuotaExceededError(err)) {
+                showToast("存储空间不足，无法保存诗歌存档", $("save-as-template-btn"));
+            } else {
+                showToast("诗歌存档保存失败", $("save-as-template-btn"));
+            }
+            return false;
+        }
     }
 
     function closeLyricTemplatePickerModal() {
@@ -2792,7 +2746,8 @@
         const tpls = getLyricTemplates();
         ul.innerHTML = "";
         if (!tpls.length) {
-            ul.innerHTML = '<li class="lyric-template-empty">暂无模板，请先在编辑区旁「存为模板」</li>';
+            ul.innerHTML =
+                '<li class="lyric-template-empty">暂无诗歌存档，请先在编辑区旁点「存为存档」保存当前歌词与样式</li>';
             return;
         }
         tpls.forEach((tpl) => {
@@ -2800,7 +2755,7 @@
             const btn = document.createElement("button");
             btn.type = "button";
             btn.className = "lyric-template-item";
-            const title = escapeHtml(tpl.name || "未命名模板");
+            const title = escapeHtml(tpl.name || "未命名存档");
             const dt = new Date(Number(tpl.createdAt) || 0);
             const ds = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
             btn.innerHTML = `<span>${title}</span><span class="lyric-template-item-meta">${ds}</span>`;
@@ -2819,9 +2774,10 @@
             modal.innerHTML =
                 "<div class=\"lyric-template-modal-panel\" role=\"presentation\">" +
                 "<div class=\"lyric-template-modal-head\">" +
-                "<h3>选择模板</h3>" +
+                "<h3>诗歌存档</h3>" +
                 "<button type=\"button\" class=\"lyric-template-modal-close\" aria-label=\"关闭\">✕</button>" +
                 "</div>" +
+                "<p class=\"lyric-template-modal-desc\">以下为已保存在本机的诗歌存档（歌词与高级样式）。点选一项将<b>新建一首诗歌</b>并套用内容。</p>" +
                 "<div class=\"lyric-template-modal-body\"><ul id=\"lyric-template-list\" class=\"lyric-template-list\"></ul></div>" +
                 "</div>";
             modal.addEventListener("click", (e) => {
@@ -2840,8 +2796,11 @@
         syncEditorToSong();
         const song = currentSong();
         if (!song) return;
-        const defaultName = `${(song.title || "未命名").trim() || "未命名"} 模板`;
-        const name = window.prompt("模板名称（将保存当前歌词与高级编辑设置）", defaultName);
+        const fromEd = String($("lyric-editor-large")?.value ?? "");
+        const fromSong = String(song.lyrics ?? "");
+        const lyricsToSave = fromEd.length >= fromSong.length ? fromEd : fromSong;
+        const defaultName = `${(song.title || "未命名").trim() || "未命名"} 存档`;
+        const name = window.prompt("存档名称（将保存当前歌词与高级编辑设置）", defaultName);
         if (name === null) return;
         const nm = String(name).trim() || defaultName;
         let uiSnap;
@@ -2854,7 +2813,7 @@
             id: "tpl_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8),
             name: nm,
             createdAt: Date.now(),
-            lyrics: song.lyrics || "",
+            lyrics: lyricsToSave,
             ui: uiSnap,
             songVisual: {
                 overlayOpacityPct: song.overlayOpacityPct,
@@ -2871,15 +2830,16 @@
         const list = getLyricTemplates();
         list.unshift(tpl);
         if (list.length > 40) list.length = 40;
-        saveLyricTemplates(list);
-        showCornerSuccessToast("✅ 已保存为模板");
+        if (!saveLyricTemplates(list)) return;
+        showCornerSuccessToast("✅ 已保存为诗歌存档", $("save-as-template-btn"));
     }
 
     function createSongFromLyricTemplate(tpl) {
         if (!tpl || !tpl.id) return;
         syncEditorToSong();
-        const baseTitle = String(tpl.name || "来自模板")
+        const baseTitle = String(tpl.name || "来自存档")
             .replace(/模板$/, "")
+            .replace(/存档$/, "")
             .trim();
         const song = {
             id: uid(),
@@ -2938,7 +2898,7 @@
         renderPlaylist();
         broadcastState();
         closeLyricTemplatePickerModal();
-        showCornerSuccessToast("✅ 已从模板新建诗歌");
+        showCornerSuccessToast("✅ 已从诗歌存档新建诗歌", $("new-from-template-btn"));
         queueMicrotask(() => {
             const inp = $("lyric-editor-large");
             if (inp) inp.focus();
@@ -4654,17 +4614,21 @@
     }
 
     function savePlaylist() {
-        /* ==========================================================
-           [迁移标记 round1] 已迁移至 js/state.js；以下为旧实现，保留作安全网。
-           当 globalThis.savePlaylist 不可用时可恢复块内逻辑。
-           ==========================================================
-        setStore(STORAGE.PLAYLIST, {
-            items: state.playlist.items,
-            running: state.playlist.running,
-            activeIndex: state.playlist.activeIndex
-        });
-        */
-        return globalThis.savePlaylist();
+        /* 必须写入 app.js 的 state.playlist。若委托 globalThis.savePlaylist（state.js），
+         * 会持久化另一份未同步的 playlist，导致「加载歌单」后列表不保存或刷新丢失。 */
+        try {
+            setStore(STORAGE.PLAYLIST, {
+                items: [...state.playlist.items],
+                running: !!state.playlist.running,
+                activeIndex: clamp(
+                    Number(state.playlist.activeIndex) || 0,
+                    0,
+                    Math.max(0, state.playlist.items.length - 1)
+                )
+            });
+        } catch (err) {
+            if (!isStorageQuotaExceededError(err)) console.warn("savePlaylist", err);
+        }
     }
 
     /** 从 localStorage 恢复 app.js 的 state（与 state.js 并行；刷新后 UI 与投屏设置一致） */
@@ -6256,9 +6220,19 @@ ${deleteBtnHtml}
 
     function loadSavedSetlists() {
         const raw = parseJSON(localStorage.getItem(WORSHIP_SETLISTS_LS), []);
-        return Array.isArray(raw)
-            ? raw.filter((x) => x && typeof x === "object" && x.id && Array.isArray(x.songs))
-            : [];
+        if (!Array.isArray(raw)) return [];
+        return raw
+            .map((x) => {
+                if (!x || typeof x !== "object" || !x.id) return null;
+                const songs = Array.isArray(x.songs)
+                    ? x.songs
+                    : Array.isArray(x.items)
+                      ? x.items
+                      : null;
+                if (!songs) return null;
+                return { ...x, songs };
+            })
+            .filter(Boolean);
     }
 
     function persistSavedSetlists(arr) {
@@ -6325,21 +6299,34 @@ ${deleteBtnHtml}
     }
 
     function applySavedSetlist(sl, triggerBtn) {
+        const rawIds = Array.isArray(sl.songs) ? sl.songs : Array.isArray(sl.items) ? sl.items : [];
         const next = [];
-        (Array.isArray(sl.songs) ? sl.songs : []).forEach((songId) => {
-            if (state.songs.some((s) => String(s.id) === String(songId)) && !next.includes(songId)) {
-                next.push(songId);
-            }
+        rawIds.forEach((songId) => {
+            const hit = state.songs.find((s) => String(s.id) === String(songId));
+            if (!hit) return;
+            if (!next.some((id) => String(id) === String(hit.id))) next.push(hit.id);
         });
+        if (!next.length && rawIds.length > 0) {
+            closeSetlistModal();
+            showToast("歌单中的诗歌已不在本机曲库，无法加载", triggerBtn || $("load-setlist-btn"));
+            return;
+        }
         state.playlist.items = next;
         state.playlist.activeIndex = next.length ? 0 : -1;
         state.playlist.running = false;
         savePlaylist();
-        renderPlaylist();
-        renderPageGallery();
+        if (next.length) {
+            switchSong(next[0], { page: 0 });
+        } else {
+            syncSongToEditor();
+            renderPlaylist();
+            renderMiniPreview();
+            updateSpeakerCards();
+            renderPageGallery();
+        }
         broadcastState();
         closeSetlistModal();
-        showToast("歌单已加载", triggerBtn || $("load-setlist-btn"));
+        showToast("已加载歌单", triggerBtn || $("load-setlist-btn"));
     }
 
     function deleteSavedSetlist(id, triggerBtn) {
@@ -6423,8 +6410,7 @@ ${deleteBtnHtml}
             return;
         }
         closeSetlistNameModal();
-        showCornerSuccessToast("歌单已保存");
-        showToast("歌单已保存", btn);
+        showToast("歌单已保存", btn, { variant: "success" });
     }
 
     function installSetlistNameModalHandlers() {
@@ -6836,11 +6822,11 @@ ${deleteBtnHtml}
     }
 
     /** 新建并写入诗歌库：插入列表最上方（不修改当前编辑区 textarea） */
-    function addNewSong(song) {
+    function addNewSong(song, anchorEl) {
         state.songs.unshift(song);
         saveSongs();
         renderSongList();
-        showCornerSuccessToast("✅ 已导入");
+        showCornerSuccessToast("✅ 已导入", anchorEl || $("online-search-input"));
     }
 
     /** 导入后切换到该诗歌并广播到投屏（等同「保存 + 应用到演示屏」） */
@@ -6860,7 +6846,7 @@ ${deleteBtnHtml}
         } catch (err) {
             console.warn("importOnlineRowAndProject", err);
         }
-        showCornerSuccessToast("✅ 已导入并应用投屏");
+        showCornerSuccessToast("✅ 已导入并应用投屏", anchorEl || $("online-search-input"));
     }
 
     function onlineHymnLyricsLinesArray(text) {
@@ -7079,7 +7065,7 @@ ${deleteBtnHtml}
                         showToast("导入失败：歌词为空", importBtn);
                         return;
                     }
-                    addNewSong(song);
+                    addNewSong(song, importBtn);
                 });
 
                 top.appendChild(titleEl);
@@ -8253,7 +8239,7 @@ ${deleteBtnHtml}
         a.download = fname;
         a.click();
         URL.revokeObjectURL(url);
-        showCornerSuccessToast(`✅ 已导出为 ${fname}，可在浏览器下载记录中查看`);
+        showCornerSuccessToast(`✅ 已导出为 ${fname}，可在浏览器下载记录中查看`, $("batch-export-btn"));
     }
 
     function switchSong(songId, opts) {
@@ -8478,7 +8464,7 @@ ${deleteBtnHtml}
             a.click();
             a.remove();
             URL.revokeObjectURL(url);
-            showCornerSuccessToast("✅ 已生成备份文件");
+            showCornerSuccessToast("✅ 已生成备份文件", $("adv-backup-all-btn"));
         } catch (err) {
             console.warn("downloadFullWorshipBackup", err);
             showToast("备份失败", $("adv-backup-all-btn"));
@@ -8609,7 +8595,7 @@ ${deleteBtnHtml}
         normalizeLegacyBgImageReference();
         const nSong = Array.isArray(data.songs) ? data.songs.length : state.songs.length;
         const nBg = countBackupBackgroundItems(data.backgrounds);
-        showCornerSuccessToast(`✅ 已恢复 ${nSong} 首诗歌，${nBg} 个背景`);
+        showCornerSuccessToast(`✅ 已恢复 ${nSong} 首诗歌，${nBg} 个背景`, $("adv-restore-backup-btn"));
         window.setTimeout(() => {
             location.reload();
         }, 650);
@@ -8674,7 +8660,7 @@ ${deleteBtnHtml}
         renderMiniPreview();
         broadcastState();
         clearLyricDraft();
-        if (!silent) showCornerSuccessToast("✅ 已保存");
+        if (!silent) showCornerSuccessToast("✅ 已保存", $("save-song-btn"));
     }
 
     function createNewSong() {
@@ -9153,14 +9139,15 @@ ${deleteBtnHtml}
         return obj;
     }
 
-    function applyWorshipSongPackFromObject(data) {
+    function applyWorshipSongPackFromObject(data, anchorEl) {
+        const anchor = anchorEl || $("import-data-btn") || $("leader-qr-btn");
         if (!data || data.v !== 1 || !Array.isArray(data.s)) {
-            showCornerSuccessToast("诗歌包无效");
+            showToast("诗歌包无效", anchor);
             return false;
         }
         const rows = data.s.filter((x) => Array.isArray(x) && x.length >= 2);
         if (!rows.length) {
-            showCornerSuccessToast("包内无歌词");
+            showToast("包内无歌词", anchor);
             return false;
         }
         const songs = rows.map(([title, lyrics]) => ({
@@ -9212,7 +9199,7 @@ ${deleteBtnHtml}
         } else if (!isLeader) {
             updateAll();
         }
-        showCornerSuccessToast(`已导入 ${songs.length} 首诗歌`);
+        showCornerSuccessToast(`已导入 ${songs.length} 首诗歌`, anchor);
         return true;
     }
 
@@ -9337,7 +9324,7 @@ ${deleteBtnHtml}
             } catch (_e) {
                 /* ignore */
             }
-            modal.querySelector("#leader-qr-save-base")?.addEventListener("click", () => {
+            modal.querySelector("#leader-qr-save-base")?.addEventListener("click", (e) => {
                 const inp = modal.querySelector("#leader-qr-base-input");
                 const v = String(inp?.value || "").trim();
                 try {
@@ -9349,35 +9336,35 @@ ${deleteBtnHtml}
                 const hint = modal.querySelector("#leader-qr-url-hint");
                 const r = resolveLeaderJoinUrlForQr();
                 if (hint) hint.textContent = r.qrEncode || r.pageAbs || "（未填写则无法用网页链接打开）";
-                showCornerSuccessToast(v ? "已保存" : "已清除");
+                showCornerSuccessToast(v ? "已保存" : "已清除", e.currentTarget);
                 void refreshLeaderQrModalContent(modal);
             });
-            modal.querySelector("#leader-qr-copy-url")?.addEventListener("click", async () => {
+            modal.querySelector("#leader-qr-copy-url")?.addEventListener("click", async (e) => {
                 const text = String(modal.dataset.lastOpenUrl || "").trim();
                 if (!text) {
-                    showCornerSuccessToast("请先生成可扫码链接（填写地址并保存后刷新本窗口）");
+                    showToast("请先生成可扫码链接（填写地址并保存后刷新本窗口）", e.currentTarget);
                     return;
                 }
                 try {
                     await navigator.clipboard.writeText(text);
-                    showCornerSuccessToast("已复制扫码链接");
+                    showCornerSuccessToast("已复制扫码链接", e.currentTarget);
                 } catch (_e) {
-                    showCornerSuccessToast("复制失败");
+                    showToast("复制失败", e.currentTarget);
                 }
             });
-            modal.querySelector("#leader-qr-copy")?.addEventListener("click", async () => {
+            modal.querySelector("#leader-qr-copy")?.addEventListener("click", async (e) => {
                 const openU = String(modal.dataset.lastOpenUrl || "").trim();
                 const pack = String(modal.dataset.lastPackQr || "").trim();
                 const text = openU || pack;
                 if (!text) {
-                    showCornerSuccessToast("暂无可复制内容");
+                    showToast("暂无可复制内容", e.currentTarget);
                     return;
                 }
                 try {
                     await navigator.clipboard.writeText(text);
-                    showCornerSuccessToast(openU ? "已复制打开链接" : "已复制备用文本，可在主领页「诗歌」里粘贴");
+                    showCornerSuccessToast(openU ? "已复制打开链接" : "已复制备用文本，可在主领页「诗歌」里粘贴", e.currentTarget);
                 } catch (_e) {
-                    showCornerSuccessToast("复制失败");
+                    showToast("复制失败", e.currentTarget);
                 }
             });
         }
@@ -9413,7 +9400,7 @@ ${deleteBtnHtml}
         a.download = fname;
         a.click();
         URL.revokeObjectURL(url);
-        showCornerSuccessToast(`✅ 已导出为 ${fname}，可在浏览器下载记录中查看`);
+        showCornerSuccessToast(`✅ 已导出为 ${fname}，可在浏览器下载记录中查看`, $("export-data-btn"));
     }
 
     function importData(file) {
@@ -9446,7 +9433,7 @@ ${deleteBtnHtml}
             renderMiniPreview();
             renderPlaylist();
             broadcastState();
-            showCornerSuccessToast("✅ 已导入");
+            showCornerSuccessToast("✅ 已导入", $("import-data-btn"));
         };
         reader.readAsText(file, "utf-8");
     }
@@ -10016,10 +10003,10 @@ ${deleteBtnHtml}
             updateGalleryZoom();
         });
         on("publish-song-btn", "click", publishSong);
-        on("apply-to-display", "click", () => {
+        on("apply-to-display", "click", (e) => {
             saveCurrentLyrics({ silent: true });
             broadcastState();
-            showCornerSuccessToast("✅ 已应用");
+            showToast("✅ 已应用", e.currentTarget, { variant: "success" });
         });
         on("reset-current-song", "click", () => {
             setLyricEditorValueProgrammatically(DEFAULT_LYRICS);
@@ -10129,7 +10116,7 @@ ${deleteBtnHtml}
             saveSongs();
             renderSongList();
             renderPlaylist();
-            if (count > 0) showCornerSuccessToast("✅ 已导入");
+            if (count > 0) showCornerSuccessToast("✅ 已导入", $("batch-import-confirm"));
         });
         on("playlist-start-btn", "click", startPlaylistPlayback);
         installSetlistModalHandlers();
@@ -10147,7 +10134,7 @@ ${deleteBtnHtml}
         on("load-setlist-btn", "click", (e) => {
             const btn = e.currentTarget;
             if (!loadSavedSetlists().length) {
-                showToast("暂无保存的歌单", btn);
+                showToast("暂无已保存的歌单，请先点「💾 保存歌单」命名保存", btn);
                 return;
             }
             openSetlistModal();
@@ -12746,23 +12733,23 @@ ${deleteBtnHtml}
                 overlay.addEventListener("click", (e) => {
                     if (e.target === overlay) shut();
                 });
-                overlay.querySelector("[data-pack-clip]")?.addEventListener("click", async () => {
+                overlay.querySelector("[data-pack-clip]")?.addEventListener("click", async (e) => {
                     try {
                         const t = await navigator.clipboard.readText();
                         if (ta && t) ta.value = String(t).trim();
                     } catch (_e) {
-                        showCornerSuccessToast("无法读取剪贴板，请长按输入框粘贴");
+                        showToast("无法读取剪贴板，请长按输入框粘贴", e.currentTarget);
                     }
                 });
-                overlay.querySelector("[data-pack-go]")?.addEventListener("click", async () => {
+                overlay.querySelector("[data-pack-go]")?.addEventListener("click", async (e) => {
                     const raw = String(ta?.value || "").trim();
                     if (!raw) return;
                     try {
                         const data = await decodeWorshipPackFromRawString(raw);
-                        applyWorshipSongPackFromObject(data);
+                        applyWorshipSongPackFromObject(data, e.currentTarget);
                         shut();
-                    } catch (e) {
-                        showCornerSuccessToast("导入失败：" + (e.message || String(e)));
+                    } catch (err) {
+                        showToast("导入失败：" + (err.message || String(err)), e.currentTarget);
                     }
                 });
             };
@@ -12961,7 +12948,10 @@ ${deleteBtnHtml}
                 }
                 try {
                     const data = await decodeWorshipPackFromRawString(packStr);
-                    applyWorshipSongPackFromObject(data);
+                    applyWorshipSongPackFromObject(
+                        data,
+                        toolbar.querySelector('[data-action="import-pack"]')
+                    );
                     try {
                         history.replaceState(null, "", location.pathname + location.search);
                     } catch (_e2) {
@@ -12969,7 +12959,10 @@ ${deleteBtnHtml}
                     }
                 } catch (err) {
                     try {
-                        showCornerSuccessToast("链接内诗歌无效：" + (err.message || String(err)));
+                        showToast(
+                            "链接内诗歌无效：" + (err.message || String(err)),
+                            toolbar.querySelector('[data-action="import-pack"]')
+                        );
                     } catch (_e3) {
                         /* ignore */
                     }

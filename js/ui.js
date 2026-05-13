@@ -611,48 +611,19 @@ const UI = {
          * syncEditorToSong 会把整首歌词冲掉 → 分页塌成 1 页、始终回到第一张卡片。 */
     },
 
-    showToast(msg, triggerEl) {
-        function clampToast(v, min, max) {
-            return Math.max(min, Math.min(max, v));
+    showToast(msg, triggerEl, opts) {
+        const fn = typeof globalThis !== "undefined" ? globalThis.showToast : null;
+        if (typeof fn === "function") {
+            fn(msg, triggerEl, opts);
+            return;
         }
         const t = document.getElementById("toast");
         if (!t) return;
         t.textContent = String(msg ?? "");
-        t.style.backgroundColor = "rgba(32, 32, 36, 0.88)";
-        t.style.position = "fixed";
-        t.classList.remove("bounceIn");
-        const anchor =
-            triggerEl && typeof triggerEl.getBoundingClientRect === "function" ? triggerEl : null;
-        if (anchor) {
-            const rect = anchor.getBoundingClientRect();
-            const pad = 8;
-            const estW = Math.min(280, window.innerWidth - 16);
-            let left = rect.right + pad;
-            if (left + estW > window.innerWidth - 8) {
-                left = rect.left - estW - pad;
-            }
-            left = clampToast(left, 8, Math.max(8, window.innerWidth - estW - 8));
-            const top = rect.top + rect.height / 2;
-            t.style.left = `${left}px`;
-            t.style.top = `${clampToast(top, 24, window.innerHeight - 24)}px`;
-            t.style.bottom = "auto";
-            t.style.right = "auto";
-            t.style.transform = "translateY(-50%)";
-            void t.offsetHeight;
-            t.style.opacity = "1";
-        } else {
-            t.style.left = "50%";
-            t.style.bottom = "30px";
-            t.style.top = "auto";
-            t.style.right = "auto";
-            t.style.transform = "translateX(-50%)";
-            t.classList.add("bounceIn");
-            t.style.opacity = "1";
-        }
+        t.style.opacity = "1";
         setTimeout(() => {
             t.style.opacity = "0";
-            t.classList.remove("bounceIn");
-        }, 1500);
+        }, 1800);
     }
 };
 

@@ -50,7 +50,7 @@
             <h3 style="margin:0;">📚 诗歌库</h3>
             <div class="song-library-header-actions">
                 <button id="new-song-btn" class="icon-btn" title="新建诗歌">+</button>
-                <button type="button" id="new-from-template-btn" class="icon-btn icon-btn--text" title="从模板新建诗歌">📄</button>
+                <button type="button" id="new-from-template-btn" class="small-btn song-library-archive-btn" title="打开本机「诗歌存档」列表（歌词与样式）">📄 诗歌存档</button>
             </div>
         </div>
         <div style="position:relative; margin-bottom:10px;">
@@ -72,7 +72,7 @@
                     <button id="playlist-start-btn" class="small-btn playlist-start-full" type="button">▶ 开始播放</button>
                     <div style="display:flex; gap:6px; width:100%;">
                         <button id="save-setlist-btn" class="small-btn playlist-start-full" type="button" style="flex:1; padding:6px 8px; font-size:12px; text-align:center; white-space:nowrap;">💾 保存歌单</button>
-                        <button id="load-setlist-btn" class="small-btn playlist-start-full" type="button" style="flex:1; padding:6px 8px; font-size:12px; text-align:center; white-space:nowrap;">📂 加载歌单</button>
+                        <button id="load-setlist-btn" class="small-btn playlist-start-full" type="button" style="flex:1; padding:6px 8px; font-size:12px; text-align:center; white-space:nowrap;">📋 我的歌单</button>
                     </div>
                 </div>
             </div>
@@ -205,7 +205,7 @@
                 </details>
                 <div id="editor-inline-actions" class="editor-action-bar" role="toolbar" aria-label="歌词编辑与云端">
                     <button type="button" id="save-song-btn" class="editor-action-bar-btn" title="保存当前歌词到曲库"><span class="editor-action-bar-btn__icon" aria-hidden="true">💾</span><span class="editor-action-bar-btn__text">保存</span></button>
-                    <button type="button" id="save-as-template-btn" class="editor-action-bar-btn" title="将当前歌词存为可复用模板"><span class="editor-action-bar-btn__icon" aria-hidden="true">📄</span><span class="editor-action-bar-btn__text">存为模板</span></button>
+                    <button type="button" id="save-as-template-btn" class="editor-action-bar-btn" title="将当前歌词与高级样式存为本机诗歌存档，便于下次套用"><span class="editor-action-bar-btn__icon" aria-hidden="true">📄</span><span class="editor-action-bar-btn__text">存为存档</span></button>
                     <button type="button" id="apply-to-display" class="editor-action-bar-btn" title="将当前样式与歌词同步到演示屏"><span class="editor-action-bar-btn__icon" aria-hidden="true">📺</span><span class="editor-action-bar-btn__text">应用到演示屏</span></button>
                     <button type="button" id="reset-current-song" class="editor-action-bar-btn" title="恢复本首诗歌的示例内容"><span class="editor-action-bar-btn__icon" aria-hidden="true">🔄</span><span class="editor-action-bar-btn__text">重置示例</span></button>
                     <button type="button" id="ocr-btn" class="editor-action-bar-btn" title="从照片识别歌词"><span class="editor-action-bar-btn__icon" aria-hidden="true">📷</span><span class="editor-action-bar-btn__text">拍照识歌词</span></button>
@@ -482,6 +482,7 @@
 <li><b>分页</b>：用空行或 [page] 标记分页位置</li>
 <li><b>歌名页</b>：第一段只有一行时，自动识别为歌名页（投屏时大字显示）</li>
 <li><b>保存</b>：点击「保存歌词」</li>
+<li><b>诗歌存档</b>：左侧诗歌库标题旁「📄 诗歌存档」打开本机存档列表；编辑区「存为存档」可把当前歌词与高级样式存下来，便于下次一键套用为新歌</li>
 <li><b>应用到演示屏</b>：编辑完成后必须点击，投屏和主领视图才会更新</li>
 </ul>
 
@@ -492,7 +493,8 @@
 <li><b>排序</b>：拖拽播放列表中的诗歌上下调整顺序</li>
 <li><b>删除</b>：点击诗歌旁的「✕」</li>
 <li><b>开始播放</b>：点击「▶ 开始播放」</li>
-<li><b>保存歌单</b>：点击「💾 保存歌单」将当前播放顺序写入本机（列表变更时也会自动保存）</li>
+<li><b>保存歌单</b>：点击「💾 保存歌单」将当前播放顺序命名保存到本机（列表变更时也会自动同步到当前播放列表存储）</li>
+<li><b>我的歌单</b>：点击「📋 我的歌单」打开已保存列表，选择一项即可把该顺序加载到播放列表，并跳到第一首</li>
 </ul>
 
 <h4>3. 本机诗歌与「搜索我的诗歌」</h4>

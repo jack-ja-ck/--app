@@ -574,8 +574,7 @@ const UI = {
             if (el) el.addEventListener(ev, fn);
         };
 
-        on("new-song-btn", "click", () => UI.addNewSong());
-        on("add-song-btn", "click", () => UI.addNewSong());
+        /* 新建诗歌由 app.js createNewSong 绑定（state / switchSong）；勿在此绑 legacy AppState 路径以免与主逻辑脱节 */
         on("save-song-btn", "click", () => UI.saveCurrentLyrics());
         on("apply-to-display", "click", () => UI.applyToDisplay());
         on("reset-current-song", "click", () => UI.resetCurrentSong());

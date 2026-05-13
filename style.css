@@ -701,20 +701,50 @@ body[data-theme-custom-bg="1"] #editor-area {
 }
 
 .library-new-song-main {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
     margin-top: 10px;
     width: 100%;
-    padding: 10px 12px;
+    box-sizing: border-box;
+    padding: 11px 14px;
     border-radius: 12px;
-    border: 1px dashed rgba(255,255,255,0.22);
-    background: rgba(255,255,255,0.06);
-    color: var(--text-primary);
-    font-size: 0.9rem;
+    border: 1px solid rgba(212, 175, 55, 0.38);
+    background: linear-gradient(
+        165deg,
+        rgba(212, 175, 55, 0.12) 0%,
+        rgba(32, 38, 54, 0.92) 48%,
+        rgba(20, 24, 36, 0.96) 100%
+    );
+    color: #f0e4c4;
+    font-size: 0.92rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
     cursor: pointer;
-    transition: background 0.15s ease, border-color 0.15s ease;
+    box-shadow:
+        0 1px 0 rgba(255, 255, 255, 0.06) inset,
+        0 6px 20px rgba(0, 0, 0, 0.28);
+    transition:
+        background 0.18s ease,
+        border-color 0.18s ease,
+        box-shadow 0.18s ease,
+        transform 0.12s ease;
 }
 .library-new-song-main:hover {
-    background: rgba(74,111,165,0.18);
-    border-color: rgba(74,111,165,0.45);
+    border-color: rgba(232, 205, 120, 0.55);
+    background: linear-gradient(
+        165deg,
+        rgba(212, 175, 55, 0.2) 0%,
+        rgba(42, 50, 72, 0.95) 50%,
+        rgba(26, 30, 46, 0.98) 100%
+    );
+    box-shadow:
+        0 1px 0 rgba(255, 255, 255, 0.08) inset,
+        0 8px 26px rgba(0, 0, 0, 0.35);
+}
+.library-new-song-main:active {
+    transform: scale(0.98);
 }
 
 .song-context-menu {
@@ -2981,6 +3011,165 @@ body.worship-audience-projection #popup-blocked-banner {
     color: var(--text-secondary);
     font-size: 0.85rem;
     padding: 24px 8px;
+}
+
+/* 存为诗歌存档：名称输入（替代系统 prompt） */
+.lyric-template-save-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 100071;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    box-sizing: border-box;
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+.lyric-template-save-modal.is-open {
+    display: flex;
+}
+.lyric-template-save-modal-panel {
+    width: min(400px, 100%);
+    max-width: 100%;
+    border-radius: 16px;
+    background: var(--bg-secondary);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 20px 56px rgba(0, 0, 0, 0.52);
+    overflow: hidden;
+}
+.lyric-template-save-modal-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border-color);
+    background: rgba(0, 0, 0, 0.2);
+}
+.lyric-template-save-modal-head h3 {
+    margin: 0;
+    font-size: 1.02rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: 0.02em;
+}
+.lyric-template-save-modal-close {
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 1.2rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 8px;
+}
+.lyric-template-save-modal-close:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-primary);
+}
+.lyric-template-save-modal-body {
+    padding: 16px 18px 18px;
+}
+.lyric-template-save-modal-desc {
+    margin: 0 0 14px;
+    font-size: 0.82rem;
+    line-height: 1.55;
+    color: rgba(255, 255, 255, 0.62);
+}
+.lyric-template-save-modal-desc b {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+.lyric-template-save-label {
+    display: block;
+    margin: 0 0 8px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    letter-spacing: 0.04em;
+}
+.lyric-template-save-input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 11px 14px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(0, 0, 0, 0.38);
+    color: var(--text-primary);
+    font-size: 0.95rem;
+    font-family: inherit;
+    transition:
+        border-color 0.15s ease,
+        box-shadow 0.15s ease,
+        background 0.15s ease;
+}
+.lyric-template-save-input::placeholder {
+    color: rgba(255, 255, 255, 0.35);
+}
+.lyric-template-save-input:hover {
+    border-color: rgba(255, 255, 255, 0.22);
+    background: rgba(0, 0, 0, 0.42);
+}
+.lyric-template-save-input:focus {
+    outline: none;
+    border-color: rgba(212, 175, 55, 0.55);
+    box-shadow: 0 0 0 1px rgba(212, 175, 55, 0.22);
+    background: rgba(0, 0, 0, 0.48);
+}
+.lyric-template-save-actions {
+    display: flex;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 18px;
+}
+.lyric-template-save-btn {
+    min-width: 92px;
+    padding: 9px 18px;
+    border-radius: 10px;
+    font-size: 0.88rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid transparent;
+    font-family: inherit;
+    transition:
+        background 0.15s ease,
+        border-color 0.15s ease,
+        transform 0.1s ease;
+}
+.lyric-template-save-btn:active {
+    transform: scale(0.98);
+}
+.lyric-template-save-btn--secondary {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.16);
+    color: var(--text-primary);
+}
+.lyric-template-save-btn--secondary:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.22);
+}
+.lyric-template-save-btn--primary {
+    background: linear-gradient(
+        165deg,
+        rgba(212, 175, 55, 0.28) 0%,
+        rgba(48, 40, 24, 0.92) 55%,
+        rgba(28, 24, 18, 0.96) 100%
+    );
+    border-color: rgba(212, 175, 55, 0.48);
+    color: #f8edd4;
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.08) inset;
+}
+.lyric-template-save-btn--primary:hover {
+    border-color: rgba(232, 205, 120, 0.6);
+    filter: brightness(1.05);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .lyric-template-save-btn:active {
+        transform: none;
+    }
 }
 
 .small-btn { width:100%; padding:8px; background:#2a2a3c; border:1px dashed #666; color:#ccc; border-radius:10px; cursor:pointer; margin-top:6px; transition:all 0.15s ease; }
@@ -6332,16 +6521,15 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
     cursor: inherit;
 }
 
-/* 页面画廊缩放：transform 加在 .layout-page-gallery-pages-scale-shell 上（见 app.js updateGalleryZoom），避免裁掉分区标题右侧页码 */
+/* 页面画廊缩放：由 #layout-page-gallery 上 --page-gallery-zoom 驱动网格列宽（见 app.js updateGalleryZoom），卡片随宽度换行 */
 .layout-page-gallery-pages-scale-shell {
     width: 100%;
     box-sizing: border-box;
-    transform-origin: top left;
-    transition: transform 0.15s ease;
     overflow: visible;
 }
 
 #layout-page-gallery {
+    --page-gallery-zoom: 1;
     display: flex !important;
     flex-wrap: wrap !important;
     gap: 8px !important;
@@ -6411,7 +6599,7 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
     box-sizing: border-box;
     aspect-ratio: 16 / 9;
     min-height: 112px;
-    max-height: min(34vh, 260px);
+    max-height: min(34vh, calc(260px * var(--page-gallery-zoom, 1)));
     height: auto !important;
     opacity: 1 !important;
     display: flex !important;
@@ -6624,7 +6812,10 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
 }
 .layout-page-gallery-pages {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr));
+    grid-template-columns: repeat(
+        auto-fill,
+        minmax(min(100%, calc(200px * var(--page-gallery-zoom, 1))), 1fr)
+    );
     gap: 12px;
     width: 100%;
     align-content: start;
@@ -6635,7 +6826,10 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
 }
 @media (min-width: 1200px) {
     .layout-page-gallery-pages {
-        grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
+        grid-template-columns: repeat(
+            auto-fill,
+            minmax(min(100%, calc(220px * var(--page-gallery-zoom, 1))), 1fr)
+        );
     }
 }
 @media (max-width: 360px) {
@@ -6651,7 +6845,7 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
     height: auto !important;
     aspect-ratio: 16 / 9;
     min-height: 120px !important;
-    max-height: min(34vh, 260px) !important;
+    max-height: min(34vh, calc(260px * var(--page-gallery-zoom, 1))) !important;
     flex-shrink: 0 !important;
     justify-content: flex-start !important;
 }

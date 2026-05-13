@@ -109,10 +109,16 @@
                 <div class="speaker-view-toolbar" role="toolbar" aria-label="页面画廊与页码">
                     <div class="speaker-view-toolbar-cluster">
                         <div class="speaker-view-label">页面画廊 · 分页卡片从左到右排列、自动换行（点击卡片；键盘 ← → / 空格）</div>
-                        <div class="editor-gallery-preface-actions" role="toolbar" aria-label="帮助与引导">
+                        <div class="editor-gallery-preface-actions" role="toolbar" aria-label="帮助与引导与画廊缩放">
                             <button type="button" id="help-btn" class="editor-action-bar-btn gallery-status-utility-btn" title="查看使用说明与快捷键"><span class="editor-action-bar-btn__icon" aria-hidden="true">❓</span><span class="editor-action-bar-btn__text">使用帮助</span></button>
                             <button type="button" id="pwa-install-btn" class="editor-action-bar-btn pwa-install-btn gallery-status-utility-btn" style="display:none" title="获取应用：与 Chrome「安装此站点」、手机应用商店「获取」步骤类似，无需单独下载 exe"><span class="editor-action-bar-btn__icon" aria-hidden="true">📲</span><span class="editor-action-bar-btn__text">安装App</span></button>
                             <button type="button" id="usage-guide-btn" class="editor-action-bar-btn gallery-status-utility-btn" title="再次查看箭头分步指引（编辑歌词 → 播放列表 → 页面画廊 → 同步投屏 → 开启投屏）"><span class="editor-action-bar-btn__icon" aria-hidden="true">🎯</span><span class="editor-action-bar-btn__text">使用引导</span></button>
+                            <div class="gallery-toolbar-zoom" role="group" aria-label="页面画廊缩放">
+                                <button type="button" id="gallery-zoom-out" class="gallery-toolbar-zoom-btn" title="缩小页面画廊">−</button>
+                                <span id="gallery-zoom-val" class="gallery-toolbar-zoom-val">100%</span>
+                                <button type="button" id="gallery-zoom-reset" class="gallery-toolbar-zoom-btn gallery-toolbar-zoom-btn--icon" title="重置为 100%">↺</button>
+                                <button type="button" id="gallery-zoom-in" class="gallery-toolbar-zoom-btn" title="放大页面画廊">+</button>
+                            </div>
                         </div>
                     </div>
                     <div class="speaker-view-page-meta">
@@ -131,6 +137,7 @@
                     </div>
                     <div id="gallery-status-utility-toolbar" class="gallery-status-utility-toolbar" style="display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:6px; flex:1 1 120px; min-width:0;">
                         <div id="upload-cloud-action-wrap" style="position:relative;display:inline-flex;align-items:center;gap:6px;flex-wrap:nowrap;">
+                            <button type="button" id="close-projection-display-btn" class="editor-action-bar-btn gallery-status-utility-btn" title="彻底关闭会众投屏窗口；再次开启投屏前会先关闭已有窗口，始终只保留一个"><span class="editor-action-bar-btn__icon" aria-hidden="true">📴</span><span class="editor-action-bar-btn__text">结束投屏</span></button>
                             <button type="button" id="upload-cloud-btn" class="editor-action-bar-btn gallery-status-utility-btn" title="将当前诗歌与高级编辑设置上传到云端，生成分享链接" disabled><span class="editor-action-bar-btn__icon" aria-hidden="true">☁️</span><span class="editor-action-bar-btn__text" id="upload-cloud-btn-label">分享云端</span></button>
                             <button type="button" id="upload-history-toggle-btn" class="editor-action-bar-btn gallery-status-utility-btn" title="查看最近 5 条上传记录" aria-expanded="false" aria-controls="upload-history-dropdown"><span class="editor-action-bar-btn__icon" aria-hidden="true">📋</span><span class="editor-action-bar-btn__text">上传历史</span></button>
                             <div id="upload-history-dropdown" role="region" aria-label="上传历史" hidden style="position:absolute;top:100%;right:0;left:auto;margin-top:6px;z-index:16000;padding:12px;border-radius:12px;border:1px solid rgba(212,175,55,0.28);background:rgba(14,16,24,0.94);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:0 12px 40px rgba(0,0,0,0.45);min-width:min(300px,88vw);max-width:min(400px,94vw);max-height:min(70vh,520px);overflow-y:auto;box-sizing:border-box;">
@@ -138,15 +145,9 @@
                             </div>
                         </div>
                     </div>
-                    <div class="gallery-status-bar__zoom" style="display:flex; align-items:center; gap:4px; flex-shrink:0;">
-                        <button type="button" id="gallery-zoom-out" style="width:26px; height:26px; border-radius:50%; border:1px solid rgba(255,255,255,0.3); background:rgba(255,255,255,0.08); color:#f5e6c8; font-size:16px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center;">−</button>
-                        <span id="gallery-zoom-val" style="min-width:38px; text-align:center; font-size:12px; color:rgba(255,255,255,0.7);">100%</span>
-                        <button type="button" id="gallery-zoom-reset" style="width:26px; height:26px; border-radius:50%; border:1px solid rgba(255,255,255,0.3); background:rgba(255,255,255,0.08); color:#f5e6c8; font-size:12px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center;">↺</button>
-                        <button type="button" id="gallery-zoom-in" style="width:26px; height:26px; border-radius:50%; border:1px solid rgba(255,255,255,0.3); background:rgba(255,255,255,0.08); color:#f5e6c8; font-size:16px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center;">+</button>
-                    </div>
                 </div>
                 <div id="gallery-wrapper" class="gallery-wrapper">
-                <div id="layout-page-gallery" class="layout-page-gallery--hero" aria-label="分页画廊" style="display:flex; flex-wrap:wrap; gap:8px; padding:10px 0; transform-origin:top left; transition:transform 0.15s ease;"></div>
+                <div id="layout-page-gallery" class="layout-page-gallery--hero" aria-label="分页画廊" style="display:flex; flex-wrap:wrap; gap:8px; padding:10px 0;"></div>
                 </div>
                 <div class="hint-text speaker-view-hint">当前诗歌由左侧播放列表顺序决定；投屏画面请用「投屏监视」小窗查看</div>
             </div>
@@ -308,8 +309,8 @@
                                     <label class="adv-drawer-field-label" for="font-family-selector">字体选择</label>
                                     <select id="font-family-selector" class="adv-font-family-select adv-font-family-select--lyrics" aria-label="歌词字体"></select>
                                     <p class="adv-font-license-hint" role="note">字体均采用开源免费商用授权，无版权风险</p>
-                                    <label class="adv-drawer-field-label" for="font-slider">字号 <span id="font-val" class="adv-font-val">56</span> px</label>
-                                    <input type="range" id="font-slider" class="adv-range" min="8" max="300" value="56" step="1">
+                                    <label class="adv-drawer-field-label" for="font-slider">字号 <span id="font-val" class="adv-font-val">60</span> px</label>
+                                    <input type="range" id="font-slider" class="adv-range" min="8" max="300" value="60" step="1">
                                     <label class="adv-font-mega-label"><input type="checkbox" id="font-mega-mode" aria-label="超大模式"> 超大模式（字号最高 500px）</label>
                                     <div id="adv-font-color-slot"></div>
                                     <label class="adv-drawer-field-label" for="text-stroke-slider">描边 <span id="text-stroke-val">0</span> px</label>

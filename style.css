@@ -1276,6 +1276,17 @@ body.online-search-overlay-open {
     line-height: 1.45;
 }
 
+/* 会众投屏页（?display=1）：#app 外的固定浮层一律隐藏，避免右下角监视窗/成功提示等叠在画面上 */
+body.worship-audience-projection #projection-preview-monitor,
+body.worship-audience-projection #corner-success-toast,
+body.worship-audience-projection #corner-cloud-upload-toast,
+body.worship-audience-projection #toast,
+body.worship-audience-projection #popup-blocked-banner {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+}
+
 /* 投屏窗口：自动全屏失败时的引导层与全屏状态提示 */
 .display-fs-guide-overlay {
     position: fixed;
@@ -1353,6 +1364,32 @@ body.online-search-overlay-open {
 }
 .display-fs-zone-fs {
     margin-bottom: 12px;
+}
+.display-fs-guide-step {
+    margin: 0 0 14px;
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: rgba(255, 223, 160, 0.95);
+    letter-spacing: 0.02em;
+    line-height: 1.4;
+}
+.display-fs-guide-next-btn {
+    display: block;
+    width: 100%;
+    margin: 0 0 12px;
+    padding: 10px 14px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    border-radius: 10px;
+    cursor: pointer;
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 248, 235, 0.96);
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    box-sizing: border-box;
+}
+.display-fs-guide-next-btn:hover {
+    background: rgba(255, 255, 255, 0.16);
+    border-color: rgba(255, 255, 255, 0.4);
 }
 .display-fs-zone-move {
     margin-bottom: 8px;
@@ -1627,6 +1664,49 @@ body.online-search-overlay-open {
     background: rgba(212, 175, 55, 0.22);
     color: #fff;
 }
+
+/* 页面画廊顶栏：缩放（与使用帮助 / 使用引导同一行，红框区域） */
+.editor-gallery-preface-actions .gallery-toolbar-zoom {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+    margin-left: 8px;
+    padding-left: 10px;
+    border-left: 1px solid rgba(255, 255, 255, 0.14);
+}
+.editor-gallery-preface-actions .gallery-toolbar-zoom-btn {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(236, 240, 252, 0.92);
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    box-sizing: border-box;
+    line-height: 1;
+}
+.editor-gallery-preface-actions .gallery-toolbar-zoom-btn--icon {
+    font-size: 12px;
+}
+.editor-gallery-preface-actions .gallery-toolbar-zoom-btn:hover {
+    background: rgba(255, 255, 255, 0.14);
+    border-color: rgba(255, 255, 255, 0.42);
+}
+.editor-gallery-preface-actions .gallery-toolbar-zoom-val {
+    min-width: 38px;
+    text-align: center;
+    font-size: 12px;
+    font-weight: 600;
+    color: rgba(220, 226, 245, 0.82);
+}
+
 #gallery-status-bar .cloud-upload-history-panel {
     left: auto;
     right: 0;
@@ -5988,10 +6068,13 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
     cursor: inherit;
 }
 
-/* 页面画廊整体缩放（与 JS transform: scale 配合，减轻缩放跳变） */
-#layout-page-gallery {
+/* 页面画廊缩放：transform 加在 .layout-page-gallery-pages-scale-shell 上（见 app.js updateGalleryZoom），避免裁掉分区标题右侧页码 */
+.layout-page-gallery-pages-scale-shell {
+    width: 100%;
+    box-sizing: border-box;
     transform-origin: top left;
     transition: transform 0.15s ease;
+    overflow: visible;
 }
 
 #layout-page-gallery {

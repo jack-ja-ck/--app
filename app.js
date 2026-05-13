@@ -940,9 +940,9 @@
         ui: {
             theme: "dark",
             fontFamily: "'Microsoft YaHei','PingFang SC',sans-serif",
-            fontSize: 56,
+            fontSize: 60,
             defaultLines: 4,
-            posY: 45,
+            posY: 40,
             bgType: "solid-black",
             bgImage: "",
             bgImageId: "",
@@ -1046,10 +1046,38 @@
         const valEl = $("gallery-zoom-val");
         galleryZoomLevel = clamp(Number(galleryZoomLevel) || 1, 0.5, 2);
         if (gal) {
-            gal.style.transformOrigin = "top left";
-            gal.style.transform = `scale(${galleryZoomLevel})`;
+            /* 缩放只作用在分页卡片容器上，避免整栏 scale 后被父级 overflow-x:hidden 裁掉右侧「x / n 共 n 页」 */
+            gal.style.transform = "";
+            gal.style.transformOrigin = "";
+            gal.querySelectorAll(".layout-page-gallery-pages-scale-shell").forEach((shell) => {
+                shell.style.transformOrigin = "top left";
+                shell.style.transform = `scale(${galleryZoomLevel})`;
+            });
         }
         if (valEl) valEl.textContent = `${Math.round(galleryZoomLevel * 100)}%`;
+        requestAnimationFrame(() => {
+            syncGalleryZoomShellVerticalGap();
+            requestAnimationFrame(syncGalleryZoomShellVerticalGap);
+        });
+    }
+
+    /**
+     * transform:scale 不改变布局高度，放大后卡片会盖住下一首分区标题；用 margin-bottom 补足 (zoom-1)*行高。
+     */
+    function syncGalleryZoomShellVerticalGap() {
+        const gal = $("layout-page-gallery");
+        if (!gal) return;
+        const z = clamp(Number(galleryZoomLevel) || 1, 0.5, 2);
+        gal.querySelectorAll(".layout-page-gallery-pages-scale-shell").forEach((shell) => {
+            const row = shell.querySelector(":scope > .layout-page-gallery-pages");
+            const h = row ? row.offsetHeight : 0;
+            if (z <= 1.001 || h <= 0) {
+                shell.style.marginBottom = "";
+                return;
+            }
+            const extra = Math.round(h * (z - 1)) + 6;
+            shell.style.marginBottom = `${extra}px`;
+        });
     }
 
     function getLyricFontSliderMax() {
@@ -1509,20 +1537,20 @@
 
     function lyricBlockTopPadPx(boxHeight, posY) {
         const h = Number(boxHeight) || 0;
-        const py = clamp(Number(posY) || 45, 20, 70);
+        const py = clamp(Number(posY) || 40, 20, 70);
         if (h <= 0) return 12;
         return Math.round(8 + ((py - 18) / 100) * h);
     }
 
     /** 与投屏监视 #monitor-lyric-layer、投屏 projection-lyric 一致：歌词层用 top 百分比（posY 20–70） */
     function effectiveGalleryPosYForSong(song) {
-        if (!song) return clamp(Number(state.ui.posY) || 45, 20, 70);
+        if (!song) return clamp(Number(state.ui.posY) || 40, 20, 70);
         const cur = currentSong();
         if (cur && String(cur.id) === String(song.id)) {
-            return clamp(Number(state.ui.posY) || 45, 20, 70);
+            return clamp(Number(state.ui.posY) || 40, 20, 70);
         }
         if (Number.isFinite(Number(song.posY))) return clamp(Number(song.posY), 20, 70);
-        return clamp(Number(defaultSongPosY) || 45, 20, 70);
+        return clamp(Number(defaultSongPosY) || 40, 20, 70);
     }
 
     let galleryPadRelayoutRaf = 0;
@@ -1552,7 +1580,10 @@
         if (!gal || galleryLayoutResizeObserver) return;
         if (typeof ResizeObserver !== "function") return;
         try {
-            galleryLayoutResizeObserver = new ResizeObserver(() => relayoutGalleryLyricVerticalPads());
+            galleryLayoutResizeObserver = new ResizeObserver(() => {
+                relayoutGalleryLyricVerticalPads();
+                syncGalleryZoomShellVerticalGap();
+            });
             galleryLayoutResizeObserver.observe(gal);
         } catch (_e) {
             galleryLayoutResizeObserver = null;
@@ -1569,6 +1600,7 @@
             if (!lyricAnim || !plSong) return;
             applyGalleryCardLyricVerticalLayout(card, lyricAnim, plSong);
         });
+        syncGalleryZoomShellVerticalGap();
     }
 
     function syncPosYFromCurrentSong() {
@@ -3215,6 +3247,54 @@
     }
     const splitPages = parsePages;
 
+    /**
+     * 粘贴较长歌词后：按每页最大行数略调字号，并把垂直位置设在「略偏上」（非画面正中央），
+     * 与迷你预览 padding、投屏 topPct、页面画廊同源。
+     */
+    function applyAutoLyricPresentationAfterPaste(lyricsPlain) {
+        const raw = String(lyricsPlain ?? "").trim();
+        const linesGuess = raw ? raw.split(/\n/).length : 0;
+        if (raw.length < 36 && linesGuess < 4) return;
+        const song = currentSong();
+        if (!song) return;
+        const dl = clamp(Number(state.ui.defaultLines) || 4, 1, 20);
+        let pages;
+        try {
+            pages = splitPages(raw, dl);
+        } catch (_e) {
+            return;
+        }
+        if (!Array.isArray(pages) || !pages.length) return;
+        let maxN = 1;
+        for (let i = 0; i < pages.length; i++) {
+            const pg = pages[i] || [];
+            const n = pg.filter((ln) => String(ln ?? "").trim().length > 0).length || 1;
+            maxN = Math.max(maxN, n);
+        }
+        const refLines = 4;
+        const denom = Math.min(Math.max(maxN, 1), 10);
+        const fsGuess = Math.round(56 * Math.sqrt(refLines / denom));
+        const nextFont = clampLyricFontSize(fsGuess);
+        /* posY 越大 → mini 预览 padding 越大（歌词越靠下）；略偏上则用 30–38 一带，并随满页行数略抬高 */
+        let posY = 35;
+        if (maxN >= dl) posY -= 6;
+        else if (maxN >= dl - 1) posY -= 3;
+        else if (maxN <= 2) posY += 3;
+        posY = clamp(posY, 24, 42);
+        state.ui.fontSize = nextFont;
+        state.ui.posY = posY;
+        song.posY = posY;
+        clearMiniPreviewLyricStageDragTransform();
+        updateUIFromState();
+        try {
+            saveSettings();
+            saveSongs();
+        } catch (_e) {
+            /* ignore */
+        }
+        updateAll();
+    }
+
     function currentSong() {
         return state.songs.find((s) => s.id === state.currentSongId) || state.songs[0] || null;
     }
@@ -3282,10 +3362,10 @@
     function applyAdvEditSettingsDefaultsToState() {
         state.ui.theme = "dark";
         state.ui.fontFamily = "'Microsoft YaHei','PingFang SC',sans-serif";
-        state.ui.fontSize = 56;
+        state.ui.fontSize = 60;
         state.ui.fontWeight = "700";
         state.ui.defaultLines = 4;
-        state.ui.posY = 45;
+        state.ui.posY = 40;
         state.ui.fontColor = "#ffffff";
         state.ui.textStrokePx = 0;
         state.ui.vignetteShape = "circle";
@@ -3300,10 +3380,10 @@
         state.ui.editorAutoFontSize = false;
         state.ui.editorAutoFontMinPx = 11;
         state.ui.editorAutoFontMaxPx = 20;
-        defaultSongPosY = 45;
+        defaultSongPosY = 40;
         const song = currentSong();
         if (song) {
-            song.posY = 45;
+            song.posY = 40;
             song.overlayOpacityPct = 30;
             song.fontOpacityPct = 100;
         }
@@ -4635,7 +4715,7 @@
             );
             if (Number(state.ui.fontSize) > 300) state.ui.fontMegaMode = true;
             const cap = state.ui.fontMegaMode ? 500 : 300;
-            state.ui.fontSize = clamp(Number(state.ui.fontSize) || 56, 8, cap);
+            state.ui.fontSize = clamp(Number(state.ui.fontSize) || 60, 8, cap);
         } else {
             state.currentSongId = state.songs[0].id;
         }
@@ -4650,7 +4730,7 @@
             state.playlist.activeIndex = clamp(Number(playlist.activeIndex) || 0, 0, Math.max(0, state.playlist.items.length - 1));
         }
         state.playlist.autoSwitch = false;
-        defaultSongPosY = clamp(Number(state.ui.posY) || 45, 20, 70);
+        defaultSongPosY = clamp(Number(state.ui.posY) || 40, 20, 70);
         const curSong = state.songs.find((s) => s.id === state.currentSongId);
         if (curSong) {
             const pc = splitPages(curSong.lyrics || "", state.ui.defaultLines);
@@ -5482,6 +5562,7 @@
             const plSong = state.songs.find((s) => String(s.id) === String(sid));
             if (!plSong) return false;
             if (!sec.querySelector(".gallery-song-section-page-meta")) return false;
+            if (!sec.querySelector(":scope > .layout-page-gallery-pages-scale-shell")) return false;
 
             const headTitle = sec.querySelector(".gallery-song-section-title");
             if (headTitle) headTitle.textContent = plSong.title || "未命名";
@@ -5503,7 +5584,10 @@
                 effStrip.bgType === "image" && effStrip.bgMediaType === "video" && !!effStrip.bgImage;
             const wantBgSig = pageGalleryBackgroundIdentityKey(effStrip);
 
-            const scrollRow = sec.querySelector(":scope > .layout-page-gallery-pages");
+            const zoomShell = sec.querySelector(":scope > .layout-page-gallery-pages-scale-shell");
+            const scrollRow = zoomShell
+                ? zoomShell.querySelector(":scope > .layout-page-gallery-pages")
+                : sec.querySelector(":scope > .layout-page-gallery-pages");
             if (!scrollRow) return false;
             const cards = scrollRow.querySelectorAll(":scope > .gallery-page-card[data-gallery-card]");
             if (cards.length !== pages.length) return false;
@@ -5732,6 +5816,9 @@
             head.appendChild(pageMeta);
             section.appendChild(head);
 
+            const zoomShell = document.createElement("div");
+            zoomShell.className = "layout-page-gallery-pages-scale-shell";
+
             const scrollRow = document.createElement("div");
             scrollRow.className = "layout-page-gallery-pages";
             scrollRow.setAttribute("role", "list");
@@ -5802,7 +5889,8 @@
                 scrollRow.appendChild(card);
             });
 
-            section.appendChild(scrollRow);
+            zoomShell.appendChild(scrollRow);
+            section.appendChild(zoomShell);
             gal.appendChild(section);
         });
 
@@ -7252,9 +7340,9 @@ ${deleteBtnHtml}
         if ($("font-slider")) {
             $("font-slider").min = "8";
             $("font-slider").max = String(fmax);
-            $("font-slider").value = String(clamp(Number(state.ui.fontSize) || 56, 8, fmax));
+            $("font-slider").value = String(clamp(Number(state.ui.fontSize) || 60, 8, fmax));
         }
-        state.ui.fontSize = clamp(Number(state.ui.fontSize) || 56, 8, fmax);
+        state.ui.fontSize = clamp(Number(state.ui.fontSize) || 60, 8, fmax);
         if ($("font-val")) $("font-val").textContent = String(state.ui.fontSize);
         if ($("default-lines-input")) $("default-lines-input").value = String(state.ui.defaultLines);
         if ($("pos-slider")) $("pos-slider").value = String(state.ui.posY);
@@ -7713,7 +7801,7 @@ ${deleteBtnHtml}
         const monFf = (t.fontFamily && String(t.fontFamily).trim()) || state.ui.fontFamily;
         lyr.style.fontFamily = monFf;
         /* 与 js/ui.js renderDisplayLyric 一致：全屏投屏上 clamp 为 24–160px */
-        lyr.style.fontSize = `${clamp(Number(t.fontSize) || 56, 24, 160)}px`;
+        lyr.style.fontSize = `${clamp(Number(t.fontSize) || 60, 24, 160)}px`;
         lyr.style.fontWeight =
             t.fontWeight != null && t.fontWeight !== ""
                 ? String(t.fontWeight)
@@ -8820,6 +8908,48 @@ ${deleteBtnHtml}
         }
     }
 
+    /**
+     * 通知所有会众投屏页自行关闭，并关闭主控台仍持有的窗口引用。
+     * 与固定 window.name 配合，保证再次「开启投屏」时不会残留后台窗口。
+     */
+    function purgeOrphanProjectionDisplayWindows() {
+        try {
+            if (channel) channel.postMessage({ type: "main_projection_end", source: "main" });
+        } catch (_e) {
+            /* ignore */
+        }
+        try {
+            const old = projectionDisplayWindowRef;
+            if (old && !old.closed) old.close();
+        } catch (_e2) {
+            /* ignore */
+        }
+        projectionDisplayWindowRef = null;
+    }
+
+    function closeProjectionDisplayWindow(opts) {
+        const silent = !!(opts && opts.silent);
+        purgeOrphanProjectionDisplayWindows();
+        try {
+            globalThis.__displayWindowOpened = false;
+        } catch (_e) {
+            /* ignore */
+        }
+        try {
+            updateGalleryStatusBar();
+        } catch (_e2) {
+            /* ignore */
+        }
+        hideRestoreProjectionBanner();
+        if (!silent) {
+            try {
+                showToast("已结束投屏", $("close-projection-display-btn") || $("open-display-btn"));
+            } catch (_e3) {
+                /* ignore */
+            }
+        }
+    }
+
     /** 主领「诗歌包」二维码：仅标题+歌词，离线可扫（手机主领页「诗歌」→ 粘贴导入） */
     const WORSHIP_QR_PACK_MAX_CHARS = 2400;
     /** 扫码打开链接总长度上限（含 #wp1=），兼顾常见二维码生成接口 */
@@ -9451,7 +9581,9 @@ ${deleteBtnHtml}
             window.setTimeout(applyPlacement, 100);
             window.setTimeout(applyPlacement, 380);
         }
-        if (!isDisplay && !isLeader) refocusMainWindowForOperator();
+        /** 会众投屏窗（display=1）保留焦点，便于副屏上 Alt+F4 / Ctrl+W 直接关闭，无需先点进窗口 */
+        const audienceProjectionUrl = /\bdisplay=1\b/.test(targetUrl);
+        if (!isDisplay && !isLeader && !audienceProjectionUrl) refocusMainWindowForOperator();
         return win;
     }
 
@@ -9477,6 +9609,8 @@ ${deleteBtnHtml}
             }
             return;
         }
+        /** 新开前：通知所有会众投屏页自行关闭并释放主控引用，避免多窗口残留后台；仍须与 window.open 同一次点击栈内完成 */
+        closeProjectionDisplayWindow({ silent: true });
         /** 先 window.open（须留在用户点击的同步栈内），再广播状态，避免 broadcastState 抛错或耗时导致弹窗被拦截 */
         const newWin = openDisplayOnSecondScreen(
             projectionEntryUrl("display"),
@@ -9506,6 +9640,7 @@ ${deleteBtnHtml}
     try {
         globalThis.__worshipOpenDisplayWindow = openDisplayWindow;
         globalThis.__worshipOpenLeaderWindow = openLeaderWindow;
+        globalThis.__worshipCloseProjectionDisplayWindow = closeProjectionDisplayWindow;
     } catch (_e) {
         /* ignore */
     }
@@ -10095,13 +10230,13 @@ ${deleteBtnHtml}
         on("online-search-input", "input", renderOnlineSearchResult);
 
         on("font-slider", "input", () => {
-            const v = clampLyricFontSize($("font-slider").value || 56);
+            const v = clampLyricFontSize($("font-slider").value || 60);
             if ($("font-val")) $("font-val").textContent = String(v);
             scheduleMiniSliderDomPreview(() => applyMiniPreviewFontSizePx(v));
             refreshMonitorContent({ fontSize: v });
         });
         on("font-slider", "change", () => {
-            state.ui.fontSize = clampLyricFontSize($("font-slider").value || 56);
+            state.ui.fontSize = clampLyricFontSize($("font-slider").value || 60);
             if ($("font-val")) $("font-val").textContent = String(state.ui.fontSize);
             saveSettings();
             updateAll();
@@ -10109,7 +10244,7 @@ ${deleteBtnHtml}
         on("font-mega-mode", "change", () => {
             state.ui.fontMegaMode = !!($("font-mega-mode") && $("font-mega-mode").checked);
             const mx = getLyricFontSliderMax();
-            state.ui.fontSize = clamp(Number(state.ui.fontSize) || 56, 8, mx);
+            state.ui.fontSize = clamp(Number(state.ui.fontSize) || 60, 8, mx);
             if ($("font-slider")) {
                 $("font-slider").max = String(mx);
                 $("font-slider").value = String(state.ui.fontSize);
@@ -10130,7 +10265,7 @@ ${deleteBtnHtml}
             updateAll();
         });
         on("pos-slider", "input", () => {
-            const v = clamp(Number($("pos-slider").value || 45), 20, 70);
+            const v = clamp(Number($("pos-slider").value || 40), 20, 70);
             if ($("pos-val")) $("pos-val").textContent = String(v);
             state.ui.posY = v;
             scheduleMiniSliderDomPreview(() => applyMiniPreviewPosDragTransform(v));
@@ -10138,7 +10273,7 @@ ${deleteBtnHtml}
             scheduleGalleryLyricPadRelayout();
         });
         on("pos-slider", "change", () => {
-            state.ui.posY = clamp(Number($("pos-slider").value || 45), 20, 70);
+            state.ui.posY = clamp(Number($("pos-slider").value || 40), 20, 70);
             if ($("pos-val")) $("pos-val").textContent = String(state.ui.posY);
             const song = currentSong();
             if (song) song.posY = state.ui.posY;
@@ -10295,6 +10430,7 @@ ${deleteBtnHtml}
         });
 
         on("open-display-btn", "click", openDisplayWindow);
+        on("close-projection-display-btn", "click", () => closeProjectionDisplayWindow());
         on("restore-projection-btn", "click", openDisplayWindow);
         on("restore-projection-dismiss", "click", hideRestoreProjectionBanner);
         on("restore-projection-overlay", "click", (e) => {
@@ -10339,6 +10475,7 @@ ${deleteBtnHtml}
                 }
             });
             ta.dispatchEvent(new Event("input", { bubbles: true }));
+            applyAutoLyricPresentationAfterPaste(ta.value);
         });
         on("editor-font-increase", "click", () => bumpLyricEditorUserFont(1));
         on("editor-font-decrease", "click", () => bumpLyricEditorUserFont(-1));
@@ -10745,12 +10882,15 @@ ${deleteBtnHtml}
             if (gifLayer) gifLayer.style.display = "none";
             if (projectionCanvas) projectionCanvas.style.display = "none";
             const want = String(bgState.imageData || "");
-            if (dispV.dataset.worshipBgUrl !== want) {
+            const srcChanged = dispV.dataset.worshipBgUrl !== want;
+            if (srcChanged) {
                 dispV.dataset.worshipBgUrl = want;
                 dispV.src = want;
             }
             dispV.style.opacity = "1";
-            void dispV.play().catch(() => {});
+            if (srcChanged || dispV.paused || dispV.ended) {
+                void dispV.play().catch(() => {});
+            }
             projectionLastTs = ts;
             projectionRaf = 0;
             return;
@@ -10877,9 +11017,9 @@ ${deleteBtnHtml}
             lightBg
         });
         layer.style.textAlign = "center";
-        layer.style.top = (t.topPct || 45) + "%";
+        layer.style.top = (t.topPct || 40) + "%";
         layer.style.fontFamily = t.fontFamily || state.ui.fontFamily;
-        layer.style.fontSize = clamp(Number(t.fontSize) || 56, 8, 500) + "px";
+        layer.style.fontSize = clamp(Number(t.fontSize) || 60, 8, 500) + "px";
         layer.style.fontWeight =
             t.fontWeight != null && t.fontWeight !== ""
                 ? String(t.fontWeight)
@@ -11031,6 +11171,11 @@ ${deleteBtnHtml}
            未来版本可考虑移除。
            ========================================================== */
         tryFreeLocalStorageForWorshipBoot();
+        try {
+            document.body.classList.add("worship-audience-projection");
+        } catch (_e) {
+            /* ignore */
+        }
         const pmHost = $("projection-preview-monitor");
         if (pmHost) pmHost.style.display = "none";
         projectionMode = "display";
@@ -11065,8 +11210,13 @@ ${deleteBtnHtml}
 
         function resetGuideIdleTimer() {
             clearGuideIdleTimer();
-            if (!fullscreenGuideOverlay || document.fullscreenElement) return;
-            displayGuideIdleTimer = window.setTimeout(() => removeFullscreenGuide(false), 10000);
+            if (!fullscreenGuideOverlay) return;
+            const mv = fullscreenGuideOverlay.querySelector("#display-fs-zone-move");
+            const step2Visible = mv && getComputedStyle(mv).display !== "none";
+            /** 第 1 步仅全屏说明时：已进入全屏则暂不自动关（等待第 2 步）；窗口模式照常计时 */
+            if (document.fullscreenElement && !step2Visible) return;
+            const ms = step2Visible ? 12000 : 10000;
+            displayGuideIdleTimer = window.setTimeout(() => removeFullscreenGuide(false), ms);
         }
 
         function captureGuideWindowBaseline() {
@@ -11086,12 +11236,39 @@ ${deleteBtnHtml}
 
         function maybeDismissGuideForWindowMove() {
             if (!fullscreenGuideOverlay || document.fullscreenElement || !guideWindowBaseline) return;
+            const mv = fullscreenGuideOverlay.querySelector("#display-fs-zone-move");
+            if (!mv || getComputedStyle(mv).display === "none") return;
             const cur = captureGuideWindowBaseline();
             const dl = Math.abs(cur.left - guideWindowBaseline.left);
             const dt = Math.abs(cur.top - guideWindowBaseline.top);
             if (dl > 72 || dt > 72) {
                 removeFullscreenGuide(true);
             }
+        }
+
+        /** 第 2 步：在已阅读全屏说明后，再展示「将窗口移到投影仪」快捷键（与专业投屏软件分步引导一致） */
+        function advanceProjectionGuideToStep2() {
+            if (!fullscreenGuideOverlay) return;
+            const mv = fullscreenGuideOverlay.querySelector("#display-fs-zone-move");
+            if (mv && getComputedStyle(mv).display !== "none") return;
+            const fs = fullscreenGuideOverlay.querySelector("#display-fs-zone-fs");
+            const step = fullscreenGuideOverlay.querySelector("#display-fs-guide-step-label");
+            const nextBtn = fullscreenGuideOverlay.querySelector("#display-fs-guide-next-btn");
+            const hLine = fullscreenGuideOverlay.querySelector("#display-fs-guide-h-shortcut");
+            const autoMsg = fullscreenGuideOverlay.querySelector("#display-fs-guide-auto-msg");
+            const isMac = isMacLikePlatform();
+            if (fs) fs.style.display = "none";
+            if (nextBtn) nextBtn.style.display = "none";
+            if (mv) mv.style.display = "block";
+            if (step) step.textContent = "第 2 / 2 步 · 将窗口移到投影仪屏幕";
+            if (hLine) hLine.style.display = "block";
+            if (autoMsg) {
+                autoMsg.textContent = isMac
+                    ? "（可用 Shift+Option+Command+方向键 移动窗口；12 秒内无操作将关闭本提示）"
+                    : "（可用 Win+Shift+方向键 将窗口移到另一块屏幕；12 秒内无操作将关闭本提示）";
+            }
+            if (!document.fullscreenElement) startGuideMovePoll();
+            resetGuideIdleTimer();
         }
 
         function startGuideMovePoll() {
@@ -11198,16 +11375,18 @@ ${deleteBtnHtml}
                     : "或按 Win+Shift+→ 移到投影仪";
                 overlay.innerHTML = `
                 <div class="display-fs-guide-panel">
+                    <p id="display-fs-guide-step-label" class="display-fs-guide-step">第 1 / 2 步 · 请先全屏放映</p>
                     <div id="display-fs-zone-fs" class="display-fs-zone-fs">
                         <button type="button" id="display-fs-guide-fs-btn" class="display-fs-guide-big-btn">📺 点击此处全屏</button>
                         <p class="display-fs-guide-sub">${escapeHtml(fsHint)}</p>
                         <p class="display-fs-guide-note">因浏览器安全策略暂不支持一键自动投屏，敬请谅解</p>
                     </div>
-                    <div id="display-fs-zone-move" class="display-fs-zone-move">
+                    <button type="button" id="display-fs-guide-next-btn" class="display-fs-guide-next-btn">下一步：移到投影仪</button>
+                    <div id="display-fs-zone-move" class="display-fs-zone-move" style="display:none;">
                         <p class="display-fs-guide-sub">${escapeHtml(moveHint)}</p>
                     </div>
-                    <p id="display-fs-guide-auto-msg" class="display-fs-guide-timer">（10 秒内无投屏相关操作将自动关闭）</p>
-                    <p class="display-fs-guide-timer" style="margin-top:10px;opacity:.88;">按 H 键打开 Windows / macOS 快捷键一览</p>
+                    <p id="display-fs-guide-auto-msg" class="display-fs-guide-timer">（第 1 步：请先全屏；10 秒内无操作将自动关闭）</p>
+                    <p id="display-fs-guide-h-shortcut" class="display-fs-guide-timer" style="display:none;margin-top:10px;opacity:.88;">按 H 键打开 Windows / macOS 快捷键一览</p>
                 </div>`;
             }
 
@@ -11233,7 +11412,10 @@ ${deleteBtnHtml}
                         /* ignore */
                     }
                 });
-                startGuideMovePoll();
+                overlay.querySelector("#display-fs-guide-next-btn")?.addEventListener("click", (e) => {
+                    e.preventDefault();
+                    advanceProjectionGuideToStep2();
+                });
             } else {
                 stopGuideMovePoll();
             }
@@ -11245,9 +11427,8 @@ ${deleteBtnHtml}
             () => {
                 if (document.fullscreenElement) {
                     displayHadFullscreenSession = true;
-                    removeFullscreenGuide(true);
                     hideFullscreenGuideFsZone();
-                    resetGuideIdleTimer();
+                    advanceProjectionGuideToStep2();
                     if (channel) channel.postMessage({ type: "projection_fs_active", source: "display" });
                 } else if (displayHadFullscreenSession) {
                     if (channel) channel.postMessage({ type: "projection_attention", reason: "fs_exit", source: "display" });
@@ -11386,9 +11567,15 @@ ${deleteBtnHtml}
                     const dispV = $("display-video-bg");
                     if (dispV && bg.imageData) {
                         const want = String(bg.imageData);
-                        dispV.dataset.worshipBgUrl = want;
-                        dispV.src = want;
-                        void dispV.play().catch(() => {});
+                        const srcChanged = dispV.dataset.worshipBgUrl !== want;
+                        if (srcChanged) {
+                            dispV.dataset.worshipBgUrl = want;
+                            dispV.src = want;
+                        }
+                        dispV.style.opacity = "1";
+                        if (srcChanged || dispV.paused || dispV.ended) {
+                            void dispV.play().catch(() => {});
+                        }
                     }
                 } else {
                     requestAnimationFrame(() => {
@@ -11454,6 +11641,14 @@ ${deleteBtnHtml}
         if (channel) {
             channel.onmessage = (e) => {
                 const d = e.data;
+                if (d && d.type === "main_projection_end" && d.source === "main") {
+                    try {
+                        window.close();
+                    } catch (_e) {
+                        /* ignore */
+                    }
+                    return;
+                }
                 if (d && d.type === "projection_console_ready" && d.source === "main") {
                     removeFullscreenGuide(true);
                     return;
@@ -11471,6 +11666,7 @@ ${deleteBtnHtml}
             }
         });
         window.addEventListener("resize", () => {
+            if (projectionDisplayIsVideoBackground()) return;
             restartBg();
         });
 
@@ -13039,6 +13235,9 @@ ${deleteBtnHtml}
                 channel.onmessage = (e) => {
                     const d = e.data;
                     if (!d || typeof d !== "object") return;
+                    if (d.type === "main_projection_end" && d.source === "main") {
+                        return;
+                    }
                     if (d.type === "projection_fs_active" && d.source === "display") {
                         hideRestoreProjectionBanner();
                         return;

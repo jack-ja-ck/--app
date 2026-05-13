@@ -861,12 +861,15 @@ globalThis.drawBg = function (ts) {
         if (gifLayer) gifLayer.style.display = "none";
         if (globalThis.projectionCanvas) globalThis.projectionCanvas.style.display = "none";
         const want = String(bgState.imageData || "");
-        if (dispV.dataset.worshipBgUrl !== want) {
+        const srcChanged = dispV.dataset.worshipBgUrl !== want;
+        if (srcChanged) {
             dispV.dataset.worshipBgUrl = want;
             dispV.src = want;
         }
         dispV.style.opacity = "1";
-        void dispV.play().catch(() => {});
+        if (srcChanged || dispV.paused || dispV.ended) {
+            void dispV.play().catch(() => {});
+        }
         globalThis.projectionLastTs = ts;
         globalThis.projectionRaf = 0;
         return;
@@ -945,6 +948,22 @@ globalThis.drawBg = function (ts) {
 
 };
 globalThis.restartBg = function () {
+    try {
+        const ls = globalThis.liveState;
+        if (projectionDisplayIsVideoBackground(ls)) {
+            const dispV = document.getElementById("display-video-bg");
+            const want = String(ls.background?.imageData || "").trim();
+            if (dispV && want && dispV.dataset.worshipBgUrl === want) {
+                if (globalThis.projectionRaf) cancelAnimationFrame(globalThis.projectionRaf);
+                globalThis.projectionRaf = 0;
+                dispV.style.opacity = "1";
+                void dispV.play().catch(() => {});
+                return;
+            }
+        }
+    } catch (_e) {
+        /* ignore */
+    }
     if (globalThis.projectionRaf) cancelAnimationFrame(globalThis.projectionRaf);
     globalThis.projectionRaf = requestAnimationFrame(globalThis.drawBg);
 
@@ -983,24 +1002,38 @@ globalThis.applyLive = function (mode, payload) {
     }
     if (!payload || !payload.pages) return;
     const prev = globalThis.liveState;
-    globalThis.liveState = payload;
+    const m0 = mode || globalThis.projectionMode || "display";
+    let next = payload;
+    const incomingBg = payload.background;
+    if (
+        prev &&
+        m0 === "display" &&
+        projectionDisplayIsVideoBackground(prev) &&
+        (!incomingBg || !String(incomingBg.imageData || "").trim())
+    ) {
+        next = { ...payload, background: prev.background };
+    }
+    globalThis.liveState = next;
     const m = mode || globalThis.projectionMode;
     if (m === "display") {
         const prevIdx = Number(prev?.pageIndex) || 0;
-        const newIdx = Number(payload.pageIndex) || 0;
-        const sameSong = !!prev && String(prev.songId || "") === String(payload.songId || "");
+        const newIdx = Number(next.pageIndex) || 0;
+        const sameSong = !!prev && String(prev.songId || "") === String(next.songId || "");
         const navChanged = !!prev && (!sameSong || prevIdx !== newIdx);
         const trans =
             typeof globalThis.__worshipCanonicalPageTransition === "function"
-                ? globalThis.__worshipCanonicalPageTransition(payload.pageTransition || "none")
+                ? globalThis.__worshipCanonicalPageTransition(next.pageTransition || "none")
                 : "none";
-        const dur = globalThis.clamp(Number(payload.pageTransitionSpeed ?? 0.6), 0.3, 1.5);
+        const dur = globalThis.clamp(Number(next.pageTransitionSpeed ?? 0.6), 0.3, 1.5);
+        /** 视频背景与 <video> 同屏时，翻页 CSS 过渡易与解码/合成抢线程，出现短暂黑屏或卡顿；仅歌词瞬时替换 */
+        const videoBg = projectionDisplayIsVideoBackground(next);
         const doAnim =
             navChanged &&
-            !payload.playlistFade &&
+            !videoBg &&
+            !next.playlistFade &&
             trans !== "none" &&
             typeof globalThis.__worshipRunDisplayPageTransitionThenRender === "function";
-        const fontOpForAnim = globalThis.clamp(Number(payload.fontOpacityPct ?? 100), 20, 100);
+        const fontOpForAnim = globalThis.clamp(Number(next.fontOpacityPct ?? 100), 20, 100);
         if (doAnim) {
             globalThis.__worshipRunDisplayPageTransitionThenRender(trans, dur, (o) => globalThis.renderDisplayLyric(o), fontOpForAnim);
         } else {
@@ -1033,11 +1066,15 @@ globalThis.renderDisplayLyric = function (opts) {
     layer.style.fontWeight =
         t.fontWeight != null && t.fontWeight !== "" ? String(t.fontWeight) : "700";
     layer.style.color = fontColor;
+    const skipMid = !!(opts && opts.pageTransitionMidSwap);
     if (inner) {
         layer.style.opacity = "1";
         layer.style.transition = "";
+        if (!skipMid) {
+            inner.style.transition = "";
+            inner.style.transform = "";
+        }
     }
-    const skipMid = !!(opts && opts.pageTransitionMidSwap);
     const applyFade = !!globalThis.liveState.playlistFade && !skipMid;
     target.style.transition = "opacity 300ms ease";
     if (applyFade) target.style.opacity = "0";
@@ -1126,9 +1163,16 @@ globalThis.installProjectionUI = function (mode) {
         displayVid.setAttribute("playsinline", "");
         displayVid.playsInline = true;
         displayVid.setAttribute("autoplay", "");
+        displayVid.preload = "auto";
+        try {
+            displayVid.disablePictureInPicture = true;
+        } catch (_e) {
+            /* ignore */
+        }
         displayVid.style.cssText =
             "position:fixed;top:0;left:0;width:100%;height:100%;object-fit:cover;z-index:0;" +
-            "pointer-events:none;opacity:0;display:block;";
+            "pointer-events:none;opacity:0;display:block;" +
+            "transform:translateZ(0);backface-visibility:hidden;-webkit-backface-visibility:hidden;";
         host.appendChild(displayVid);
     }
 
@@ -1191,6 +1235,16 @@ function initDisplayMode() {
     const audienceDisplay =
         typeof location !== "undefined" &&
         new URLSearchParams(location.search || "").get("display") === "1";
+
+    if (audienceDisplay) {
+        try {
+            document.body.classList.add("worship-audience-projection");
+        } catch (_e) {
+            /* ignore */
+        }
+        const pmMon = document.getElementById("projection-preview-monitor");
+        if (pmMon) pmMon.style.display = "none";
+    }
 
     globalThis.installProjectionUI("display");
     if (audienceDisplay) {
@@ -1493,6 +1547,14 @@ function initDisplayMode() {
     if (globalThis.__projectionChannel) {
         globalThis.__projectionChannel.onmessage = (e) => {
             const d = e.data;
+            if (d && d.type === "main_projection_end" && d.source === "main") {
+                try {
+                    window.close();
+                } catch (_e) {
+                    /* ignore */
+                }
+                return;
+            }
             if (d && d.type === "update" && d.payload && d.payload.pages) {
                 globalThis.applyLive("display", d.payload);
             }
@@ -1504,6 +1566,10 @@ function initDisplayMode() {
         if (e.key === "worship.live.v5" && e.newValue) globalThis.applyLive("display", globalThis.parseJSON(e.newValue, null));
     });
     window.addEventListener("resize", () => {
+        if (projectionDisplayIsVideoBackground(globalThis.liveState)) {
+            globalThis.updateDisplayCardPreview();
+            return;
+        }
         globalThis.restartBg();
         globalThis.updateDisplayCardPreview();
     });

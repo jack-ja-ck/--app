@@ -274,7 +274,11 @@ globalThis.renderDisplayLyric = function () {
     const applyFade = !!globalThis.liveState.playlistFade;
     layer.style.transition = "opacity 300ms ease";
     if (applyFade) layer.style.opacity = "0";
-    layer.innerHTML = lines.map((line) => `<div>${globalThis.escapeHtml(line)}</div>`).join("");
+    const buildRow =
+        typeof globalThis.buildLyricRowHtmlForProjectionLine === "function"
+            ? globalThis.buildLyricRowHtmlForProjectionLine
+            : (line) => `<div>${globalThis.escapeHtml(line)}</div>`;
+    layer.innerHTML = lines.map((line) => buildRow(line, "", undefined)).join("");
     if (applyFade) requestAnimationFrame(() => { layer.style.opacity = "1"; });
     globalThis.updateDisplayCardPreview();
 
@@ -295,10 +299,14 @@ globalThis.renderLeaderLyric = function () {
     const applyFade = !!globalThis.liveState.playlistFade;
     layer.style.transition = "opacity 300ms ease";
     if (applyFade) layer.style.opacity = "0";
+    const fmtLine =
+        typeof globalThis.formatLyricLineForCompactPreview === "function"
+            ? globalThis.formatLyricLineForCompactPreview
+            : (ln) => String(ln ?? "");
     layer.innerHTML = [
         `<div style="position:absolute;top:-90px;right:0;font-size:16px;opacity:.9;">第 ${idx + 1}/${Math.max(1, pages.length)} 页</div>`,
-        `<div style="line-height:1.35;margin-bottom:20px;">${current.map((x) => globalThis.escapeHtml(x)).join("<br>") || "..."}</div>`,
-        `<div style="font-size:22px;opacity:.75;">下页：${next.length ? next.map((x) => globalThis.escapeHtml(x)).join(" / ") : "（无）"}</div>`
+        `<div style="line-height:1.35;margin-bottom:20px;">${current.map((x) => globalThis.escapeHtml(fmtLine(x))).join("<br>") || "..."}</div>`,
+        `<div style="font-size:22px;opacity:.75;">下页：${next.length ? next.map((x) => globalThis.escapeHtml(fmtLine(x))).join(" / ") : "（无）"}</div>`
     ].join("");
     if (applyFade) requestAnimationFrame(() => { layer.style.opacity = "1"; });
 
@@ -314,8 +322,12 @@ globalThis.updateDisplayCardPreview = function () {
         const card = document.createElement("div");
         card.className = "display-mini-card" + (i === globalThis.liveState.pageIndex ? " active" : "");
         card.style.setProperty("--cards-per-row", String(cardsPerRow));
-        const l1 = lines?.[0] || "";
-        const l2 = lines?.[1] || "";
+        const fmt =
+            typeof globalThis.formatLyricLineForCompactPreview === "function"
+                ? globalThis.formatLyricLineForCompactPreview
+                : (ln) => String(ln ?? "");
+        const l1 = fmt(lines?.[0] || "");
+        const l2 = fmt(lines?.[1] || "");
         card.innerHTML = `<div style="font-weight:700;white-space:normal;">${globalThis.escapeHtml(l1)}</div><div style="opacity:.75;margin-top:4px;white-space:normal;">${globalThis.escapeHtml(l2)}</div>`;
         card.addEventListener("click", () => {
             if (globalThis.__projectionChannel) globalThis.__projectionChannel.postMessage({ type: "goto", page: i });

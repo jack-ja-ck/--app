@@ -751,10 +751,22 @@ body[data-theme-custom-bg="1"] #editor-area {
 .song-delete-btn--pending {
     opacity: 1 !important;
     pointer-events: auto !important;
-    color: #ffc8c8 !important;
-    font-size: 0.7rem !important;
+    min-width: 5.5em;
+    padding: 5px 12px !important;
+    border-radius: 999px !important;
+    font-size: 0.72rem !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.02em;
     white-space: nowrap;
-    min-width: 4.5em;
+    color: #fff0f0 !important;
+    background: linear-gradient(165deg, rgba(200, 72, 72, 0.55) 0%, rgba(130, 36, 44, 0.65) 100%) !important;
+    border: 1px solid rgba(255, 170, 170, 0.45) !important;
+    box-shadow:
+        0 2px 10px rgba(0, 0, 0, 0.35),
+        0 0 0 1px rgba(0, 0, 0, 0.15) inset;
+}
+.song-delete-btn--pending:hover {
+    filter: brightness(1.06);
 }
 
 .library-search-wrap { position:relative; flex-shrink:0; }
@@ -4216,71 +4228,109 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
 
 /* 「我的背景」删除确认浮层 */
 .lyric-bg-delete-popover {
-    position:absolute;
-    left:50%;
-    bottom:calc(100% + 6px);
-    transform:translateX(-50%);
-    z-index:20;
-    min-width:min(168px, 44vw);
-    padding:12px;
-    box-sizing:border-box;
-    border-radius:10px;
-    background:rgba(20,20,30,0.9);
-    border:1px solid rgba(255,255,255,0.1);
-    box-shadow:0 8px 24px rgba(0,0,0,0.45);
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + 8px);
+    transform: translateX(-50%);
+    z-index: 20;
+    min-width: min(188px, 46vw);
+    padding: 14px 14px 12px;
+    box-sizing: border-box;
+    border-radius: 14px;
+    background: rgba(22, 24, 34, 0.92);
+    -webkit-backdrop-filter: blur(12px) saturate(1.2);
+    backdrop-filter: blur(12px) saturate(1.2);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow:
+        0 12px 36px rgba(0, 0, 0, 0.55),
+        0 0 0 1px rgba(0, 0, 0, 0.2) inset;
+}
+.lyric-bg-delete-popover::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: -6px;
+    transform: translateX(-50%) rotate(45deg);
+    width: 12px;
+    height: 12px;
+    background: rgba(22, 24, 34, 0.92);
+    border-right: 1px solid rgba(255, 255, 255, 0.1);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    box-sizing: border-box;
 }
 .lyric-bg-delete-popover-text {
-    margin:0 0 10px;
-    font-size:0.85rem;
-    color:#fff;
-    line-height:1.4;
-    text-align:center;
+    margin: 0 0 12px;
+    font-size: 0.86rem;
+    font-weight: 600;
+    color: #f4f4f8;
+    line-height: 1.45;
+    text-align: center;
 }
 .lyric-bg-delete-popover-actions {
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    gap:12px;
-    flex-wrap:wrap;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    flex-wrap: wrap;
 }
 .lyric-bg-delete-popover-confirm,
 .lyric-bg-delete-popover-cancel {
-    padding:0;
-    border:none;
-    background:transparent;
-    font-size:0.82rem;
-    font-weight:600;
-    cursor:pointer;
-    transition:opacity 0.15s ease;
+    min-width: 4.5em;
+    padding: 7px 14px;
+    border-radius: 10px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition:
+        transform 0.12s ease,
+        box-shadow 0.15s ease,
+        opacity 0.15s ease;
 }
 .lyric-bg-delete-popover-confirm {
-    color:#ff8a80;
+    color: #fff;
+    border: 1px solid rgba(255, 120, 120, 0.45);
+    background: linear-gradient(165deg, rgba(220, 80, 80, 0.85) 0%, rgba(160, 40, 48, 0.92) 100%);
+    box-shadow: 0 2px 8px rgba(80, 0, 0, 0.35);
 }
 .lyric-bg-delete-popover-cancel {
-    color:rgba(255,255,255,0.72);
+    color: rgba(235, 238, 250, 0.92);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.08);
 }
-.lyric-bg-delete-popover-confirm:hover { opacity:0.88; }
-.lyric-bg-delete-popover-cancel:hover { opacity:1; }
+.lyric-bg-delete-popover-confirm:hover {
+    opacity: 0.93;
+    transform: translateY(-1px);
+}
+.lyric-bg-delete-popover-cancel:hover {
+    background: rgba(255, 255, 255, 0.14);
+    opacity: 1;
+}
 
 /* 删除成功气泡 + 消散 */
 #my-backgrounds-container .lyric-bg-thumb-wrap--deleting {
     pointer-events:none;
 }
 .lyric-bg-delete-success-bubble {
-    position:absolute;
-    left:50%;
-    top:50%;
-    transform:translate(-50%, -50%);
-    z-index:6;
-    padding:6px 12px;
-    border-radius:8px;
-    font-size:0.72rem;
-    color:#fff;
-    background:rgba(20,20,30,0.88);
-    border:1px solid rgba(255,255,255,0.1);
-    white-space:nowrap;
-    pointer-events:none;
-    animation:lyric-bg-success-bubble-fade 1.5s ease forwards;
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 6;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    border-radius: 12px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: #e8fff3;
+    white-space: nowrap;
+    pointer-events: none;
+    border: 1px solid rgba(120, 200, 150, 0.4);
+    background: linear-gradient(145deg, rgba(28, 88, 62, 0.92) 0%, rgba(18, 48, 38, 0.9) 100%);
+    box-shadow: 0 6px 20px rgba(0, 20, 12, 0.45);
+    animation: lyric-bg-success-bubble-fade 1.5s ease forwards;
 }
 @keyframes lyric-bg-success-bubble-fade {
     0%, 72% { opacity:1; }
@@ -4454,6 +4504,40 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
     display: block;
 }
 
+/* 高级编辑：字号 / 垂直位置滑杆参考金线 */
+.adv-range-tick-wrap {
+    position: relative;
+    margin-top: 2px;
+}
+.adv-range-tick-bar {
+    position: relative;
+    height: 5px;
+    margin: 0 1px 6px 0;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.07);
+    pointer-events: none;
+}
+.adv-range-tick-wrap > .adv-range {
+    width: 100%;
+    display: block;
+}
+.adv-range-tick-mark {
+    position: absolute;
+    bottom: -1px;
+    width: 2px;
+    height: 11px;
+    border-radius: 1px;
+    transform: translateX(-50%);
+    background: linear-gradient(180deg, rgba(244, 214, 130, 0.95) 0%, rgba(212, 175, 55, 0.78) 100%);
+    box-shadow: 0 0 8px rgba(212, 175, 55, 0.38);
+}
+.adv-range-ticks-caption {
+    margin: 2px 0 6px;
+    font-size: 0.68rem;
+    line-height: 1.38;
+    color: rgba(200, 206, 218, 0.62);
+}
+
 .adv-font-mega-label {
     display: flex;
     align-items: center;
@@ -4566,12 +4650,108 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
     box-shadow:0 0 0 3px rgba(74,111,165,0.2);
 }
 .setting-tip { margin-top:6px; color:var(--text-secondary); font-size:0.78rem; line-height:1.4; }
-#toast { position:fixed; bottom:30px; left:50%; transform:translateX(-50%); background:rgba(35,35,40,0.92); color:#fff; padding:8px 16px; border-radius:24px; z-index:22550; opacity:0; transition:opacity 0.3s ease; font-size:0.72rem; line-height:1.35; max-width:min(280px,calc(100vw - 24px)); box-shadow:0 2px 12px rgba(0,0,0,0.25); pointer-events:none; word-break:break-word; }
+
+/* ========== 全局轻提示 Toast（#toast，由 js/utils.js 填充结构） ========== */
+#toast.toast {
+    position: fixed;
+    z-index: 22550;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    max-width: min(340px, calc(100vw - 24px));
+    padding: 11px 16px 11px 12px;
+    box-sizing: border-box;
+    border-radius: 14px;
+    font-size: 0.82rem;
+    font-weight: 500;
+    line-height: 1.45;
+    letter-spacing: 0.01em;
+    color: #f4f5f8;
+    pointer-events: none;
+    word-break: break-word;
+    opacity: 0;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(28, 30, 42, 0.88);
+    -webkit-backdrop-filter: blur(14px) saturate(1.35);
+    backdrop-filter: blur(14px) saturate(1.35);
+    box-shadow:
+        0 4px 24px rgba(0, 0, 0, 0.45),
+        0 0 0 1px rgba(0, 0, 0, 0.2) inset,
+        0 1px 0 rgba(255, 255, 255, 0.06) inset;
+    transition:
+        opacity 0.28s cubic-bezier(0.33, 1, 0.68, 1),
+        transform 0.28s cubic-bezier(0.33, 1, 0.68, 1),
+        box-shadow 0.2s ease;
+}
+#toast.toast .toast__icon {
+    flex-shrink: 0;
+    width: 30px;
+    height: 30px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.78rem;
+    font-weight: 800;
+    line-height: 1;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    color: rgba(255, 255, 255, 0.92);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+#toast.toast .toast__msg {
+    flex: 1;
+    min-width: 0;
+}
+#toast.toast--default .toast__icon {
+    background: rgba(120, 132, 168, 0.35);
+    border-color: rgba(160, 175, 220, 0.35);
+    color: #e8ecff;
+}
 #toast.toast--success {
-    background:rgba(22, 72, 54, 0.94);
-    color:#e8fff0;
-    border:1px solid rgba(120, 200, 150, 0.45);
-    box-shadow:0 4px 18px rgba(0, 0, 0, 0.28);
+    color: #e8fff3;
+    border-color: rgba(100, 200, 150, 0.42);
+    background: linear-gradient(145deg, rgba(24, 68, 52, 0.94) 0%, rgba(18, 42, 36, 0.92) 100%);
+    box-shadow:
+        0 6px 28px rgba(0, 24, 16, 0.55),
+        0 0 0 1px rgba(120, 210, 160, 0.12) inset;
+}
+#toast.toast--success .toast__icon {
+    background: linear-gradient(160deg, rgba(90, 200, 130, 0.55) 0%, rgba(40, 140, 95, 0.5) 100%);
+    border-color: rgba(160, 235, 190, 0.45);
+    color: #fff;
+}
+#toast.toast--warning {
+    color: #fff8e8;
+    border-color: rgba(230, 180, 90, 0.45);
+    background: linear-gradient(145deg, rgba(72, 52, 22, 0.94) 0%, rgba(42, 32, 18, 0.93) 100%);
+    box-shadow:
+        0 6px 28px rgba(40, 24, 0, 0.5),
+        0 0 0 1px rgba(255, 200, 100, 0.1) inset;
+}
+#toast.toast--warning .toast__icon {
+    background: linear-gradient(160deg, rgba(255, 190, 80, 0.55) 0%, rgba(200, 120, 30, 0.45) 100%);
+    border-color: rgba(255, 220, 140, 0.5);
+    color: #1a1408;
+}
+#toast.toast--error {
+    color: #ffeef0;
+    border-color: rgba(230, 100, 100, 0.45);
+    background: linear-gradient(145deg, rgba(72, 28, 32, 0.95) 0%, rgba(38, 16, 22, 0.94) 100%);
+    box-shadow:
+        0 6px 28px rgba(32, 0, 8, 0.55),
+        0 0 0 1px rgba(255, 120, 120, 0.08) inset;
+}
+#toast.toast--error .toast__icon {
+    background: linear-gradient(160deg, rgba(255, 120, 120, 0.5) 0%, rgba(180, 50, 60, 0.5) 100%);
+    border-color: rgba(255, 180, 180, 0.45);
+    color: #fff;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    #toast.toast {
+        transition: opacity 0.18s ease;
+    }
 }
 
 /* 主站欢迎提示（全屏透明命中层 + 可点提示框；不拦截页面其余操作） */
@@ -5747,9 +5927,9 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
     }
     
     /* Toast不被遮挡 */
-    #toast {
-        bottom:80px;
-        max-width:90vw;
+    #toast.toast {
+        bottom: 80px;
+        max-width: 90vw;
     }
     
     /* 主领视图移动端优化 */
@@ -5981,16 +6161,56 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
 #monitor-header {
     flex: 0 0 auto;
     user-select: none;
-    padding: 8px 12px;
+    padding: 8px 10px 8px 12px;
     font-size: 0.88rem;
     font-weight: 700;
     letter-spacing: 0.02em;
-    cursor: move;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     background: rgba(0, 0, 0, 0.25);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    box-sizing: border-box;
+}
+
+.monitor-header-title {
+    flex: 1 1 auto;
+    min-width: 0;
+    cursor: move;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+.monitor-collapse-btn {
+    flex: 0 0 auto;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    margin: 0;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.75rem;
+    line-height: 1;
+    color: inherit;
+    background: rgba(255, 255, 255, 0.1);
+    transition: background 0.15s ease;
+}
+
+.monitor-collapse-btn:hover {
+    background: rgba(255, 255, 255, 0.16);
+}
+
+#projection-preview-monitor.is-monitor-collapsed #monitor-content,
+#projection-preview-monitor.is-monitor-collapsed #monitor-resize-handle {
+    display: none !important;
+}
+
+#projection-preview-monitor.is-monitor-collapsed {
+    width: auto !important;
+    min-width: 0;
+    max-width: min(92vw, 360px);
 }
 
 #monitor-content {
@@ -6050,6 +6270,25 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
 #monitor-lyric-layer .monitor-lyric-line {
     margin: 0;
     padding: 0;
+}
+
+/* 同一显示行多段横向排列（歌词中用 || 分隔），投屏/监视/迷你预览/画廊共用 */
+.lyric-row--hseg {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: baseline;
+    gap: 0.55em 1.1em;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.lyric-seg {
+    flex: 0 1 auto;
+    max-width: 100%;
+    text-align: center;
+    white-space: normal;
+    word-break: break-word;
 }
 
 #monitor-lyric-anim {
@@ -6170,7 +6409,7 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
     max-width: 100%;
     min-width: 0;
     box-sizing: border-box;
-    aspect-ratio: 8 / 5;
+    aspect-ratio: 16 / 9;
     min-height: 112px;
     max-height: min(34vh, 260px);
     height: auto !important;
@@ -6216,6 +6455,12 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
     text-align: center;
     width: 100%;
     box-sizing: border-box;
+}
+
+#layout-page-gallery .gallery-page-card .gallery-card-line.lyric-row--hseg {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
 }
 
 /* 画廊在 #speaker-view 中：横向换行展示分页卡片，高度随内容增高（不在画廊内纵向滚动） */
@@ -6404,7 +6649,7 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
     max-width: none !important;
     align-self: stretch !important;
     height: auto !important;
-    aspect-ratio: 8 / 5;
+    aspect-ratio: 16 / 9;
     min-height: 120px !important;
     max-height: min(34vh, 260px) !important;
     flex-shrink: 0 !important;
@@ -6416,9 +6661,7 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
     overflow: visible !important;
     text-overflow: unset !important;
     max-width: 100%;
-    /* 缩略图字号固定，不受高级编辑「字体大小」影响；颜色/描边/透明度/字重由 JS 与投屏监视同源 */
-    font-size: clamp(11px, 0.55vw + 10px, 15px) !important;
-    line-height: 1.45 !important;
+    /* 字号/行距/描边由 JS 按 1920 投屏画布比例缩放，与投屏监视一致 */
 }
 #layout-page-gallery .card,
 #layout-page-gallery > div[style*="width:152px"] {

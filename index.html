@@ -159,7 +159,7 @@
                     <div class="first-visit-onboarding-inner">
                         <p class="first-visit-onboarding-title">欢迎使用</p>
                         <ol class="first-visit-onboarding-steps">
-                            <li><span class="first-visit-step-emoji" aria-hidden="true">📝</span> 展开中间「编辑歌词」，在歌名与底部按钮之间的大编辑区填写并粘贴歌词（空行或 <code>[page]</code> 分段）；点「保存」写入左侧诗歌库。</li>
+                            <li><span class="first-visit-step-emoji" aria-hidden="true">📝</span> 展开中间「编辑歌词」，在歌名与底部按钮之间的大编辑区填写并粘贴歌词（空行或 <code>[page]</code> 分段；<strong>同一行多段</strong>用 <code>||</code> 分隔，投屏与预览中会横向排列）；点「保存」写入左侧诗歌库。</li>
                             <li><span class="first-visit-step-emoji" aria-hidden="true">📋</span> 在左侧把诗歌「+」进播放列表，点「▶ 开始播放」；用中间页面画廊的分页卡片预览翻页。</li>
                             <li><span class="first-visit-step-emoji" aria-hidden="true">📺</span> 点「应用到演示屏」后，在右侧「开启投屏」放映；需要说明时点页面画廊旁的「使用帮助」。</li>
                         </ol>
@@ -211,7 +211,7 @@
                     <button type="button" id="ocr-btn" class="editor-action-bar-btn" title="从照片识别歌词"><span class="editor-action-bar-btn__icon" aria-hidden="true">📷</span><span class="editor-action-bar-btn__text">拍照识歌词</span></button>
                     <input type="file" id="ocr-file-input" accept="image/*" capture="environment" hidden>
                 </div>
-                <textarea id="lyric-editor-large" placeholder="在此粘贴歌词，一行一句，用空行分段"></textarea>
+                <textarea id="lyric-editor-large" placeholder="一行一句；空行或 [page] 分段。同一行多段横向排：用 || 分隔，如：患难中的安慰||黑暗中的盼望"></textarea>
                 <p class="editor-lyrics-drawer-hint">一行一句；空行或 <code>[page]</code> 分段；正文居中显示。粘贴时会自动去掉行尾与文末多余空格。展开后编辑区会<b>浮在页面画廊之上</b>；将鼠标移到<b>窗口最顶边</b>出现高亮条时，按住向上拖可拉高（不挤压画廊布局）。</p>
             </div>
         </details>
@@ -310,7 +310,11 @@
                                     <select id="font-family-selector" class="adv-font-family-select adv-font-family-select--lyrics" aria-label="歌词字体"></select>
                                     <p class="adv-font-license-hint" role="note">字体均采用开源免费商用授权，无版权风险</p>
                                     <label class="adv-drawer-field-label" for="font-slider">字号 <span id="font-val" class="adv-font-val">60</span> px</label>
-                                    <input type="range" id="font-slider" class="adv-range" min="8" max="300" value="60" step="1">
+                                    <div class="adv-range-tick-wrap">
+                                        <div class="adv-range-tick-bar" id="font-slider-tick-bar" aria-hidden="true"></div>
+                                        <input type="range" id="font-slider" class="adv-range" min="8" max="300" value="60" step="1">
+                                    </div>
+                                    <p class="adv-range-ticks-caption">滑轨上金线为常用参考字号（约 60 / 88 / 120 px，随「超大模式」量程变化）</p>
                                     <label class="adv-font-mega-label"><input type="checkbox" id="font-mega-mode" aria-label="超大模式"> 超大模式（字号最高 500px）</label>
                                     <div id="adv-font-color-slot"></div>
                                     <label class="adv-drawer-field-label" for="text-stroke-slider">描边 <span id="text-stroke-val">0</span> px</label>
@@ -376,7 +380,11 @@
                             <div class="adv-drawer-acc-panel">
                                 <div class="adv-drawer-acc-panel-inner adv-drawer-card-body">
                                     <label class="adv-drawer-field-label" for="pos-slider">垂直位置 <span id="pos-val">45</span> %</label>
-                                    <input type="range" id="pos-slider" class="adv-range" min="20" max="70" value="45">
+                                    <div class="adv-range-tick-wrap">
+                                        <div class="adv-range-tick-bar" id="pos-slider-tick-bar" aria-hidden="true"></div>
+                                        <input type="range" id="pos-slider" class="adv-range" min="20" max="70" value="45">
+                                    </div>
+                                    <p class="adv-range-ticks-caption">金线示常见舒适区（约 40% / 45%，依幕布与机位微调）</p>
                                     <label class="adv-drawer-field-label" for="adv-preview-line-height">行间距</label>
                                     <input type="range" id="adv-preview-line-height" class="adv-range" min="1.2" max="2.4" value="1.65" step="0.05">
                                     <label class="adv-drawer-field-label" for="default-lines-input">默认行数（分页）</label>
@@ -424,7 +432,7 @@
         <div class="bg-hover-preview-inner" id="bg-hover-preview-inner"></div>
     </div>
 </div>
-<div id="toast"></div>
+<div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 <!-- 已保存歌单列表（加载 / 删除） -->
 <div id="setlist-modal" class="setlist-modal" hidden aria-hidden="true">
     <div class="setlist-modal__backdrop" id="setlist-modal-backdrop"></div>
@@ -821,7 +829,10 @@
 </script>
 
 <div id="projection-preview-monitor" style="position:fixed;bottom:20px;right:100px;width:280px;height:auto;z-index:999;">
-    <div id="monitor-header">👁️ 投屏监视</div>
+    <div id="monitor-header">
+        <span class="monitor-header-title">👁️ 投屏监视</span>
+        <button type="button" id="monitor-collapse-btn" class="monitor-collapse-btn" aria-expanded="true" aria-controls="monitor-content" title="收起或展开预览">▾</button>
+    </div>
     <div id="monitor-content"></div>
     <div id="monitor-resize-handle" aria-hidden="true"></div>
 </div>

@@ -911,6 +911,9 @@
     const ONLINE_HYMN_SEARCH_WORKER_URL = "https://holy-snow-ebc5.cuirenjie123456789.workers.dev";
     let onlineHymnSearchDebounceTimer = 0;
     let onlineHymnSearchAbort = null;
+    /** 诗歌库两个搜索框：获焦时各提示一次（失焦后重置），避免与 input 重复刷屏 */
+    let librarySearchScopeHintShownForFocus = false;
+    let onlineSearchNotReadyHintShownForFocus = false;
 
     let cloudUploadInFlight = false;
     let cloudUploadToastShowTimer = 0;
@@ -1091,6 +1094,71 @@
         return clamp(base, 8, getLyricFontSliderMax());
     }
 
+    /** 与投屏监视、高级编辑「行间距」滑块同源，保证监视窗与真实投屏行距一致 */
+    function getAdvPreviewLineHeightNumber() {
+        try {
+            const lhRaw = getComputedStyle(document.documentElement).getPropertyValue("--adv-preview-line-height");
+            return Math.max(1.05, Math.min(3, parseFloat(lhRaw) || 1.65));
+        } catch (_e) {
+            return 1.65;
+        }
+    }
+
+    /** 歌词垂直位置（%），与 buildLiveState.text.topPct / 滑杆 20–70 一致 */
+    function projectionTextTopPctFromLive(t) {
+        const v =
+            t != null && t.topPct != null && String(t.topPct) !== "" && Number.isFinite(Number(t.topPct))
+                ? Number(t.topPct)
+                : Number(state.ui.posY);
+        return clamp(Number.isFinite(v) ? v : 40, 20, 70);
+    }
+
+    /** 高级编辑字号 / 垂直位置滑杆上的参考金线（随超大模式 max 更新） */
+    function syncAdvSliderRecommendedTicks() {
+        const fontIn = $("font-slider");
+        const fontBar = $("font-slider-tick-bar");
+        if (fontIn && fontBar) {
+            const min = Number(fontIn.min) || 8;
+            const max = Number(fontIn.max) || 300;
+            const span = Math.max(1e-6, max - min);
+            const pct = (v) => `${clamp(((Number(v) - min) / span) * 100, 0, 100)}%`;
+            const marks = [60, 88, 120].filter((v) => v >= min && v <= max);
+            fontBar.replaceChildren();
+            marks.forEach((v) => {
+                const m = document.createElement("span");
+                m.className = "adv-range-tick-mark";
+                m.style.left = pct(v);
+                m.title = `常用参考约 ${v} px`;
+                fontBar.appendChild(m);
+            });
+        }
+        const posIn = $("pos-slider");
+        const posBar = $("pos-slider-tick-bar");
+        if (posIn && posBar) {
+            const min = Number(posIn.min) || 20;
+            const max = Number(posIn.max) || 70;
+            const span = Math.max(1e-6, max - min);
+            const pct = (v) => `${clamp(((Number(v) - min) / span) * 100, 0, 100)}%`;
+            posBar.replaceChildren();
+            [40, 45].forEach((v) => {
+                const m = document.createElement("span");
+                m.className = "adv-range-tick-mark";
+                m.style.left = pct(v);
+                m.title = `常用参考约 ${v}%`;
+                posBar.appendChild(m);
+            });
+        }
+    }
+
+    try {
+        globalThis.getAdvPreviewLineHeightNumber = getAdvPreviewLineHeightNumber;
+        globalThis.projectionTextTopPctFromLive = projectionTextTopPctFromLive;
+        globalThis.clampLyricFontSize = clampLyricFontSize;
+        globalThis.syncAdvSliderRecommendedTicks = syncAdvSliderRecommendedTicks;
+    } catch (_e) {
+        /* ignore */
+    }
+
     /** 与高级编辑「翻页动画」option value 一致；投屏与 liveState 同步使用 */
     const PAGE_TRANSITION_IDS = [
         "none",
@@ -1156,18 +1224,53 @@
         const fw = fwRaw == null || fwRaw === "" ? "700" : String(fwRaw);
         row.style.fontWeight = /^(400|normal)$/i.test(fw) ? "400" : fw;
         row.style.fontFamily = u.fontFamily || state.ui.fontFamily;
-        row.style.color = u.lightBg ? "#111" : (u.fontColor || state.ui.fontColor || "#ffffff");
+        /** 与 renderDisplayLyric / refreshMonitorContent 一致：填色用 fontColor；纯白底时 text.color 仅为对比参考，不覆盖用户字色 */
+        const root = String(u.fontColor ?? state.ui.fontColor ?? "#ffffff").trim() || "#ffffff";
+        const tContr = u.lightBg ? "#111" : root;
+        const displayColor = root || tContr || "#ffffff";
+        const strokeLightBg = displayColor === "#111" || tContr === "#111";
+        row.style.color = displayColor;
         row.style.opacity = String(fontOp);
         const sp = clamp(Number(u.textStrokePx ?? 0), 0, 6);
         if (sp > 0) {
             const w = Math.min(sp, 2.5);
-            const tcol = u.lightBg ? "rgba(0,0,0,0.4)" : "rgba(0,0,0,0.62)";
+            const tcol = strokeLightBg ? "rgba(0,0,0,0.4)" : "rgba(0,0,0,0.62)";
             row.style.webkitTextStroke = `${w}px ${tcol}`;
             row.style.paintOrder = "stroke fill";
         } else {
             row.style.webkitTextStroke = "";
             row.style.paintOrder = "";
         }
+    }
+
+    /** 将一行歌词写入预览行 DOM：同一行内用「||」分隔多段时横向排列（.lyric-row--hseg） */
+    function populateLyricRowElement(rowEl, line, ctx) {
+        if (!rowEl) return;
+        rowEl.replaceChildren();
+        rowEl.classList.remove("lyric-row--hseg");
+        const splitFn =
+            typeof globalThis.splitLyricRowIntoDisplaySegments === "function"
+                ? globalThis.splitLyricRowIntoDisplaySegments
+                : function (ln) {
+                      const s = String(ln ?? "");
+                      if (!s.includes("||")) return [s];
+                      const p = s.split(/\s*\|\|\s*/).map((x) => x.trim()).filter(Boolean);
+                      return p.length ? p : [s];
+                  };
+        const segs = splitFn(line);
+        if (segs.length <= 1) {
+            rowEl.textContent = segs[0] != null ? String(segs[0]) : String(line ?? "");
+            applyTypographyToPreviewRow(rowEl, ctx);
+            return;
+        }
+        rowEl.classList.add("lyric-row--hseg");
+        segs.forEach((seg) => {
+            const spn = document.createElement("span");
+            spn.className = "lyric-seg";
+            spn.textContent = String(seg);
+            applyTypographyToPreviewRow(spn, ctx);
+            rowEl.appendChild(spn);
+        });
     }
 
     function ensureMiniPreviewVignetteLayer(mini) {
@@ -1409,7 +1512,7 @@
     }
 
     /** 迷你预览：入场（新歌词已挂载后调用） */
-    function runMiniPageTransitionEnter(el, trans, durSec, fontOpacityPct) {
+    function runMiniPageTransitionEnter(el, trans, durSec, fontOpacityPct, endTransform) {
         const fontOp = clamp(Number(fontOpacityPct ?? 100), 20, 100) / 100;
         const dur = clamp(Number(durSec), 0.3, 1.5);
         const ease = "cubic-bezier(0.4, 0, 0.2, 1)";
@@ -1417,18 +1520,22 @@
         if (!el || t === "none") return;
         const in0 = pageTransitionEnterStartPreset(t);
         if (!in0) return;
+        const endT = endTransform != null && String(endTransform).trim() ? String(endTransform).trim() : "";
+        const extra = in0.transform && String(in0.transform).trim() ? String(in0.transform).trim() : "";
+        /** 页面画廊歌词与 #monitor-lyric-layer 一致：top% 表示垂直中心，需保留 translateY(-50%) 与入场位移的合成 */
+        const startTf = endT ? (extra ? `${endT} ${extra}` : endT) : extra;
         el.style.transition = "none";
-        el.style.transform = in0.transform;
+        el.style.transform = startTf || "";
         el.style.opacity = in0.opacity;
         requestAnimationFrame(() => {
             el.style.transition = `opacity ${dur}s ${ease}, transform ${dur}s ${ease}`;
             el.style.opacity = String(fontOp);
-            el.style.transform = "";
+            el.style.transform = endT || "";
         });
         window.setTimeout(() => {
             if (!el || !el.isConnected) return;
             el.style.opacity = String(fontOp);
-            el.style.transform = "";
+            el.style.transform = endT || "";
         }, Math.round(dur * 1000) + 120);
     }
 
@@ -1518,6 +1625,9 @@
         const fs = Math.round(Math.min(140, clampLyricFontSize(fontSize) * 0.42));
         $("mini-preview")?.querySelectorAll(".preview-line").forEach((row) => {
             row.style.fontSize = fs + "px";
+            row.querySelectorAll(".lyric-seg").forEach((s) => {
+                s.style.fontSize = fs + "px";
+            });
         });
     }
 
@@ -1542,7 +1652,7 @@
         return Math.round(8 + ((py - 18) / 100) * h);
     }
 
-    /** 与投屏监视 #monitor-lyric-layer、投屏 projection-lyric 一致：歌词层用 top 百分比（posY 20–70） */
+    /** 与投屏监视 #monitor-lyric-layer、投屏 projection-lyric 一致：top% 为歌词块垂直中心（配合 translateY(-50%)） */
     function effectiveGalleryPosYForSong(song) {
         if (!song) return clamp(Number(state.ui.posY) || 40, 20, 70);
         const cur = currentSong();
@@ -1562,14 +1672,15 @@
         });
     }
 
-    /** 页面画廊缩略图：垂直位置与投屏监视同源（top 百分比），字号仍由 CSS 固定 */
+    /** 页面画廊缩略图：与 #monitor-lyric-layer 相同语义 — top% 为歌词块垂直中心（translateY(-50%)），左右 4% 与投屏一致 */
     function applyGalleryCardLyricVerticalLayout(card, lyricAnim, song) {
         if (!card || !lyricAnim) return;
         const py = effectiveGalleryPosYForSong(song);
         const topPct = clamp(Number(py), 0, 100);
         lyricAnim.style.cssText =
-            "position:absolute;left:0;right:0;width:100%;z-index:2;" +
+            "position:absolute;left:4%;right:4%;width:auto;z-index:2;" +
             `top:${topPct}%;` +
+            "transform:translateY(-50%);" +
             "box-sizing:border-box;padding:0 0 8px 0;" +
             "transform-origin:center center;display:flex;flex-direction:column;align-items:center;";
     }
@@ -1590,6 +1701,49 @@
         }
     }
 
+    /**
+     * 画廊卡片内歌词：按卡片相对 1920 投屏画布的宽度比例设置 px 字号与描边，使与投屏监视内 scale(1920) 的视觉比例一致。
+     */
+    function syncGalleryCardLyricFontsToProjectionScale() {
+        const gal = document.getElementById("layout-page-gallery");
+        if (!gal) return;
+        const refW = 1920;
+        const band = 0.92;
+        const lh = getAdvPreviewLineHeightNumber();
+        const baseFs = clampLyricFontSize(state.ui.fontSize);
+        const spRaw = clamp(Number(state.ui.textStrokePx ?? 0), 0, 6);
+        gal.querySelectorAll(".gallery-page-card[data-gallery-card]").forEach((card) => {
+            const sid = card.getAttribute("data-song-id");
+            const plSong = state.songs.find((s) => String(s.id) === String(sid || ""));
+            if (!plSong) return;
+            const wTotal = Math.max(1, card.getBoundingClientRect().width);
+            const scale = (wTotal * band) / refW;
+            const fsPx = Math.max(5, Math.round(baseFs * scale));
+            const lightBg = effectiveSongBackground(plSong).bgType === "solid-white";
+            const root = String(state.ui.fontColor ?? "#ffffff").trim() || "#ffffff";
+            const tContr = lightBg ? "#111" : root;
+            const displayColor = root || tContr || "#ffffff";
+            const strokeLightBg = displayColor === "#111" || tContr === "#111";
+            const tcol = strokeLightBg ? "rgba(0,0,0,0.4)" : "rgba(0,0,0,0.62)";
+            const applyScaledTypography = (row) => {
+                row.style.fontSize = `${fsPx}px`;
+                row.style.lineHeight = String(lh);
+                if (spRaw > 0) {
+                    const w = Math.min(spRaw, 2.5) * scale;
+                    row.style.webkitTextStroke = `${w}px ${tcol}`;
+                    row.style.paintOrder = "stroke fill";
+                } else {
+                    row.style.webkitTextStroke = "";
+                    row.style.paintOrder = "";
+                }
+            };
+            card.querySelectorAll(".gallery-card-line").forEach((row) => {
+                applyScaledTypography(row);
+                row.querySelectorAll(".lyric-seg").forEach(applyScaledTypography);
+            });
+        });
+    }
+
     function relayoutGalleryLyricVerticalPads() {
         const gal = document.getElementById("layout-page-gallery");
         if (!gal) return;
@@ -1600,6 +1754,7 @@
             if (!lyricAnim || !plSong) return;
             applyGalleryCardLyricVerticalLayout(card, lyricAnim, plSong);
         });
+        syncGalleryCardLyricFontsToProjectionScale();
         syncGalleryZoomShellVerticalGap();
     }
 
@@ -5185,8 +5340,7 @@
                         const pl = pages[idx] || [];
                         const rows = card.querySelectorAll(".card-line");
                         rows.forEach((row, i) => {
-                            row.textContent = pl[i] || "";
-                            applyTypographyToPreviewRow(row, {
+                            populateLyricRowElement(row, pl[i] || "", {
                                 fontFamily: state.ui.fontFamily,
                                 fontColor: state.ui.fontColor,
                                 fontOpacityPct: state.ui.fontOpacityPct,
@@ -5247,8 +5401,7 @@
                 row.style.lineHeight = "1.5";
                 row.style.position = "relative";
                 row.style.zIndex = "2";
-                row.textContent = line;
-                applyTypographyToPreviewRow(row, {
+                populateLyricRowElement(row, line, {
                     fontFamily: state.ui.fontFamily,
                     fontColor: state.ui.fontColor,
                     fontOpacityPct: state.ui.fontOpacityPct,
@@ -5454,7 +5607,7 @@
             (String(prevP) !== String(idx) || String(prevS || "") !== curSid);
         if (shouldAnim) {
             const active = gal.querySelector(".gallery-page-card.is-active .gallery-card-lyric-anim");
-            if (active) runMiniPageTransitionEnter(active, trans, dur, state.ui.fontOpacityPct);
+            if (active) runMiniPageTransitionEnter(active, trans, dur, state.ui.fontOpacityPct, "translateY(-50%)");
         }
         gal.dataset.galLyricLastPage = String(idx);
         gal.dataset.galLyricLastSongId = curSid;
@@ -5598,11 +5751,9 @@
                 lineList.forEach((l) => {
                     const row = document.createElement("div");
                     row.className = "gallery-card-line";
-                    row.style.lineHeight = "1.45";
                     row.style.position = "relative";
                     row.style.zIndex = "2";
-                    row.textContent = l;
-                    applyTypographyToPreviewRow(row, {
+                    populateLyricRowElement(row, l, {
                         fontFamily: state.ui.fontFamily,
                         fontColor: state.ui.fontColor,
                         fontOpacityPct: state.ui.fontOpacityPct,
@@ -5827,11 +5978,9 @@
                 lineList.forEach((l) => {
                     const row = document.createElement("div");
                     row.className = "gallery-card-line";
-                    row.style.lineHeight = "1.45";
                     row.style.position = "relative";
                     row.style.zIndex = "2";
-                    row.textContent = l;
-                    applyTypographyToPreviewRow(row, {
+                    populateLyricRowElement(row, l, {
                         fontFamily: state.ui.fontFamily,
                         fontColor: state.ui.fontColor,
                         fontOpacityPct: state.ui.fontOpacityPct,
@@ -6570,8 +6719,7 @@ ${deleteBtnHtml}
                     Math.round(Math.min(140, clampLyricFontSize(state.ui.fontSize) * 0.42)) + "px";
                 row.style.position = "relative";
                 row.style.zIndex = "3";
-                row.textContent = line;
-                applyTypographyToPreviewRow(row, {
+                populateLyricRowElement(row, line, {
                     fontFamily: state.ui.fontFamily,
                     fontColor: state.ui.fontColor,
                     fontOpacityPct: state.ui.fontOpacityPct,
@@ -6668,8 +6816,7 @@ ${deleteBtnHtml}
                 Math.round(Math.min(140, clampLyricFontSize(state.ui.fontSize) * 0.42)) + "px";
             row.style.position = "relative";
             row.style.zIndex = "3";
-            row.textContent = line;
-            applyTypographyToPreviewRow(row, {
+            populateLyricRowElement(row, line, {
                 fontFamily: state.ui.fontFamily,
                 fontColor: state.ui.fontColor,
                 fontOpacityPct: state.ui.fontOpacityPct,
@@ -7209,7 +7356,33 @@ ${deleteBtnHtml}
             if (target?.parentElement) target.parentElement.insertBefore(group, target);
             else panel.appendChild(group);
         }
-        const colors = ["#ffffff", "#d9d9d9", "#ffd700", "#b8f5b8", "#ffc0cb"];
+        const colors = [
+            "#ffffff",
+            "#f5f5f5",
+            "#e8e8e8",
+            "#d9d9d9",
+            "#111111",
+            "#fff8e7",
+            "#ffe4b5",
+            "#ffd54f",
+            "#ffd700",
+            "#d4af37",
+            "#ffb74d",
+            "#ff8a65",
+            "#ffab91",
+            "#ffc0cb",
+            "#f48fb1",
+            "#e1bee7",
+            "#ce93d8",
+            "#b39ddb",
+            "#90caf9",
+            "#80deea",
+            "#80cbc4",
+            "#a5d6a7",
+            "#c5e1a5",
+            "#e6ee9c",
+            "#fff59d"
+        ];
         const chips = $("font-color-chips");
         colors.forEach((c) => {
             const chip = document.createElement("button");
@@ -7406,6 +7579,7 @@ ${deleteBtnHtml}
             /* ignore */
         }
         scheduleFitLyricEditorFont();
+        syncAdvSliderRecommendedTicks();
     }
 
     const ADV_ACC_STORAGE_KEY = "adv-drawer-accordion-v1";
@@ -7592,7 +7766,8 @@ ${deleteBtnHtml}
     }
 
     const MONITOR_RECT_LS_KEY = "worship_projection_preview_monitor_rect_v1";
-    /** 监视窗按此画布铺版再整体缩放，使 px 字号与全屏投屏上的视觉比例一致（页面画廊不参与） */
+    const MONITOR_COLLAPSED_LS_KEY = "worship_projection_preview_monitor_collapsed_v1";
+    /** 监视窗按此画布铺版再整体缩放，使 px 字号与全屏投屏上的视觉比例一致；页面画廊卡片歌词按同一 1920 参考宽度比例缩放 */
     const MONITOR_STAGE_REF_W = 1920;
     const MONITOR_STAGE_REF_H = 1080;
     const MONITOR_CONTENT_ASPECT = MONITOR_STAGE_REF_W / MONITOR_STAGE_REF_H;
@@ -7603,6 +7778,12 @@ ${deleteBtnHtml}
      */
     function normalizeProjectionMonitorFrame(el, reqTotalW, reqTotalH) {
         if (!el) return;
+        if (el.classList.contains("is-monitor-collapsed")) {
+            el.style.width = "auto";
+            el.style.height = "auto";
+            el.style.maxHeight = "";
+            return;
+        }
         const header = el.querySelector("#monitor-header") || $("monitor-header");
         const hh = header ? header.offsetHeight : 40;
         const minContentW = 160;
@@ -7627,6 +7808,8 @@ ${deleteBtnHtml}
 
     function layoutMonitorPreviewScale() {
         if (isDisplay || isLeader) return;
+        const host = $("projection-preview-monitor");
+        if (host && host.classList.contains("is-monitor-collapsed")) return;
         const content = $("monitor-content");
         const stage = $("monitor-preview-stage");
         if (!content || !stage) return;
@@ -7635,6 +7818,61 @@ ${deleteBtnHtml}
         /** 内容区为 16:9；用 min 吸收取整误差，避免画布超出产生裁切闪烁 */
         const s = Math.min(cw / MONITOR_STAGE_REF_W, ch / MONITOR_STAGE_REF_H);
         stage.style.transform = `scale(${s})`;
+    }
+
+    function setProjectionMonitorCollapsedUi(el, collapsed) {
+        if (!el) return;
+        const btn = $("monitor-collapse-btn");
+        el.classList.toggle("is-monitor-collapsed", !!collapsed);
+        if (btn) {
+            btn.setAttribute("aria-expanded", collapsed ? "false" : "true");
+            btn.textContent = collapsed ? "▸" : "▾";
+        }
+        try {
+            localStorage.setItem(MONITOR_COLLAPSED_LS_KEY, collapsed ? "1" : "0");
+        } catch (_) {
+            /* ignore */
+        }
+        if (collapsed) {
+            el.style.width = "auto";
+            el.style.height = "auto";
+            el.style.maxHeight = "";
+        }
+    }
+
+    function collapseProjectionMonitorFromUi() {
+        const el = $("projection-preview-monitor");
+        if (!el || el.classList.contains("is-monitor-collapsed")) return;
+        persistProjectionMonitorRect();
+        setProjectionMonitorCollapsedUi(el, true);
+    }
+
+    function expandProjectionMonitorFromUi() {
+        const el = $("projection-preview-monitor");
+        if (!el || !el.classList.contains("is-monitor-collapsed")) return;
+        setProjectionMonitorCollapsedUi(el, false);
+        let w = 280;
+        let h = 220;
+        try {
+            const raw = localStorage.getItem(MONITOR_RECT_LS_KEY);
+            const o = raw ? JSON.parse(raw) : null;
+            if (o && typeof o === "object") {
+                if (Number.isFinite(Number(o.width))) w = Number(o.width);
+                if (Number.isFinite(Number(o.height))) h = Number(o.height);
+            }
+        } catch (_) {
+            /* ignore */
+        }
+        normalizeProjectionMonitorFrame(el, w, h);
+        layoutMonitorPreviewScale();
+        refreshMonitorContent();
+    }
+
+    function toggleProjectionMonitorCollapsed() {
+        const el = $("projection-preview-monitor");
+        if (!el) return;
+        if (el.classList.contains("is-monitor-collapsed")) expandProjectionMonitorFromUi();
+        else collapseProjectionMonitorFromUi();
     }
 
     function mergeMonitorProjectionSnapshot(overrides, baseSnap) {
@@ -7717,11 +7955,7 @@ ${deleteBtnHtml}
             textStrokePx: t.strokePx,
             lightBg
         });
-        const lhRaw =
-            typeof getComputedStyle === "function"
-                ? getComputedStyle(document.documentElement).getPropertyValue("--adv-preview-line-height")
-                : "";
-        const lh = Math.max(1.05, Math.min(3, parseFloat(lhRaw) || 1.65));
+        const lh = getAdvPreviewLineHeightNumber();
 
         const { bgEl, videoEl, mask, vig, lyr } = ensureMonitorPreviewLayers(content);
         if (!bgEl || !videoEl || !mask || !vig || !lyr) return;
@@ -7783,11 +8017,10 @@ ${deleteBtnHtml}
 
         applyRadialVignetteToLayer(vig, snap);
 
-        lyr.style.top = `${t.topPct != null ? clamp(Number(t.topPct), 0, 100) : 45}%`;
+        lyr.style.top = `${projectionTextTopPctFromLive(t)}%`;
         const monFf = (t.fontFamily && String(t.fontFamily).trim()) || state.ui.fontFamily;
         lyr.style.fontFamily = monFf;
-        /* 与 js/ui.js renderDisplayLyric 一致：全屏投屏上 clamp 为 24–160px */
-        lyr.style.fontSize = `${clamp(Number(t.fontSize) || 60, 24, 160)}px`;
+        lyr.style.fontSize = `${clampLyricFontSize(Number(t.fontSize) || 60)}px`;
         lyr.style.fontWeight =
             t.fontWeight != null && t.fontWeight !== ""
                 ? String(t.fontWeight)
@@ -7806,9 +8039,11 @@ ${deleteBtnHtml}
         }
 
         const fillMonitorLyricInner = () => {
-            anim.innerHTML = lines
-                .map((line) => `<div class="monitor-lyric-line"${strokeAttr}>${escapeHtml(line)}</div>`)
-                .join("");
+            const buildRow =
+                typeof globalThis.buildLyricRowHtmlForProjectionLine === "function"
+                    ? globalThis.buildLyricRowHtmlForProjectionLine
+                    : (line, attr) => `<div class="monitor-lyric-line"${attr}>${escapeHtml(line)}</div>`;
+            anim.innerHTML = lines.map((line) => buildRow(line, strokeAttr, "monitor-lyric-line")).join("");
             anim.querySelectorAll(".monitor-lyric-line").forEach((row) => {
                 row.style.fontFamily = monFf;
             });
@@ -7857,15 +8092,24 @@ ${deleteBtnHtml}
         if (!el) return;
         try {
             const r = el.getBoundingClientRect();
-            localStorage.setItem(
-                MONITOR_RECT_LS_KEY,
-                JSON.stringify({
-                    left: r.left,
-                    top: r.top,
-                    width: r.width,
-                    height: r.height
-                })
-            );
+            let o = {};
+            try {
+                const raw = localStorage.getItem(MONITOR_RECT_LS_KEY);
+                const p = raw ? JSON.parse(raw) : null;
+                if (p && typeof p === "object") o = { ...p };
+            } catch (_) {
+                /* ignore */
+            }
+            o.left = r.left;
+            o.top = r.top;
+            if (!el.classList.contains("is-monitor-collapsed")) {
+                o.width = r.width;
+                o.height = r.height;
+            } else if (!Number.isFinite(Number(o.width)) || Number(o.width) < 160) {
+                o.width = 280;
+                o.height = 220;
+            }
+            localStorage.setItem(MONITOR_RECT_LS_KEY, JSON.stringify(o));
         } catch (_) {
             /* ignore */
         }
@@ -7907,8 +8151,31 @@ ${deleteBtnHtml}
         el.dataset.monitorBound = "1";
 
         restoreProjectionMonitorRect(el);
-        const r0 = el.getBoundingClientRect();
-        normalizeProjectionMonitorFrame(el, r0.width, r0.height);
+        let monCollapsed = false;
+        try {
+            monCollapsed = localStorage.getItem(MONITOR_COLLAPSED_LS_KEY) === "1";
+        } catch (_) {
+            /* ignore */
+        }
+        if (monCollapsed) {
+            setProjectionMonitorCollapsedUi(el, true);
+        } else {
+            const r0 = el.getBoundingClientRect();
+            normalizeProjectionMonitorFrame(el, r0.width, r0.height);
+        }
+
+        const cbtn = $("monitor-collapse-btn");
+        if (cbtn && cbtn.dataset.monitorCollapseBound !== "1") {
+            cbtn.dataset.monitorCollapseBound = "1";
+            const stopProp = (e) => e.stopPropagation();
+            cbtn.addEventListener("mousedown", stopProp);
+            cbtn.addEventListener("touchstart", stopProp, { passive: false });
+            cbtn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                toggleProjectionMonitorCollapsed();
+            });
+        }
 
         let drag = null;
         const onMove = (e) => {
@@ -7987,8 +8254,10 @@ ${deleteBtnHtml}
             e.preventDefault();
         };
 
-        header.addEventListener("mousedown", startMove);
-        header.addEventListener("touchstart", startMove, { passive: false });
+        const titleEl = el.querySelector(".monitor-header-title");
+        const dragHost = titleEl || header;
+        dragHost.addEventListener("mousedown", startMove);
+        dragHost.addEventListener("touchstart", startMove, { passive: false });
         handle.addEventListener("mousedown", startSize);
         handle.addEventListener("touchstart", startSize, { passive: false });
 
@@ -10141,6 +10410,14 @@ ${deleteBtnHtml}
         });
 
         on("search-input", "input", renderSongList);
+        on("search-input", "focus", () => {
+            if (librarySearchScopeHintShownForFocus) return;
+            librarySearchScopeHintShownForFocus = true;
+            showToast("仅搜索您已保存在本机的诗歌（标题与歌词），不会搜索网络。", $("search-input"));
+        });
+        on("search-input", "blur", () => {
+            librarySearchScopeHintShownForFocus = false;
+        });
         on("library-view-all", "click", () => {
             if (state.library.viewMode === "batch") libraryBatchSelected.clear();
             state.library.viewMode = "all";
@@ -10215,12 +10492,21 @@ ${deleteBtnHtml}
         });
 
         on("online-search-input", "input", renderOnlineSearchResult);
+        on("online-search-input", "focus", () => {
+            if (onlineSearchNotReadyHintShownForFocus) return;
+            onlineSearchNotReadyHintShownForFocus = true;
+            showToast("在线搜索功能尚未正式开放，当前无法使用；请使用本机诗歌库或导入。", $("online-search-input"));
+        });
+        on("online-search-input", "blur", () => {
+            onlineSearchNotReadyHintShownForFocus = false;
+        });
 
         on("font-slider", "input", () => {
             const v = clampLyricFontSize($("font-slider").value || 60);
             if ($("font-val")) $("font-val").textContent = String(v);
             scheduleMiniSliderDomPreview(() => applyMiniPreviewFontSizePx(v));
             refreshMonitorContent({ fontSize: v });
+            scheduleGalleryLyricPadRelayout();
         });
         on("font-slider", "change", () => {
             state.ui.fontSize = clampLyricFontSize($("font-slider").value || 60);
@@ -10239,6 +10525,7 @@ ${deleteBtnHtml}
             if ($("font-val")) $("font-val").textContent = String(state.ui.fontSize);
             saveSettings();
             updateAll();
+            syncAdvSliderRecommendedTicks();
         });
         on("default-lines-input", "input", () => {
             state.ui.defaultLines = clamp(Number($("default-lines-input").value || 4), 1, 20);
@@ -10507,17 +10794,22 @@ ${deleteBtnHtml}
             const lightBg = state.ui.bgType === "solid-white";
             scheduleMiniSliderDomPreview(() => {
                 $("mini-preview")?.querySelectorAll(".preview-line").forEach((row) => {
-                    if (sp > 0) {
-                        const w = Math.min(sp, 2.5);
-                        const tcol = lightBg ? "rgba(0,0,0,0.4)" : "rgba(0,0,0,0.62)";
-                        row.style.webkitTextStroke = `${w}px ${tcol}`;
-                        row.style.paintOrder = "stroke fill";
-                    } else {
-                        row.style.webkitTextStroke = "";
-                        row.style.paintOrder = "";
-                    }
+                    const applyStroke = (el) => {
+                        if (sp > 0) {
+                            const w = Math.min(sp, 2.5);
+                            const tcol = lightBg ? "rgba(0,0,0,0.4)" : "rgba(0,0,0,0.62)";
+                            el.style.webkitTextStroke = `${w}px ${tcol}`;
+                            el.style.paintOrder = "stroke fill";
+                        } else {
+                            el.style.webkitTextStroke = "";
+                            el.style.paintOrder = "";
+                        }
+                    };
+                    applyStroke(row);
+                    row.querySelectorAll(".lyric-seg").forEach(applyStroke);
                 });
                 refreshMonitorContent({ textStrokePx: sp });
+                scheduleGalleryLyricPadRelayout();
             });
         });
         on("text-stroke-slider", "change", () => {
@@ -11004,9 +11296,10 @@ ${deleteBtnHtml}
             lightBg
         });
         layer.style.textAlign = "center";
-        layer.style.top = (t.topPct || 40) + "%";
+        layer.style.top = `${projectionTextTopPctFromLive(t)}%`;
         layer.style.fontFamily = t.fontFamily || state.ui.fontFamily;
-        layer.style.fontSize = clamp(Number(t.fontSize) || 60, 8, 500) + "px";
+        layer.style.fontSize = `${clampLyricFontSize(Number(t.fontSize) || 60)}px`;
+        layer.style.lineHeight = String(getAdvPreviewLineHeightNumber());
         layer.style.fontWeight =
             t.fontWeight != null && t.fontWeight !== ""
                 ? String(t.fontWeight)
@@ -11016,9 +11309,11 @@ ${deleteBtnHtml}
         if (applyFade) layer.style.transition = "opacity 300ms ease";
         else if (!skipOT) layer.style.transition = "";
         if (applyFade) layer.style.opacity = "0";
-        layer.innerHTML = lines
-            .map((line) => `<div${strokeAttr}>${escapeHtml(line)}</div>`)
-            .join("");
+        const buildRow =
+            typeof globalThis.buildLyricRowHtmlForProjectionLine === "function"
+                ? globalThis.buildLyricRowHtmlForProjectionLine
+                : (line, attr) => `<div${attr}>${escapeHtml(line)}</div>`;
+        layer.innerHTML = lines.map((line) => buildRow(line, strokeAttr, undefined)).join("");
         if (!skipOT) {
             if (applyFade) {
                 requestAnimationFrame(() => {
@@ -11058,10 +11353,14 @@ ${deleteBtnHtml}
         const sp = clamp(Number(t.strokePx ?? liveState.textStrokePx ?? 0), 0, 6);
         layer.style.webkitTextStroke =
             sp > 0 ? `${String(Math.min(sp, 2.5))}px rgba(0,0,0,0.55)` : "";
+        const fmtLine =
+            typeof globalThis.formatLyricLineForCompactPreview === "function"
+                ? globalThis.formatLyricLineForCompactPreview
+                : (ln) => String(ln ?? "");
         layer.innerHTML = [
             `<div style="position:absolute;top:-90px;right:0;font-size:16px;opacity:.9;">第 ${idx + 1}/${Math.max(1, pages.length)} 页</div>`,
-            `<div style="line-height:1.35;margin-bottom:20px;">${current.map((x) => escapeHtml(x)).join("<br>") || "..."}</div>`,
-            `<div style="font-size:22px;opacity:.75;">下页：${next.length ? next.map((x) => escapeHtml(x)).join(" / ") : "（无）"}</div>`
+            `<div style="line-height:1.35;margin-bottom:20px;">${current.map((x) => escapeHtml(fmtLine(x))).join("<br>") || "..."}</div>`,
+            `<div style="font-size:22px;opacity:.75;">下页：${next.length ? next.map((x) => escapeHtml(fmtLine(x))).join(" / ") : "（无）"}</div>`
         ].join("");
         if (!skipOT) {
             if (applyFade) {
@@ -11086,8 +11385,12 @@ ${deleteBtnHtml}
             const card = document.createElement("div");
             card.className = "display-mini-card" + (i === liveState.pageIndex ? " active" : "");
             card.style.setProperty("--cards-per-row", String(cardsPerRow));
-            const l1 = lines?.[0] || "";
-            const l2 = lines?.[1] || "";
+            const fmt =
+                typeof globalThis.formatLyricLineForCompactPreview === "function"
+                    ? globalThis.formatLyricLineForCompactPreview
+                    : (ln) => String(ln ?? "");
+            const l1 = fmt(lines?.[0] || "");
+            const l2 = fmt(lines?.[1] || "");
             card.innerHTML = `<div style="font-weight:700;white-space:normal;">${escapeHtml(l1)}</div><div style="opacity:.75;margin-top:4px;white-space:normal;">${escapeHtml(l2)}</div>`;
             card.addEventListener("click", () => {
                 if (channel) channel.postMessage({ type: "goto", page: i });

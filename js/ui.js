@@ -1031,9 +1031,30 @@ globalThis.renderDisplayLyric = function (opts) {
     const fontColor = globalThis.liveState.fontColor || t.color || "#ffffff";
     const fontOp = globalThis.clamp(Number(globalThis.liveState.fontOpacityPct ?? 100), 20, 100) / 100;
     layer.style.textAlign = "center";
-    layer.style.top = (t.topPct || 45) + "%";
+    let topPct = 45;
+    if (typeof globalThis.projectionTextTopPctFromLive === "function") {
+        try {
+            topPct = globalThis.projectionTextTopPctFromLive(t);
+        } catch (_e) {
+            const raw = t.topPct != null ? Number(t.topPct) : 45;
+            topPct = globalThis.clamp(Number.isFinite(raw) ? raw : 45, 20, 70);
+        }
+    } else {
+        const raw = t.topPct != null ? Number(t.topPct) : 45;
+        topPct = globalThis.clamp(Number.isFinite(raw) ? raw : 45, 20, 70);
+    }
+    layer.style.top = `${topPct}%`;
     layer.style.fontFamily = t.fontFamily || globalThis.__projectionUi.fontFamily;
-    layer.style.fontSize = globalThis.clamp(t.fontSize || 56, 24, 160) + "px";
+    const fsPx =
+        typeof globalThis.clampLyricFontSize === "function"
+            ? globalThis.clampLyricFontSize(Number(t.fontSize) || 60)
+            : globalThis.clamp(t.fontSize || 56, 8, 500);
+    layer.style.fontSize = `${fsPx}px`;
+    const lh =
+        typeof globalThis.getAdvPreviewLineHeightNumber === "function"
+            ? globalThis.getAdvPreviewLineHeightNumber()
+            : 1.45;
+    layer.style.lineHeight = String(lh);
     layer.style.fontWeight =
         t.fontWeight != null && t.fontWeight !== "" ? String(t.fontWeight) : "700";
     layer.style.color = fontColor;
@@ -1049,8 +1070,12 @@ globalThis.renderDisplayLyric = function (opts) {
     const applyFade = !!globalThis.liveState.playlistFade && !skipMid;
     target.style.transition = "opacity 300ms ease";
     if (applyFade) target.style.opacity = "0";
-    else target.style.opacity = String(fontOp);
-    target.innerHTML = lines.map((line) => `<div>${globalThis.escapeHtml(line)}</div>`).join("");
+    else     target.style.opacity = String(fontOp);
+    const buildRow =
+        typeof globalThis.buildLyricRowHtmlForProjectionLine === "function"
+            ? globalThis.buildLyricRowHtmlForProjectionLine
+            : (line) => `<div>${globalThis.escapeHtml(line)}</div>`;
+    target.innerHTML = lines.map((line) => buildRow(line, "", undefined)).join("");
     if (applyFade) {
         requestAnimationFrame(() => {
             target.style.opacity = String(fontOp);
@@ -1070,15 +1095,21 @@ globalThis.renderLeaderLyric = function () {
     const fontColor = globalThis.liveState.fontColor || t.color || "#ffffff";
     layer.style.textAlign = "left";
     layer.style.fontFamily = t.fontFamily || globalThis.__projectionUi.fontFamily;
+    layer.style.fontWeight =
+        t.fontWeight != null && t.fontWeight !== "" ? String(t.fontWeight) : "700";
     layer.style.color = fontColor;
     layer.style.fontSize = "44px";
     const applyFade = !!globalThis.liveState.playlistFade;
     layer.style.transition = "opacity 300ms ease";
     if (applyFade) layer.style.opacity = "0";
+    const fmtLine =
+        typeof globalThis.formatLyricLineForCompactPreview === "function"
+            ? globalThis.formatLyricLineForCompactPreview
+            : (ln) => String(ln ?? "");
     layer.innerHTML = [
         `<div style="position:absolute;top:-90px;right:0;font-size:16px;opacity:.9;">第 ${idx + 1}/${Math.max(1, pages.length)} 页</div>`,
-        `<div style="line-height:1.35;margin-bottom:20px;">${current.map((x) => globalThis.escapeHtml(x)).join("<br>") || "..."}</div>`,
-        `<div style="font-size:22px;opacity:.75;">下页：${next.length ? next.map((x) => globalThis.escapeHtml(x)).join(" / ") : "（无）"}</div>`
+        `<div style="line-height:1.35;margin-bottom:20px;">${current.map((x) => globalThis.escapeHtml(fmtLine(x))).join("<br>") || "..."}</div>`,
+        `<div style="font-size:22px;opacity:.75;">下页：${next.length ? next.map((x) => globalThis.escapeHtml(fmtLine(x))).join(" / ") : "（无）"}</div>`
     ].join("");
     if (applyFade) requestAnimationFrame(() => { layer.style.opacity = "1"; });
 
@@ -1100,8 +1131,12 @@ globalThis.updateDisplayCardPreview = function () {
         const card = document.createElement("div");
         card.className = "display-mini-card" + (i === globalThis.liveState.pageIndex ? " active" : "");
         card.style.setProperty("--cards-per-row", String(cardsPerRow));
-        const l1 = lines?.[0] || "";
-        const l2 = lines?.[1] || "";
+        const fmt =
+            typeof globalThis.formatLyricLineForCompactPreview === "function"
+                ? globalThis.formatLyricLineForCompactPreview
+                : (ln) => String(ln ?? "");
+        const l1 = fmt(lines?.[0] || "");
+        const l2 = fmt(lines?.[1] || "");
         card.innerHTML = `<div style="font-weight:700;white-space:normal;">${globalThis.escapeHtml(l1)}</div><div style="opacity:.75;margin-top:4px;white-space:normal;">${globalThis.escapeHtml(l2)}</div>`;
         card.addEventListener("click", () => {
             if (globalThis.__projectionChannel) globalThis.__projectionChannel.postMessage({ type: "goto", page: i });

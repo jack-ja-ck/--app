@@ -69,11 +69,11 @@
             <div class="projection-playlist-body">
                 <ul id="playlist-list"></ul>
                 <div class="playlist-controls projection-playlist-controls">
-                    <button id="playlist-start-btn" class="small-btn playlist-start-full">▶ 开始播放</button>
-                    <label class="playlist-auto-label">
-                        <input type="checkbox" id="playlist-auto-switch">
-                        🔄 自动切换
-                    </label>
+                    <button id="playlist-start-btn" class="small-btn playlist-start-full" type="button">▶ 开始播放</button>
+                    <div style="display:flex; gap:6px; width:100%;">
+                        <button id="save-setlist-btn" class="small-btn playlist-start-full" type="button" style="flex:1; padding:6px 8px; font-size:12px; text-align:center; white-space:nowrap;">💾 保存歌单</button>
+                        <button id="load-setlist-btn" class="small-btn playlist-start-full" type="button" style="flex:1; padding:6px 8px; font-size:12px; text-align:center; white-space:nowrap;">📂 加载歌单</button>
+                    </div>
                 </div>
             </div>
         </details>
@@ -91,45 +91,30 @@
     <!-- 中间：编辑与预览区 -->
     <div id="editor-area" class="console-zone console-zone--editor console-zone--gallery-first">
         <p class="console-zone-label">编辑与预览</p>
-        <div id="editor-workspace-header" class="editor-workspace-header">
-            <input type="text" id="song-title-input" class="editor-song-title-input" placeholder="请输入歌名..." value="奇异恩典" aria-label="歌名">
-        </div>
-        <div id="editor-action-bar" class="editor-action-bar" role="toolbar" aria-label="歌词编辑操作">
-            <button type="button" id="save-song-btn" class="editor-action-bar-btn" title="保存当前歌词到曲库"><span class="editor-action-bar-btn__icon" aria-hidden="true">💾</span><span class="editor-action-bar-btn__text">保存</span></button>
-            <button type="button" id="save-as-template-btn" class="editor-action-bar-btn" title="将当前歌词存为可复用模板"><span class="editor-action-bar-btn__icon" aria-hidden="true">📄</span><span class="editor-action-bar-btn__text">存为模板</span></button>
-            <button type="button" id="apply-to-display" class="editor-action-bar-btn" title="将当前样式与歌词同步到演示屏"><span class="editor-action-bar-btn__icon" aria-hidden="true">📺</span><span class="editor-action-bar-btn__text">应用到演示屏</span></button>
-            <button type="button" id="reset-current-song" class="editor-action-bar-btn" title="恢复本首诗歌的示例内容"><span class="editor-action-bar-btn__icon" aria-hidden="true">🔄</span><span class="editor-action-bar-btn__text">重置示例</span></button>
-            <div id="upload-cloud-action-wrap" style="position:relative;display:inline-flex;align-items:center;gap:6px;flex-wrap:nowrap;">
-                <button type="button" id="upload-cloud-btn" class="editor-action-bar-btn" title="将当前诗歌与高级编辑设置上传到云端，生成分享链接" disabled><span class="editor-action-bar-btn__icon" aria-hidden="true">☁️</span><span class="editor-action-bar-btn__text" id="upload-cloud-btn-label">上传云端</span></button>
-                <button type="button" id="upload-history-toggle-btn" class="editor-action-bar-btn" title="查看最近 5 条上传记录" aria-expanded="false" aria-controls="upload-history-dropdown"><span class="editor-action-bar-btn__icon" aria-hidden="true">📋</span><span class="editor-action-bar-btn__text">历史</span></button>
-                <div id="upload-history-dropdown" role="region" aria-label="上传历史" hidden style="position:absolute;top:100%;left:0;margin-top:6px;z-index:16000;padding:12px;border-radius:12px;border:1px solid rgba(212,175,55,0.28);background:rgba(14,16,24,0.94);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:0 12px 40px rgba(0,0,0,0.45);min-width:min(300px,88vw);max-width:min(400px,94vw);max-height:min(70vh,520px);overflow-y:auto;box-sizing:border-box;">
-                    <div id="upload-history-dropdown-list" style="display:flex;flex-direction:column;gap:10px;"></div>
-                </div>
-            </div>
-            <button type="button" id="pwa-install-btn" class="editor-action-bar-btn pwa-install-btn" style="display:none" title="获取应用：与 Chrome「安装此站点」、手机应用商店「获取」步骤类似，无需单独下载 exe"><span class="editor-action-bar-btn__icon" aria-hidden="true">📲</span><span class="editor-action-bar-btn__text">安装App</span></button>
-            <button type="button" id="ocr-btn" class="editor-action-bar-btn" title="从照片识别歌词"><span class="editor-action-bar-btn__icon" aria-hidden="true">📷</span><span class="editor-action-bar-btn__text">拍照识歌词</span></button>
-            <button type="button" id="help-btn" class="editor-action-bar-btn" title="查看使用说明与快捷键"><span class="editor-action-bar-btn__icon" aria-hidden="true">❓</span><span class="editor-action-bar-btn__text">使用帮助</span></button>
-            <button type="button" id="usage-guide-btn" class="editor-action-bar-btn" title="再次查看主界面分步使用引导（编辑→播放列表→开始播放→预览→同步投屏→开启投屏）"><span class="editor-action-bar-btn__icon" aria-hidden="true">🎯</span><span class="editor-action-bar-btn__text">使用引导</span></button>
-            <input type="file" id="ocr-file-input" accept="image/*" capture="environment" hidden>
-        </div>
         <div class="editor-hidden-controls" hidden aria-hidden="true">
             <button type="button" id="publish-song-btn" class="btn btn-outline">☁️ 发布到云端</button>
         </div>
-        <details id="song-meta-details" class="song-meta-details" hidden>
-            <summary class="song-meta-details-summary">🎵 更多歌曲信息</summary>
-            <div id="song-meta" class="song-meta-details-body">
-                <span class="meta-field"><label>🎵 调性</label><input type="text" id="song-key" placeholder="C"></span>
-                <span class="meta-field"><label>⏱️ 速度</label><input type="text" id="song-tempo" placeholder="72"></span>
-                <span class="meta-field" style="flex:1; min-width:180px; max-width:300px;"><label>📝 备注</label><input type="text" id="song-notes" placeholder="如：副歌反复" style="width:100%;"></span>
-                <span class="meta-field"><label>🏷️ 标签</label><input type="text" id="song-tags" placeholder="敬拜,感恩" style="width:120px;"></span>
-            </div>
-        </details>
         <div class="editor-main-body editor-main-body--gallery-first">
+            <div class="editor-gallery-preface" id="editor-gallery-preface">
+                <div id="gallery-empty-hint" style="display:flex; align-items:center; justify-content:center; padding:10px 10px; margin-bottom:0; border-radius:8px; background:rgba(255,255,255,0.04); border:1px dashed rgba(255,255,255,0.12);">
+                    <div style="text-align:center;">
+                        <p style="margin:0 0 4px; font-size:1.2rem; font-weight:600; color:rgba(255,255,255,0.6); letter-spacing:1px;">此处尚在建设中</p>
+                        <p style="margin:0; font-size:0.85rem; color:rgba(255,255,255,0.35);">您希望这里放什么功能？欢迎提交建议</p>
+                    </div>
+                </div>
+            </div>
             <!-- 主区：页面画廊 + 分页卡片（横向换行，无内层滚动） -->
             <div id="speaker-view" class="speaker-view--gallery-hero">
                 <div id="speaker-resize-handle"></div>
                 <div class="speaker-view-toolbar" role="toolbar" aria-label="页面画廊与页码">
-                    <div class="speaker-view-label">页面画廊 · 分页卡片从左到右排列、自动换行（点击卡片；键盘 ← → / 空格）</div>
+                    <div class="speaker-view-toolbar-cluster">
+                        <div class="speaker-view-label">页面画廊 · 分页卡片从左到右排列、自动换行（点击卡片；键盘 ← → / 空格）</div>
+                        <div class="editor-gallery-preface-actions" role="toolbar" aria-label="帮助与引导">
+                            <button type="button" id="help-btn" class="editor-action-bar-btn gallery-status-utility-btn" title="查看使用说明与快捷键"><span class="editor-action-bar-btn__icon" aria-hidden="true">❓</span><span class="editor-action-bar-btn__text">使用帮助</span></button>
+                            <button type="button" id="pwa-install-btn" class="editor-action-bar-btn pwa-install-btn gallery-status-utility-btn" style="display:none" title="获取应用：与 Chrome「安装此站点」、手机应用商店「获取」步骤类似，无需单独下载 exe"><span class="editor-action-bar-btn__icon" aria-hidden="true">📲</span><span class="editor-action-bar-btn__text">安装App</span></button>
+                            <button type="button" id="usage-guide-btn" class="editor-action-bar-btn gallery-status-utility-btn" title="再次查看箭头分步指引（编辑歌词 → 播放列表 → 页面画廊 → 同步投屏 → 开启投屏）"><span class="editor-action-bar-btn__icon" aria-hidden="true">🎯</span><span class="editor-action-bar-btn__text">使用引导</span></button>
+                        </div>
+                    </div>
                     <div class="speaker-view-page-meta">
                         <span class="page-indicator-wrap" title="输入页码后按回车跳转">
                             <input type="text" inputmode="numeric" pattern="[0-9]*" id="page-indicator-input" class="page-indicator-input" value="1" aria-label="当前页码">
@@ -137,7 +122,32 @@
                         </span>
                     </div>
                 </div>
-                <div id="layout-page-gallery" class="layout-page-gallery--hero" aria-label="分页画廊"></div>
+                <div id="gallery-status-bar" role="status" aria-live="polite" class="gallery-status-bar" style="display:none; flex-wrap:wrap; align-items:center; gap:8px; justify-content:space-between; padding:6px 10px; margin-bottom:6px; border-radius:8px; background:rgba(212,175,55,0.12); color:#f5e6c8; font-size:13px; font-weight:500;">
+                    <div class="gallery-status-bar__status" style="display:flex; align-items:center; gap:6px; flex:0 1 auto; min-width:0;">
+                        <span>📺 正在投屏：</span>
+                        <span id="gallery-status-song">—</span>
+                        <span>·</span>
+                        <span id="gallery-status-page">—</span>
+                    </div>
+                    <div id="gallery-status-utility-toolbar" class="gallery-status-utility-toolbar" style="display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:6px; flex:1 1 120px; min-width:0;">
+                        <div id="upload-cloud-action-wrap" style="position:relative;display:inline-flex;align-items:center;gap:6px;flex-wrap:nowrap;">
+                            <button type="button" id="upload-cloud-btn" class="editor-action-bar-btn gallery-status-utility-btn" title="将当前诗歌与高级编辑设置上传到云端，生成分享链接" disabled><span class="editor-action-bar-btn__icon" aria-hidden="true">☁️</span><span class="editor-action-bar-btn__text" id="upload-cloud-btn-label">分享云端</span></button>
+                            <button type="button" id="upload-history-toggle-btn" class="editor-action-bar-btn gallery-status-utility-btn" title="查看最近 5 条上传记录" aria-expanded="false" aria-controls="upload-history-dropdown"><span class="editor-action-bar-btn__icon" aria-hidden="true">📋</span><span class="editor-action-bar-btn__text">上传历史</span></button>
+                            <div id="upload-history-dropdown" role="region" aria-label="上传历史" hidden style="position:absolute;top:100%;right:0;left:auto;margin-top:6px;z-index:16000;padding:12px;border-radius:12px;border:1px solid rgba(212,175,55,0.28);background:rgba(14,16,24,0.94);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:0 12px 40px rgba(0,0,0,0.45);min-width:min(300px,88vw);max-width:min(400px,94vw);max-height:min(70vh,520px);overflow-y:auto;box-sizing:border-box;">
+                                <div id="upload-history-dropdown-list" style="display:flex;flex-direction:column;gap:10px;"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="gallery-status-bar__zoom" style="display:flex; align-items:center; gap:4px; flex-shrink:0;">
+                        <button type="button" id="gallery-zoom-out" style="width:26px; height:26px; border-radius:50%; border:1px solid rgba(255,255,255,0.3); background:rgba(255,255,255,0.08); color:#f5e6c8; font-size:16px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center;">−</button>
+                        <span id="gallery-zoom-val" style="min-width:38px; text-align:center; font-size:12px; color:rgba(255,255,255,0.7);">100%</span>
+                        <button type="button" id="gallery-zoom-reset" style="width:26px; height:26px; border-radius:50%; border:1px solid rgba(255,255,255,0.3); background:rgba(255,255,255,0.08); color:#f5e6c8; font-size:12px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center;">↺</button>
+                        <button type="button" id="gallery-zoom-in" style="width:26px; height:26px; border-radius:50%; border:1px solid rgba(255,255,255,0.3); background:rgba(255,255,255,0.08); color:#f5e6c8; font-size:16px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center;">+</button>
+                    </div>
+                </div>
+                <div id="gallery-wrapper" class="gallery-wrapper">
+                <div id="layout-page-gallery" class="layout-page-gallery--hero" aria-label="分页画廊" style="display:flex; flex-wrap:wrap; gap:8px; padding:10px 0; transform-origin:top left; transition:transform 0.15s ease;"></div>
+                </div>
                 <div class="hint-text speaker-view-hint">当前诗歌由左侧播放列表顺序决定；投屏画面请用「投屏监视」小窗查看</div>
             </div>
 
@@ -148,9 +158,9 @@
                     <div class="first-visit-onboarding-inner">
                         <p class="first-visit-onboarding-title">欢迎使用</p>
                         <ol class="first-visit-onboarding-steps">
-                            <li><span class="first-visit-step-emoji" aria-hidden="true">📝</span> 展开下方「编辑歌词」粘贴歌词</li>
-                            <li><span class="first-visit-step-emoji" aria-hidden="true">✂️</span> 用空行或 <code>[page]</code> 分段</li>
-                            <li><span class="first-visit-step-emoji" aria-hidden="true">📺</span> 点击「开启投屏」放映</li>
+                            <li><span class="first-visit-step-emoji" aria-hidden="true">📝</span> 展开中间「编辑歌词」，在歌名与底部按钮之间的大编辑区填写并粘贴歌词（空行或 <code>[page]</code> 分段）；点「保存」写入左侧诗歌库。</li>
+                            <li><span class="first-visit-step-emoji" aria-hidden="true">📋</span> 在左侧把诗歌「+」进播放列表，点「▶ 开始播放」；用中间页面画廊的分页卡片预览翻页。</li>
+                            <li><span class="first-visit-step-emoji" aria-hidden="true">📺</span> 点「应用到演示屏」后，在右侧「开启投屏」放映；需要说明时点页面画廊旁的「使用帮助」。</li>
                         </ol>
                         <button type="button" id="first-visit-onboarding-dismiss" class="first-visit-onboarding-dismiss">知道了</button>
                     </div>
@@ -173,10 +183,35 @@
                 ></div>
                 <span class="editor-lyrics-drawer-summary-label">📝 编辑歌词（展开后粘贴 / 修改）</span>
             </summary>
-            <p class="editor-lyrics-drawer-collapse-hint" role="note">收起：点击上方「编辑歌词」标题栏即可收回。</p>
-            <div class="editor-lyrics-drawer-body" id="editor-lyrics-drawer-body">
-                <p class="editor-lyrics-drawer-hint">一行一句；空行或 <code>[page]</code> 分段；正文居中显示。粘贴时会自动去掉行尾与文末多余空格。展开后编辑区会<b>浮在页面画廊之上</b>；将鼠标移到<b>窗口最顶边</b>出现高亮条时，按住向上拖可拉高（不挤压画廊布局）。</p>
+            <div class="editor-lyrics-drawer-body" id="layout-editor-sheet">
+                <div class="editor-title-row">
+                    <input type="text" id="song-title-input" class="editor-song-title-input" placeholder="请输入歌名..." value="奇异恩典" aria-label="歌名">
+                    <div class="editor-font-tools" aria-label="编辑区字号">
+                        <button type="button" id="editor-font-decrease" class="editor-font-btn" title="减小编辑区字号" aria-label="减小字号">A-</button>
+                        <span id="editor-font-size-display" aria-live="polite">16</span>
+                        <button type="button" id="editor-font-increase" class="editor-font-btn" title="增大编辑区字号" aria-label="增大字号">A+</button>
+                    </div>
+                    <span class="editor-lyrics-drawer-collapse-hint" role="note">收起：点击上方「编辑歌词」即可收回</span>
+                </div>
+                <details id="song-meta-details" class="song-meta-details" hidden>
+                    <summary class="song-meta-details-summary">🎵 更多歌曲信息</summary>
+                    <div id="song-meta" class="song-meta-details-body">
+                        <span class="meta-field"><label>🎵 调性</label><input type="text" id="song-key" placeholder="C"></span>
+                        <span class="meta-field"><label>⏱️ 速度</label><input type="text" id="song-tempo" placeholder="72"></span>
+                        <span class="meta-field" style="flex:1; min-width:180px; max-width:300px;"><label>📝 备注</label><input type="text" id="song-notes" placeholder="如：副歌反复" style="width:100%;"></span>
+                        <span class="meta-field"><label>🏷️ 标签</label><input type="text" id="song-tags" placeholder="敬拜,感恩" style="width:120px;"></span>
+                    </div>
+                </details>
+                <div id="editor-inline-actions" class="editor-action-bar" role="toolbar" aria-label="歌词编辑与云端">
+                    <button type="button" id="save-song-btn" class="editor-action-bar-btn" title="保存当前歌词到曲库"><span class="editor-action-bar-btn__icon" aria-hidden="true">💾</span><span class="editor-action-bar-btn__text">保存</span></button>
+                    <button type="button" id="save-as-template-btn" class="editor-action-bar-btn" title="将当前歌词存为可复用模板"><span class="editor-action-bar-btn__icon" aria-hidden="true">📄</span><span class="editor-action-bar-btn__text">存为模板</span></button>
+                    <button type="button" id="apply-to-display" class="editor-action-bar-btn" title="将当前样式与歌词同步到演示屏"><span class="editor-action-bar-btn__icon" aria-hidden="true">📺</span><span class="editor-action-bar-btn__text">应用到演示屏</span></button>
+                    <button type="button" id="reset-current-song" class="editor-action-bar-btn" title="恢复本首诗歌的示例内容"><span class="editor-action-bar-btn__icon" aria-hidden="true">🔄</span><span class="editor-action-bar-btn__text">重置示例</span></button>
+                    <button type="button" id="ocr-btn" class="editor-action-bar-btn" title="从照片识别歌词"><span class="editor-action-bar-btn__icon" aria-hidden="true">📷</span><span class="editor-action-bar-btn__text">拍照识歌词</span></button>
+                    <input type="file" id="ocr-file-input" accept="image/*" capture="environment" hidden>
+                </div>
                 <textarea id="lyric-editor-large" placeholder="在此粘贴歌词，一行一句，用空行分段"></textarea>
+                <p class="editor-lyrics-drawer-hint">一行一句；空行或 <code>[page]</code> 分段；正文居中显示。粘贴时会自动去掉行尾与文末多余空格。展开后编辑区会<b>浮在页面画廊之上</b>；将鼠标移到<b>窗口最顶边</b>出现高亮条时，按住向上拖可拉高（不挤压画廊布局）。</p>
             </div>
         </details>
     </div>
@@ -389,6 +424,17 @@
     </div>
 </div>
 <div id="toast"></div>
+<!-- 已保存歌单列表（加载 / 删除） -->
+<div id="setlist-modal" class="setlist-modal" hidden aria-hidden="true">
+    <div class="setlist-modal__backdrop" id="setlist-modal-backdrop"></div>
+    <div class="setlist-modal__panel" role="dialog" aria-modal="true" aria-labelledby="setlist-modal-title">
+        <div class="setlist-modal__head">
+            <h2 class="setlist-modal__title" id="setlist-modal-title">📋 我的歌单</h2>
+            <button type="button" class="setlist-modal__close" id="setlist-modal-close" aria-label="关闭">✕</button>
+        </div>
+        <div id="setlist-list" class="setlist-modal__list"></div>
+    </div>
+</div>
 <div id="corner-success-toast" class="corner-success-toast" role="status" aria-live="polite" hidden></div>
 <div id="corner-cloud-upload-toast" class="corner-success-toast" role="status" aria-live="polite" aria-atomic="true" hidden style="z-index:100051;pointer-events:auto;">
     <div id="corner-cloud-upload-msg"></div>
@@ -421,7 +467,7 @@
 <h3>一、界面概览</h3>
 <table>
 <tr><td><b>诗歌库</b></td><td>左侧</td><td>搜索、标签、诗歌列表；底部为<b>播放列表（敬拜顺序）</b>与新建/导入导出</td></tr>
-<tr><td><b>编辑与预览</b></td><td>中间</td><td>歌词编辑与页面画廊；投屏监视小窗</td></tr>
+<tr><td><b>编辑与预览</b></td><td>中间</td><td>顶部征集中与帮助；页面画廊与分页卡片；下方「编辑歌词」抽屉；投屏监视小窗</td></tr>
 <tr><td><b>投屏控制</b></td><td>右侧</td><td>背景、自动播放、开启投屏与主领视图等</td></tr>
 <tr><td><b>快速预览</b></td><td>中间右侧</td><td>与歌词编辑器同高并排，实时预览当前页</td></tr>
 </table>
@@ -445,7 +491,7 @@
 <li><b>排序</b>：拖拽播放列表中的诗歌上下调整顺序</li>
 <li><b>删除</b>：点击诗歌旁的「✕」</li>
 <li><b>开始播放</b>：点击「▶ 开始播放」</li>
-<li><b>自动切换</b>：勾选「🔄 自动切换」后，当前歌唱完自动播下一首</li>
+<li><b>保存歌单</b>：点击「💾 保存歌单」将当前播放顺序写入本机（列表变更时也会自动保存）</li>
 </ul>
 
 <h4>3. 本机诗歌与「搜索我的诗歌」</h4>
@@ -1167,6 +1213,18 @@
     installBtn.style.display = "inline-flex";
 })();
 </script>
+
+<div id="setlist-name-modal" role="dialog" aria-modal="true" aria-labelledby="setlist-name-modal-title" style="display:none; position:fixed; inset:0; z-index:10001; background:rgba(0,0,0,0.55); box-sizing:border-box;">
+  <div style="background:#1e2030; border-radius:16px; padding:28px 32px; width:420px; max-width:90vw; border:1px solid rgba(255,255,255,0.1); box-shadow:0 16px 48px rgba(0,0,0,0.5);">
+    <h3 id="setlist-name-modal-title" style="margin:0 0 8px; color:#f5e6c8; font-size:1.1rem;">💾 保存歌单</h3>
+    <p style="margin:0 0 16px; color:rgba(255,255,255,0.55); font-size:0.85rem;">请为本次敬拜歌单命名</p>
+    <input id="setlist-name-input" type="text" placeholder="例如：主日敬拜 5月第2周" style="width:100%; padding:10px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.2); background:rgba(0,0,0,0.3); color:#fff; font-size:15px; box-sizing:border-box; margin-bottom:20px;">
+    <div style="display:flex; gap:10px; justify-content:flex-end;">
+      <button type="button" id="setlist-name-cancel" style="padding:8px 20px; border-radius:8px; border:1px solid rgba(255,255,255,0.2); background:transparent; color:rgba(255,255,255,0.7); cursor:pointer;">取消</button>
+      <button type="button" id="setlist-name-confirm" style="padding:8px 20px; border-radius:8px; border:none; background:#d4af37; color:#1a1510; font-weight:600; cursor:pointer;">保存</button>
+    </div>
+  </div>
+</div>
 
 </body>
 </html>

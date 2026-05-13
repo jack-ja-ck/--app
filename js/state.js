@@ -148,7 +148,7 @@ function loadState() {
         playlist.running = !!pl.running && playlist.items.length > 0;
         playlist.activeIndex = clampPersist(Number(pl.activeIndex) || 0, 0, Math.max(0, playlist.items.length - 1));
     }
-    playlist.autoSwitch = localStorage.getItem("playlist_auto_switch") === "1";
+    playlist.autoSwitch = false;
     defaultSongPosY = clampPersist(Number(ui.posY) || 45, 20, 70);
 
     AppState.fontSize = clampPersist(Number(ui.fontSize) || 56, 24, 120);

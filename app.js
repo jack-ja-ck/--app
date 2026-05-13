@@ -26,6 +26,8 @@
     const THEME_BG_ACTIVE_ID_STORAGE = "worship.theme_bg_active.v1";
     /** 控制台主题背景视频（Data URL，localStorage；与壁纸槽位并存，播放时优先于壁纸） */
     const WORSHIP_THEME_VIDEO_LS = "worship_theme_video";
+    /** 用户命名的已保存播放列表（localStorage JSON 数组） */
+    const WORSHIP_SETLISTS_LS = "worship_setlists";
 
     /** 部分浏览器对 .mov/.mp4 会生成 data:application/octet-stream，需与 data:video/* 同等对待 */
     function isLikelyThemeConsoleVideoDataUrl(s) {
@@ -957,7 +959,11 @@
             pageTransition: "none",
             pageTransitionSpeed: 0.6,
             fontMegaMode: false,
-            defaultUploadedBgId: ""
+            defaultUploadedBgId: "",
+            /** 歌词编辑区：按可视高度自动缩小字号，长歌词更易一览 */
+            editorAutoFontSize: false,
+            editorAutoFontMinPx: 11,
+            editorAutoFontMaxPx: 20
         },
         sizePreset: "M",
         autoplay: {
@@ -1016,6 +1022,34 @@
 
     function clamp(v, min, max) {
         return Math.max(min, Math.min(max, v));
+    }
+
+    const GALLERY_ZOOM_LS = "worship_gallery_zoom";
+    let galleryZoomLevel = 1;
+    try {
+        const _gz = parseFloat(localStorage.getItem(GALLERY_ZOOM_LS));
+        if (Number.isFinite(_gz)) galleryZoomLevel = clamp(_gz, 0.5, 2);
+    } catch (_e) {
+        galleryZoomLevel = 1;
+    }
+
+    function persistGalleryZoomLevel() {
+        try {
+            localStorage.setItem(GALLERY_ZOOM_LS, String(galleryZoomLevel));
+        } catch (_e) {
+            /* ignore */
+        }
+    }
+
+    function updateGalleryZoom() {
+        const gal = $("layout-page-gallery");
+        const valEl = $("gallery-zoom-val");
+        galleryZoomLevel = clamp(Number(galleryZoomLevel) || 1, 0.5, 2);
+        if (gal) {
+            gal.style.transformOrigin = "top left";
+            gal.style.transform = `scale(${galleryZoomLevel})`;
+        }
+        if (valEl) valEl.textContent = `${Math.round(galleryZoomLevel * 100)}%`;
     }
 
     function getLyricFontSliderMax() {
@@ -1480,6 +1514,63 @@
         return Math.round(8 + ((py - 18) / 100) * h);
     }
 
+    /** 与投屏监视 #monitor-lyric-layer、投屏 projection-lyric 一致：歌词层用 top 百分比（posY 20–70） */
+    function effectiveGalleryPosYForSong(song) {
+        if (!song) return clamp(Number(state.ui.posY) || 45, 20, 70);
+        const cur = currentSong();
+        if (cur && String(cur.id) === String(song.id)) {
+            return clamp(Number(state.ui.posY) || 45, 20, 70);
+        }
+        if (Number.isFinite(Number(song.posY))) return clamp(Number(song.posY), 20, 70);
+        return clamp(Number(defaultSongPosY) || 45, 20, 70);
+    }
+
+    let galleryPadRelayoutRaf = 0;
+    function scheduleGalleryLyricPadRelayout() {
+        if (galleryPadRelayoutRaf) return;
+        galleryPadRelayoutRaf = requestAnimationFrame(() => {
+            galleryPadRelayoutRaf = 0;
+            relayoutGalleryLyricVerticalPads();
+        });
+    }
+
+    /** 页面画廊缩略图：垂直位置与投屏监视同源（top 百分比），字号仍由 CSS 固定 */
+    function applyGalleryCardLyricVerticalLayout(card, lyricAnim, song) {
+        if (!card || !lyricAnim) return;
+        const py = effectiveGalleryPosYForSong(song);
+        const topPct = clamp(Number(py), 0, 100);
+        lyricAnim.style.cssText =
+            "position:absolute;left:0;right:0;width:100%;z-index:2;" +
+            `top:${topPct}%;` +
+            "box-sizing:border-box;padding:0 0 8px 0;" +
+            "transform-origin:center center;display:flex;flex-direction:column;align-items:center;";
+    }
+
+    let galleryLayoutResizeObserver = null;
+    function ensureGalleryLayoutResizeObserver() {
+        const gal = document.getElementById("layout-page-gallery");
+        if (!gal || galleryLayoutResizeObserver) return;
+        if (typeof ResizeObserver !== "function") return;
+        try {
+            galleryLayoutResizeObserver = new ResizeObserver(() => relayoutGalleryLyricVerticalPads());
+            galleryLayoutResizeObserver.observe(gal);
+        } catch (_e) {
+            galleryLayoutResizeObserver = null;
+        }
+    }
+
+    function relayoutGalleryLyricVerticalPads() {
+        const gal = document.getElementById("layout-page-gallery");
+        if (!gal) return;
+        gal.querySelectorAll(".gallery-page-card[data-gallery-card]").forEach((card) => {
+            const sid = card.getAttribute("data-song-id");
+            const plSong = state.songs.find((s) => String(s.id) === String(sid || ""));
+            const lyricAnim = card.querySelector(":scope > .gallery-card-lyric-anim");
+            if (!lyricAnim || !plSong) return;
+            applyGalleryCardLyricVerticalLayout(card, lyricAnim, plSong);
+        });
+    }
+
     function syncPosYFromCurrentSong() {
         const song = currentSong();
         state.ui.posY = song && Number.isFinite(Number(song.posY))
@@ -1930,7 +2021,7 @@
         el.appendChild(icon);
         el.appendChild(msg);
         el.appendChild(closeBtn);
-        const header = $("editor-workspace-header");
+        const header = $("editor-main-body");
         if (header && header.parentNode === editorArea) {
             editorArea.insertBefore(el, header);
         } else {
@@ -2338,37 +2429,37 @@
             selector: "#editor-lyrics-drawer-summary",
             title: "第 1 步：编辑歌词",
             text:
-                "先展开「编辑歌词」，在中间编辑区粘贴或输入内容（空行或 [page] 分段）。确认歌名后，点上方工具栏「保存」，把本首写入左侧诗歌库。"
+                "点中间栏下方的「📝 编辑歌词」标题栏展开。展开后自上而下为：歌名与字号（右侧有收起提示）；接着是「保存」「存为模板」「应用到演示屏」等按钮；下方是大块歌词编辑区（可用空行或 [page] 分段）。编辑区会浮在页面画廊之上，可向上拖动顶边加高。"
         },
         {
             selector: "#song-library",
             title: "第 2 步：加入播放列表",
             text:
-                "在上方诗歌列表中，点要唱的诗歌右侧「+」，将其加入下方「播放列表」；可添加多首，并在列表里拖动调整顺序。「在线搜索诗歌」暂不可用；查找本机已保存作品请用「搜索我的诗歌」。"
+                "在左侧「诗歌库」里选中要唱的诗歌，点该行右侧「+」，加入下方的「播放列表（敬拜顺序）」；可多首并拖拽排序。列表下方「💾 保存歌单」与「📂 加载歌单」并排，用于写入或读取本机歌单。（「在线搜索诗歌」当前为占位。）"
         },
         {
             selector: "#playlist-start-btn",
             title: "第 3 步：开始播放",
             text:
-                "准备开唱时，点「▶ 开始播放」。随后在中间「页面画廊」用 ← → 或空格翻页；需要连播时可勾选「🔄 自动切换」。"
+                "顺序排好后点「▶ 开始播放」。之后用中间「页面画廊」里的分页卡片翻页：可点击卡片，或使用键盘 ← → / 空格。"
         },
         {
-            selector: "#speaker-view",
-            title: "第 4 步：预览幻灯片",
+            selector: "#layout-page-gallery",
+            title: "第 4 步：预览页面画廊",
             text:
-                "在画廊中点击各页卡片，确认分页与歌词在幻灯片上的显示无误，再进入投屏。"
+                "卡片区即分页预览，每张对应投屏一页。其上方同一行里：蓝色说明条介绍画廊操作，旁边有「使用帮助」「使用引导」（以及可用的「安装 App」）；再往上是征集中提示。确认分页与歌词显示无误后，再继续同步投屏。"
         },
         {
             selector: "#apply-to-display",
             title: "第 5 步：同步到演示屏",
             text:
-                "点「应用到演示屏」，把当前歌词与样式同步给投屏窗口和主领视图。（每次编辑后务必再点一次，会众画面才会更新。）"
+                "在已展开的「编辑歌词」底部工具栏点「应用到演示屏」，把当前歌词与样式同步到会众投屏窗口和主领视图。（每次改词或样式后务必再点一次，会众画面才会更新。）"
         },
         {
             selector: "#open-display-btn",
             title: "第 6 步：开启投屏",
             text:
-                "在右侧点「开启投屏」打开会众窗口；投屏窗口可按 F 全屏。主控台可用「投屏监视」小窗查看现场效果。"
+                "在右侧「投屏控制」点「开启投屏」打开会众窗口（若被拦截请在地址栏允许弹窗）。投屏窗口可按 F 全屏。主控台可用「投屏监视」小窗查看现场；投屏中后，中间还会出现金色状态栏，可「分享云端」等。"
         }
     ];
 
@@ -3206,6 +3297,9 @@
         state.ui.fontOpacityPct = 100;
         state.ui.fontMegaMode = false;
         state.ui.defaultUploadedBgId = "";
+        state.ui.editorAutoFontSize = false;
+        state.ui.editorAutoFontMinPx = 11;
+        state.ui.editorAutoFontMaxPx = 20;
         defaultSongPosY = 45;
         const song = currentSong();
         if (song) {
@@ -4051,7 +4145,7 @@
         const items = getUploadedBackgrounds().filter((x) => x && x.imageData);
         root.innerHTML = "";
         if (!items.length) {
-            root.innerHTML = '<div class="hint-text" style="grid-column:1/-1;">暂无已上传背景，请在「预设背景」中上传图片</div>';
+            root.innerHTML = '<div class="hint-text my-backgrounds-empty-hint">暂无已上传背景，请在「预设背景」中上传图片</div>';
             const emptyAdd = document.createElement("button");
             emptyAdd.type = "button";
             emptyAdd.className = "lyric-bg-slot-empty";
@@ -4532,6 +4626,13 @@
             }
             if (state.ui.fontMegaMode !== true) state.ui.fontMegaMode = false;
             if (state.ui.defaultUploadedBgId == null) state.ui.defaultUploadedBgId = "";
+            state.ui.editorAutoFontSize = false;
+            state.ui.editorAutoFontMinPx = clamp(Number(state.ui.editorAutoFontMinPx) || 11, 9, 22);
+            state.ui.editorAutoFontMaxPx = clamp(
+                Number(state.ui.editorAutoFontMaxPx) || 20,
+                state.ui.editorAutoFontMinPx + 1,
+                32
+            );
             if (Number(state.ui.fontSize) > 300) state.ui.fontMegaMode = true;
             const cap = state.ui.fontMegaMode ? 500 : 300;
             state.ui.fontSize = clamp(Number(state.ui.fontSize) || 56, 8, cap);
@@ -4548,7 +4649,7 @@
             state.playlist.running = !!playlist.running && state.playlist.items.length > 0;
             state.playlist.activeIndex = clamp(Number(playlist.activeIndex) || 0, 0, Math.max(0, state.playlist.items.length - 1));
         }
-        state.playlist.autoSwitch = localStorage.getItem("playlist_auto_switch") === "1";
+        state.playlist.autoSwitch = false;
         defaultSongPosY = clamp(Number(state.ui.posY) || 45, 20, 70);
         const curSong = state.songs.find((s) => s.id === state.currentSongId);
         if (curSong) {
@@ -4609,6 +4710,7 @@
         } finally {
             _lyricEditorProgrammaticWrite = false;
         }
+        scheduleFitLyricEditorFont();
     }
 
     /** 粘贴歌词：统一换行、去掉行尾与全文末尾的多余空格 */
@@ -4622,7 +4724,62 @@
         return s;
     }
 
+    let _fitLyricEditorFontTimer = 0;
+    function scheduleFitLyricEditorFont() {
+        if (_fitLyricEditorFontTimer) clearTimeout(_fitLyricEditorFontTimer);
+        _fitLyricEditorFontTimer = window.setTimeout(() => {
+            _fitLyricEditorFontTimer = 0;
+            fitLyricEditorFontToBox();
+        }, 40);
+    }
+
+    /** 编辑区字号：仅使用 A+/A− 与 localStorage 中的手动字号 */
+    function fitLyricEditorFontToBox() {
+        const ta = $("lyric-editor-large");
+        if (!ta) return;
+        applyLyricEditorUserFont(readLyricEditorUserFontPx());
+    }
+
     const LYRIC_EDITOR_HEIGHT_LS_KEY = "worship.lyricEditorHeightPx.v1";
+    const LYRIC_EDITOR_USER_FONT_LS = "worship.lyricEditorUserFontPx.v1";
+
+    function readLyricEditorUserFontPx() {
+        const v = parseInt(String(localStorage.getItem(LYRIC_EDITOR_USER_FONT_LS) || "16"), 10);
+        return clamp(Number.isFinite(v) ? v : 16, 10, 32);
+    }
+
+    function writeLyricEditorUserFontPx(px) {
+        try {
+            localStorage.setItem(LYRIC_EDITOR_USER_FONT_LS, String(clamp(Number(px) || 16, 10, 32)));
+        } catch (_e) {
+            /* ignore */
+        }
+    }
+
+    function syncLyricEditorFontSizeDisplay() {
+        const ta = $("lyric-editor-large");
+        const disp = $("editor-font-size-display");
+        if (!ta || !disp) return;
+        const fs = window.getComputedStyle(ta).fontSize;
+        const n = Math.round(parseFloat(fs) || 16);
+        disp.textContent = String(n);
+    }
+
+    function applyLyricEditorUserFont(px) {
+        const ta = $("lyric-editor-large");
+        if (!ta) return;
+        const p = clamp(Number(px) || 16, 10, 32);
+        ta.style.fontSize = `${p}px`;
+        syncLyricEditorFontSizeDisplay();
+    }
+
+    function bumpLyricEditorUserFont(delta) {
+        const ta = $("lyric-editor-large");
+        if (!ta) return;
+        const next = clamp(readLyricEditorUserFontPx() + delta, 10, 32);
+        writeLyricEditorUserFontPx(next);
+        applyLyricEditorUserFont(next);
+    }
 
     function syncLyricDrawerOverlayClass() {
         const d = $("editor-lyrics-drawer");
@@ -4656,7 +4813,10 @@
         const drawer = $("editor-lyrics-drawer");
         if (drawer && !installLyricEditorDrawerResize._toggleBound) {
             installLyricEditorDrawerResize._toggleBound = true;
-            drawer.addEventListener("toggle", syncLyricDrawerOverlayClass);
+            drawer.addEventListener("toggle", () => {
+                syncLyricDrawerOverlayClass();
+                if (drawer.open) scheduleFitLyricEditorFont();
+            });
             installLyricEditorDrawerOutsideClose();
         }
         syncLyricDrawerOverlayClass();
@@ -4681,6 +4841,7 @@
             } catch (_e) {
                 /* ignore */
             }
+            scheduleFitLyricEditorFont();
         }
 
         const saved = parseInt(localStorage.getItem(LYRIC_EDITOR_HEIGHT_LS_KEY), 10);
@@ -4741,6 +4902,7 @@
             () => {
                 const h = ta.getBoundingClientRect().height;
                 if (h > window.innerHeight * 0.92) applyLyricEditorHeight(window.innerHeight * 0.92);
+                else scheduleFitLyricEditorFont();
             },
             { passive: true }
         );
@@ -5090,11 +5252,72 @@
         renderPageGallery();
     }
 
+    function getPlaylistSongIdsOrderedForGallery() {
+        const plItems = Array.isArray(state.playlist?.items) ? state.playlist.items : [];
+        let songIdsOrdered =
+            plItems.length > 0
+                ? plItems.filter((sid) => state.songs.some((s) => String(s.id) === String(sid)))
+                : [];
+        if (!songIdsOrdered.length && state.currentSongId) {
+            songIdsOrdered = [state.currentSongId];
+        }
+        return songIdsOrdered;
+    }
+
+    /** 多首连播时：每首分区右侧页码；单首时隐藏分区页码、使用工具栏全局页码 */
+    function refreshGallerySectionPageIndicators() {
+        const gal = $("layout-page-gallery");
+        const songIdsOrdered = getPlaylistSongIdsOrderedForGallery();
+        const multi = songIdsOrdered.length > 1;
+        const curSid = String(state.currentSongId || "");
+
+        if (!gal || !multi || !gal.classList.contains("layout-page-gallery--multi-strip")) {
+            return;
+        }
+
+        gal.querySelectorAll(":scope > .gallery-song-section").forEach((sec) => {
+            const sid = sec.getAttribute("data-song-id");
+            if (!sid) return;
+            const meta = sec.querySelector(".gallery-song-section-page-meta");
+            if (!meta) return;
+            const plSong = state.songs.find((s) => String(s.id) === String(sid));
+            if (!plSong) return;
+            const isCurrent = String(sid) === curSid;
+            const lyricsSrc = isCurrent ? getStablePagingLyricsForPageSplit() : String(plSong.lyrics ?? "");
+            const pages = splitPages(lyricsSrc, state.ui.defaultLines);
+            const pn = Math.max(1, pages.length);
+            const cp = isCurrent ? clamp(state.currentPage, 0, Math.max(0, pages.length - 1)) : 0;
+
+            const wrapI = meta.querySelector('[data-gallery-page-mode="interactive"]');
+            const wrapS = meta.querySelector('[data-gallery-page-mode="static"]');
+            if (wrapI) {
+                wrapI.hidden = !isCurrent;
+                const inp = wrapI.querySelector(".gallery-section-page-input");
+                const tot = wrapI.querySelector(".page-indicator-total");
+                if (tot) tot.textContent = `/${pn}`;
+                if (inp) {
+                    inp.setAttribute("max", String(pn));
+                    inp.setAttribute("min", "1");
+                    inp.value = String(clamp(cp + 1, 1, pn));
+                }
+            }
+            if (wrapS) {
+                wrapS.hidden = isCurrent;
+                const sum = wrapS.querySelector(".gallery-section-page-summary");
+                if (sum) sum.textContent = `共 ${pn} 页`;
+            }
+        });
+    }
+
     function syncPageIndicatorFromState(pageCount) {
         const n = Math.max(1, Number(pageCount) || 1);
+        const songIdsOrdered = getPlaylistSongIdsOrderedForGallery();
+        const multi = songIdsOrdered.length > 1;
+        const globalMeta = document.querySelector(".speaker-view-page-meta");
+        if (globalMeta) globalMeta.hidden = !!multi;
         const inp = $("page-indicator-input");
         const total = $("page-indicator-total");
-        if (inp && total) {
+        if (inp && total && !multi) {
             total.textContent = `/${n}`;
             inp.setAttribute("max", String(n));
             inp.setAttribute("min", "1");
@@ -5258,11 +5481,19 @@
             if (sec.getAttribute("data-song-id") !== sid) return false;
             const plSong = state.songs.find((s) => String(s.id) === String(sid));
             if (!plSong) return false;
+            if (!sec.querySelector(".gallery-song-section-page-meta")) return false;
 
             const headTitle = sec.querySelector(".gallery-song-section-title");
             if (headTitle) headTitle.textContent = plSong.title || "未命名";
 
             const isCurrent = sid === curSid;
+            const pageMetaEl = sec.querySelector(".gallery-song-section-page-meta");
+            if (pageMetaEl) {
+                const wrapI = pageMetaEl.querySelector('[data-gallery-page-mode="interactive"]');
+                const wrapS = pageMetaEl.querySelector('[data-gallery-page-mode="static"]');
+                if (wrapI) wrapI.hidden = !isCurrent;
+                if (wrapS) wrapS.hidden = isCurrent;
+            }
             const lyricsSrc = isCurrent ? getStablePagingLyricsForPageSplit() : String(plSong.lyrics ?? "");
             const pages = splitPages(lyricsSrc, state.ui.defaultLines);
             const cp = isCurrent ? clamp(state.currentPage, 0, Math.max(0, pages.length - 1)) : -1;
@@ -5328,35 +5559,96 @@
                         fontColor: state.ui.fontColor,
                         fontOpacityPct: state.ui.fontOpacityPct,
                         textStrokePx: state.ui.textStrokePx,
+                        fontWeight: state.ui.fontWeight,
                         lightBg: effectiveSongBackground(plSong).bgType === "solid-white"
                     });
                     lyricAnim.appendChild(row);
                 });
+                applyGalleryCardLyricVerticalLayout(card, lyricAnim, plSong);
             }
         }
+        refreshGallerySectionPageIndicators();
+        requestAnimationFrame(() => relayoutGalleryLyricVerticalPads());
         return true;
+    }
+
+    function updateGalleryStatusBar() {
+        const bar = $("gallery-status-bar");
+        if (!globalThis.__displayWindowOpened) {
+            if (bar) bar.style.display = "none";
+            return;
+        }
+        if (bar) bar.style.display = "flex";
+
+        const songEl = $("gallery-status-song");
+        const pageEl = $("gallery-status-page");
+        if (!songEl || !pageEl) return;
+        const plItems = Array.isArray(state.playlist?.items) ? state.playlist.items : [];
+        if (!plItems.length) {
+            songEl.textContent = "—";
+            pageEl.textContent = "—";
+            return;
+        }
+        const curId = state.currentSongId;
+        const idx = plItems.findIndex((id) => String(id) === String(curId));
+        const song = state.songs?.find((s) => String(s.id) === String(curId));
+        if (idx < 0 || !song) {
+            songEl.textContent = "—";
+            pageEl.textContent = "—";
+            return;
+        }
+        const ord = idx + 1;
+        songEl.textContent = `第${ord}首 ${song.title || "未命名"}`;
+        let linesSrc = "";
+        try {
+            linesSrc = getStablePagingLyricsForPageSplit();
+        } catch (_e) {
+            linesSrc = String(song.lyrics ?? "");
+        }
+        const pages = splitPages(linesSrc, state.ui.defaultLines);
+        const total = Math.max(1, pages.length);
+        const y = clamp(state.currentPage, 0, total - 1) + 1;
+        pageEl.textContent = `第${y}/${total}页`;
+    }
+
+    function resetGalleryWrapperScroll() {
+        const gal = $("layout-page-gallery");
+        if (!gal) return;
+        const wrap = gal.parentElement;
+        if (!wrap) return;
+        wrap.style.overflowX = "auto";
+        wrap.style.maxWidth = "100%";
+        wrap.scrollLeft = 0;
     }
 
     function renderPageGallery() {
         const gal = document.getElementById("layout-page-gallery");
-        if (!gal) return;
+        const finishGalleryChrome = () => {
+            updateGalleryStatusBar();
+            updateGalleryZoom();
+            resetGalleryWrapperScroll();
+        };
+
+        if (!gal) {
+            finishGalleryChrome();
+            return;
+        }
         if (!state.songs || !state.songs.length || !state.currentSongId) {
             gal.innerHTML = "";
             delete gal.dataset.galleryStructSig;
+            const globalMeta = document.querySelector(".speaker-view-page-meta");
+            if (globalMeta) globalMeta.hidden = false;
+            finishGalleryChrome();
             return;
         }
 
-        const plItems = Array.isArray(state.playlist?.items) ? state.playlist.items : [];
-        let songIdsOrdered =
-            plItems.length > 0
-                ? plItems.filter((sid) => state.songs.some((s) => String(s.id) === String(sid)))
-                : [];
-        if (!songIdsOrdered.length && state.currentSongId) {
-            songIdsOrdered = [state.currentSongId];
-        }
+        const songIdsOrdered = getPlaylistSongIdsOrderedForGallery();
         if (!songIdsOrdered.length) {
             gal.innerHTML = "";
             delete gal.dataset.galleryStructSig;
+            const globalMeta = document.querySelector(".speaker-view-page-meta");
+            if (globalMeta) globalMeta.hidden = false;
+            finishGalleryChrome();
             return;
         }
 
@@ -5368,6 +5660,10 @@
         ) {
             scrollGalleryActiveIntoView(gal);
             scheduleGalleryCardSwitchAnimation();
+            refreshGallerySectionPageIndicators();
+            ensureGalleryLayoutResizeObserver();
+            requestAnimationFrame(() => relayoutGalleryLyricVerticalPads());
+            finishGalleryChrome();
             return;
         }
 
@@ -5385,25 +5681,61 @@
 
             const head = document.createElement("header");
             head.className = "gallery-song-section-head";
+            const headMain = document.createElement("div");
+            headMain.className = "gallery-song-section-head-main";
             const idxLabel = document.createElement("span");
             idxLabel.className = "gallery-song-section-index";
             idxLabel.textContent = `第 ${songOrd + 1} 首`;
             const titleEl = document.createElement("span");
             titleEl.className = "gallery-song-section-title";
             titleEl.textContent = plSong.title || "未命名";
-            head.appendChild(idxLabel);
-            head.appendChild(titleEl);
+            headMain.appendChild(idxLabel);
+            headMain.appendChild(titleEl);
+            head.appendChild(headMain);
+
+            const isCurrent = String(sid) === String(state.currentSongId);
+            const lyricsSrc = isCurrent ? getStablePagingLyricsForPageSplit() : String(plSong.lyrics ?? "");
+            const pages = splitPages(lyricsSrc, state.ui.defaultLines);
+            const cp = clamp(state.currentPage, 0, Math.max(0, pages.length - 1));
+
+            const pageMeta = document.createElement("div");
+            pageMeta.className = "gallery-song-section-page-meta";
+            const wrapInteractive = document.createElement("span");
+            wrapInteractive.className = "page-indicator-wrap";
+            wrapInteractive.setAttribute("data-gallery-page-mode", "interactive");
+            wrapInteractive.title = "输入页码后按回车跳转";
+            wrapInteractive.hidden = !isCurrent;
+            const inpPg = document.createElement("input");
+            inpPg.type = "text";
+            inpPg.inputMode = "numeric";
+            inpPg.pattern = "[0-9]*";
+            inpPg.className = "page-indicator-input gallery-section-page-input";
+            inpPg.setAttribute("aria-label", `「${plSong.title || "诗歌"}」当前页码`);
+            const totI = document.createElement("span");
+            totI.className = "page-indicator-total";
+            totI.textContent = `/${Math.max(1, pages.length)}`;
+            wrapInteractive.appendChild(inpPg);
+            wrapInteractive.appendChild(totI);
+
+            const wrapStatic = document.createElement("span");
+            wrapStatic.className = "page-indicator-wrap gallery-section-page-wrap-static";
+            wrapStatic.setAttribute("data-gallery-page-mode", "static");
+            wrapStatic.title = "当前未选中本首；翻页请先在上方卡片选中本首诗歌";
+            wrapStatic.hidden = isCurrent;
+            const sumSpan = document.createElement("span");
+            sumSpan.className = "gallery-section-page-summary";
+            sumSpan.textContent = `共 ${Math.max(1, pages.length)} 页`;
+            wrapStatic.appendChild(sumSpan);
+
+            pageMeta.appendChild(wrapInteractive);
+            pageMeta.appendChild(wrapStatic);
+            head.appendChild(pageMeta);
             section.appendChild(head);
 
             const scrollRow = document.createElement("div");
             scrollRow.className = "layout-page-gallery-pages";
             scrollRow.setAttribute("role", "list");
             scrollRow.setAttribute("aria-label", `${plSong.title || "诗歌"} 分页`);
-
-            const isCurrent = String(sid) === String(state.currentSongId);
-            const lyricsSrc = isCurrent ? getStablePagingLyricsForPageSplit() : String(plSong.lyrics ?? "");
-            const pages = splitPages(lyricsSrc, state.ui.defaultLines);
-            const cp = clamp(state.currentPage, 0, Math.max(0, pages.length - 1));
             const effStrip = effectiveSongBackground(plSong);
             const galleryLiveVideoBgThis =
                 effStrip.bgType === "image" && effStrip.bgMediaType === "video" && !!effStrip.bgImage;
@@ -5453,10 +5785,12 @@
                         fontColor: state.ui.fontColor,
                         fontOpacityPct: state.ui.fontOpacityPct,
                         textStrokePx: state.ui.textStrokePx,
+                        fontWeight: state.ui.fontWeight,
                         lightBg: effectiveSongBackground(plSong).bgType === "solid-white"
                     });
                     lyricAnim.appendChild(row);
                 });
+                applyGalleryCardLyricVerticalLayout(card, lyricAnim, plSong);
                 card.addEventListener("click", () => {
                     if (String(sid) === String(state.currentSongId)) {
                         jumpToPage(pi);
@@ -5475,6 +5809,13 @@
         gal.dataset.galleryStructSig = newSig;
         scrollGalleryActiveIntoView(gal);
         scheduleGalleryCardSwitchAnimation();
+        refreshGallerySectionPageIndicators();
+        ensureGalleryLayoutResizeObserver();
+        requestAnimationFrame(() => {
+            relayoutGalleryLyricVerticalPads();
+            requestAnimationFrame(() => relayoutGalleryLyricVerticalPads());
+        });
+        finishGalleryChrome();
     }
     window.renderPageGallery = renderPageGallery;
 
@@ -5825,6 +6166,202 @@ ${deleteBtnHtml}
         });
     }
 
+    function loadSavedSetlists() {
+        const raw = parseJSON(localStorage.getItem(WORSHIP_SETLISTS_LS), []);
+        return Array.isArray(raw)
+            ? raw.filter((x) => x && typeof x === "object" && x.id && Array.isArray(x.songs))
+            : [];
+    }
+
+    function persistSavedSetlists(arr) {
+        localStorage.setItem(WORSHIP_SETLISTS_LS, JSON.stringify(arr));
+    }
+
+    function closeSetlistModal() {
+        const m = $("setlist-modal");
+        if (!m) return;
+        m.hidden = true;
+        m.setAttribute("aria-hidden", "true");
+    }
+
+    function openSetlistModal() {
+        const m = $("setlist-modal");
+        if (!m) return;
+        renderSetlistModalList();
+        m.hidden = false;
+        m.setAttribute("aria-hidden", "false");
+    }
+
+    function renderSetlistModalList() {
+        const root = $("setlist-list");
+        if (!root) return;
+        root.innerHTML = "";
+        const lists = loadSavedSetlists();
+        if (!lists.length) {
+            const p = document.createElement("p");
+            p.className = "setlist-modal__empty";
+            p.textContent = "暂无已保存的歌单。";
+            root.appendChild(p);
+            return;
+        }
+        lists.forEach((sl) => {
+            const card = document.createElement("div");
+            card.className = "setlist-card";
+            const nameEl = document.createElement("p");
+            nameEl.className = "setlist-card__name";
+            nameEl.textContent = String(sl.name || "未命名歌单");
+            const meta = document.createElement("p");
+            meta.className = "setlist-card__meta";
+            const n = Array.isArray(sl.songs) ? sl.songs.length : 0;
+            const when = sl.createdAt ? new Date(sl.createdAt).toLocaleString() : "—";
+            meta.textContent = `${n} 首 · 保存于 ${when}`;
+            const actions = document.createElement("div");
+            actions.className = "setlist-card__actions";
+            const loadBtn = document.createElement("button");
+            loadBtn.type = "button";
+            loadBtn.className = "small-btn";
+            loadBtn.textContent = "加载";
+            loadBtn.addEventListener("click", () => applySavedSetlist(sl, loadBtn));
+            const delBtn = document.createElement("button");
+            delBtn.type = "button";
+            delBtn.className = "small-btn";
+            delBtn.textContent = "删除";
+            delBtn.addEventListener("click", () => deleteSavedSetlist(sl.id, delBtn));
+            actions.appendChild(loadBtn);
+            actions.appendChild(delBtn);
+            card.appendChild(nameEl);
+            card.appendChild(meta);
+            card.appendChild(actions);
+            root.appendChild(card);
+        });
+    }
+
+    function applySavedSetlist(sl, triggerBtn) {
+        const next = [];
+        (Array.isArray(sl.songs) ? sl.songs : []).forEach((songId) => {
+            if (state.songs.some((s) => String(s.id) === String(songId)) && !next.includes(songId)) {
+                next.push(songId);
+            }
+        });
+        state.playlist.items = next;
+        state.playlist.activeIndex = next.length ? 0 : -1;
+        state.playlist.running = false;
+        savePlaylist();
+        renderPlaylist();
+        renderPageGallery();
+        broadcastState();
+        closeSetlistModal();
+        showToast("歌单已加载", triggerBtn || $("load-setlist-btn"));
+    }
+
+    function deleteSavedSetlist(id, triggerBtn) {
+        if (!window.confirm("确定删除该歌单？")) return;
+        const next = loadSavedSetlists().filter((x) => String(x.id) !== String(id));
+        try {
+            persistSavedSetlists(next);
+        } catch (_e) {
+            showToast("删除失败", triggerBtn || $("load-setlist-btn"));
+            return;
+        }
+        showToast("已删除歌单", triggerBtn || $("load-setlist-btn"));
+        renderSetlistModalList();
+    }
+
+    function installSetlistModalHandlers() {
+        if (installSetlistModalHandlers._done) return;
+        installSetlistModalHandlers._done = true;
+        $("setlist-modal-backdrop")?.addEventListener("click", () => closeSetlistModal());
+        $("setlist-modal-close")?.addEventListener("click", () => closeSetlistModal());
+    }
+
+    let setlistNameModalCtx = null;
+
+    function closeSetlistNameModal() {
+        const m = $("setlist-name-modal");
+        if (m) {
+            m.style.display = "none";
+            m.style.paddingTop = "";
+            m.style.alignItems = "";
+            m.style.justifyContent = "";
+            m.style.flexDirection = "";
+        }
+        const inp = $("setlist-name-input");
+        if (inp) inp.value = "";
+        setlistNameModalCtx = null;
+    }
+
+    function openSetlistNameModal(defaultName, ids, triggerBtn) {
+        const m = $("setlist-name-modal");
+        const inp = $("setlist-name-input");
+        if (!m || !inp) return false;
+        setlistNameModalCtx = { ids: [...ids], triggerBtn };
+        inp.value = defaultName;
+        m.style.display = "flex";
+        m.style.flexDirection = "row";
+        m.style.alignItems = "flex-start";
+        m.style.justifyContent = "center";
+        m.style.paddingTop = "18vh";
+        window.requestAnimationFrame(() => {
+            inp.focus();
+            inp.select();
+        });
+        return true;
+    }
+
+    function commitSetlistNameModalSave() {
+        const inp = $("setlist-name-input");
+        const ctx = setlistNameModalCtx;
+        if (!inp || !ctx) return;
+        const trimmed = String(inp.value || "").trim();
+        if (!trimmed) {
+            showToast("请输入歌单名称", $("setlist-name-confirm"));
+            return;
+        }
+        let lists = loadSavedSetlists();
+        const entry = {
+            id: "setlist_" + Date.now(),
+            name: trimmed,
+            songs: [...ctx.ids],
+            createdAt: Date.now()
+        };
+        const btn = ctx.triggerBtn;
+        try {
+            lists.push(entry);
+            persistSavedSetlists(lists);
+        } catch (err) {
+            console.warn("persist setlists", err);
+            showToast("歌单保存失败", btn);
+            closeSetlistNameModal();
+            return;
+        }
+        closeSetlistNameModal();
+        showCornerSuccessToast("歌单已保存");
+        showToast("歌单已保存", btn);
+    }
+
+    function installSetlistNameModalHandlers() {
+        if (installSetlistNameModalHandlers._bound) return;
+        installSetlistNameModalHandlers._bound = true;
+        const modal = $("setlist-name-modal");
+        const cancel = $("setlist-name-cancel");
+        const confirm = $("setlist-name-confirm");
+        const inp = $("setlist-name-input");
+        cancel?.addEventListener("click", () => closeSetlistNameModal());
+        confirm?.addEventListener("click", () => commitSetlistNameModalSave());
+        modal?.addEventListener("click", (e) => {
+            if (e.target === modal) closeSetlistNameModal();
+        });
+        inp?.addEventListener("keydown", (e) => {
+            if (e.key === "Escape") {
+                e.preventDefault();
+                closeSetlistNameModal();
+            } else if (e.key === "Enter") {
+                e.preventDefault();
+                commitSetlistNameModalSave();
+            }
+        });
+    }
+
     function addToPlaylist(songId, triggerElement) {
         if (!songId || state.playlist.items.includes(songId)) return;
         state.playlist.items.push(songId);
@@ -5871,7 +6408,7 @@ ${deleteBtnHtml}
 
     function startPlaylistPlayback() {
         if (!state.playlist.items.length) {
-        showToast("播放列表为空", $("playlist-start-btn"));
+            showToast("播放列表为空", $("playlist-start-btn"));
             return;
         }
         switchToPlaylistSong(0, true);
@@ -6794,6 +7331,7 @@ ${deleteBtnHtml}
         } catch (_e) {
             /* ignore */
         }
+        scheduleFitLyricEditorFont();
     }
 
     const ADV_ACC_STORAGE_KEY = "adv-drawer-accordion-v1";
@@ -8079,7 +8617,10 @@ ${deleteBtnHtml}
 
     async function publishSong() {
         const s = getCurrentSong();
-        if (!s.lyrics || !s.lyrics.length) { showToast('无歌词可发布'); return; }
+        if (!s.lyrics || !s.lyrics.length) {
+            showToast("无歌词可发布", $("publish-song-btn"));
+            return;
+        }
         const url = 'https://holy-snow-ebc5.cuirenjie123456789.workers.dev';
         try {
             const response = await fetch(url, {
@@ -8087,9 +8628,15 @@ ${deleteBtnHtml}
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ title: s.title, lyrics: s.lyrics, tags: s.tags || [] })
             });
-            if (response.ok) { showToast('✅ 已发布到云端'); }
-            else { showToast('❌ 发布失败，请重试'); }
-        } catch(e) { console.error('发布失败:', e); showToast('❌ 发布失败，请重试'); }
+            if (response.ok) {
+                showToast("✅ 已发布到云端", $("publish-song-btn"));
+            } else {
+                showToast("❌ 发布失败，请重试", $("publish-song-btn"));
+            }
+        } catch (e) {
+            console.error('发布失败:', e);
+            showToast("❌ 发布失败，请重试", $("publish-song-btn"));
+        }
     }
 
     function notifyProjectionConsoleReadyForGuide() {
@@ -8256,6 +8803,16 @@ ${deleteBtnHtml}
         try {
             win.addEventListener("unload", () => {
                 if (projectionDisplayWindowRef === win) projectionDisplayWindowRef = null;
+                try {
+                    globalThis.__displayWindowOpened = false;
+                } catch (_e) {
+                    /* ignore */
+                }
+                try {
+                    renderPageGallery();
+                } catch (_e2) {
+                    /* ignore */
+                }
                 showRestoreProjectionBanner();
             });
         } catch (_) {
@@ -8875,7 +9432,10 @@ ${deleteBtnHtml}
         }
         if (!win) {
             showPopupBlockedBanner();
-            if (toastAnchor) showToast("无法打开窗口，请允许弹窗", toastAnchor);
+            showToast(
+                "无法打开窗口，请允许弹窗",
+                toastAnchor || $("open-display-btn") || $("open-leader-btn")
+            );
             return null;
         }
         const applyPlacement = () => {
@@ -8910,6 +9470,11 @@ ${deleteBtnHtml}
             }
             safeBroadcastState("openDisplayWindow:focus-existing");
             hideRestoreProjectionBanner();
+            try {
+                globalThis.__displayWindowOpened = true;
+            } catch (_e) {
+                /* ignore */
+            }
             return;
         }
         /** 先 window.open（须留在用户点击的同步栈内），再广播状态，避免 broadcastState 抛错或耗时导致弹窗被拦截 */
@@ -8921,6 +9486,11 @@ ${deleteBtnHtml}
         safeBroadcastState("openDisplayWindow:after-open");
         if (newWin) {
             attachProjectionDisplayWindow(newWin);
+            try {
+                globalThis.__displayWindowOpened = true;
+            } catch (_e) {
+                /* ignore */
+            }
         }
         hideRestoreProjectionBanner();
     }
@@ -9279,6 +9849,37 @@ ${deleteBtnHtml}
                 });
             }
         }
+        if (!document.body.dataset.boundGallerySectionPageInd) {
+            document.body.dataset.boundGallerySectionPageInd = "1";
+            document.body.addEventListener("keydown", (e) => {
+                if (e.key !== "Enter") return;
+                const t = e.target;
+                if (!(t instanceof Element) || !t.classList.contains("gallery-section-page-input")) return;
+                e.preventDefault();
+                const pages = splitPages(getStablePagingLyricsForPageSplit(), state.ui.defaultLines);
+                const maxP = Math.max(1, pages.length);
+                const raw = String(t.value || "").trim();
+                const n = parseInt(raw, 10);
+                const v = clamp(Number.isFinite(n) ? n : state.currentPage + 1, 1, maxP);
+                jumpToPage(v - 1);
+                t.blur();
+            });
+        }
+        on("gallery-zoom-out", "click", () => {
+            galleryZoomLevel = clamp(Math.round((galleryZoomLevel - 0.1) * 10) / 10, 0.5, 2);
+            persistGalleryZoomLevel();
+            updateGalleryZoom();
+        });
+        on("gallery-zoom-in", "click", () => {
+            galleryZoomLevel = clamp(Math.round((galleryZoomLevel + 0.1) * 10) / 10, 0.5, 2);
+            persistGalleryZoomLevel();
+            updateGalleryZoom();
+        });
+        on("gallery-zoom-reset", "click", () => {
+            galleryZoomLevel = 1;
+            persistGalleryZoomLevel();
+            updateGalleryZoom();
+        });
         on("publish-song-btn", "click", publishSong);
         on("apply-to-display", "click", () => {
             saveCurrentLyrics({ silent: true });
@@ -9396,9 +9997,25 @@ ${deleteBtnHtml}
             if (count > 0) showCornerSuccessToast("✅ 已导入");
         });
         on("playlist-start-btn", "click", startPlaylistPlayback);
-        on("playlist-auto-switch", "change", () => {
-            state.playlist.autoSwitch = !!$("playlist-auto-switch")?.checked;
-            localStorage.setItem("playlist_auto_switch", state.playlist.autoSwitch ? "1" : "0");
+        installSetlistModalHandlers();
+        installSetlistNameModalHandlers();
+        on("save-setlist-btn", "click", (e) => {
+            const btn = e.currentTarget;
+            const ids = Array.isArray(state.playlist.items) ? [...state.playlist.items] : [];
+            if (!ids.length) {
+                showToast("播放列表为空，请先添加诗歌", btn);
+                return;
+            }
+            const defaultName = "敬拜歌单 " + new Date().toLocaleDateString();
+            openSetlistNameModal(defaultName, ids, btn);
+        });
+        on("load-setlist-btn", "click", (e) => {
+            const btn = e.currentTarget;
+            if (!loadSavedSetlists().length) {
+                showToast("暂无保存的歌单", btn);
+                return;
+            }
+            openSetlistModal();
         });
 
         on("search-input", "input", renderSongList);
@@ -9515,8 +10132,10 @@ ${deleteBtnHtml}
         on("pos-slider", "input", () => {
             const v = clamp(Number($("pos-slider").value || 45), 20, 70);
             if ($("pos-val")) $("pos-val").textContent = String(v);
+            state.ui.posY = v;
             scheduleMiniSliderDomPreview(() => applyMiniPreviewPosDragTransform(v));
             refreshMonitorContent({ posY: v });
+            scheduleGalleryLyricPadRelayout();
         });
         on("pos-slider", "change", () => {
             state.ui.posY = clamp(Number($("pos-slider").value || 45), 20, 70);
@@ -9697,6 +10316,7 @@ ${deleteBtnHtml}
             updateCloudUploadBtnState();
             scheduleLyricDraftSave();
             renderPageGallery();
+            scheduleFitLyricEditorFont();
         });
         on("lyric-editor-large", "paste", (e) => {
             if (_lyricEditorProgrammaticWrite) return;
@@ -9720,6 +10340,8 @@ ${deleteBtnHtml}
             });
             ta.dispatchEvent(new Event("input", { bubbles: true }));
         });
+        on("editor-font-increase", "click", () => bumpLyricEditorUserFont(1));
+        on("editor-font-decrease", "click", () => bumpLyricEditorUserFont(-1));
         on("song-title-input", "input", () => {
             syncEditorToSong();
             renderSongList();
@@ -9858,6 +10480,7 @@ ${deleteBtnHtml}
                 if (t.tagName === "SELECT") return true;
                 if (t.tagName === "INPUT") {
                     if (t.id === "page-indicator-input") return false;
+                    if (t.classList.contains("gallery-section-page-input")) return false;
                     if (
                         (t.id === "song-title-input" ||
                             t.id === "search-input" ||
@@ -12358,6 +12981,11 @@ ${deleteBtnHtml}
             tryFreeLocalStorageForWorshipBoot();
             ensureBgImageInputAcceptsVideo();
             loadState();
+            try {
+                globalThis.__displayWindowOpened = false;
+            } catch (_e) {
+                /* ignore */
+            }
             applyAdvPreviewCssVarsFromStorage();
             ensureDefaultThemeBackgroundAtBoot();
             normalizeLegacyBgImageReference();
@@ -12381,7 +13009,6 @@ ${deleteBtnHtml}
             updateSpeakerCards();
             renderMiniPreview();
             renderPlaylist();
-            if ($("playlist-auto-switch")) $("playlist-auto-switch").checked = !!state.playlist.autoSwitch;
             bindEvents();
             installLyricEditorDrawerResize();
             initProjectionPreviewMonitor();
@@ -12453,6 +13080,8 @@ ${deleteBtnHtml}
             maybeShowWelcomeToast();
             maybeStartNewUserArrowGuide();
             ensureWorshipVersionFooter();
+            updateGalleryStatusBar();
+            updateGalleryZoom();
             if (typeof UI !== "undefined" && UI.init) UI.init();
             // ====== 强制初始化页面画廊 ======
             setTimeout(function () {

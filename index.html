@@ -441,7 +441,10 @@
             <h2 class="setlist-modal__title" id="setlist-modal-title">📋 我的歌单</h2>
             <button type="button" class="setlist-modal__close" id="setlist-modal-close" aria-label="关闭">✕</button>
         </div>
-        <div id="setlist-list" class="setlist-modal__list"></div>
+        <div class="setlist-modal__body">
+            <div id="setlist-list" class="setlist-modal__list"></div>
+            <p class="setlist-modal__storage-foot" role="note">⚠️ 使用系统清理工具时可能误删本地数据，建议定期导出备份</p>
+        </div>
     </div>
 </div>
 <div id="corner-success-toast" class="corner-success-toast" role="status" aria-live="polite" hidden></div>
@@ -1233,7 +1236,11 @@
   <div style="background:#1e2030; border-radius:16px; padding:28px 32px; width:420px; max-width:90vw; border:1px solid rgba(255,255,255,0.1); box-shadow:0 16px 48px rgba(0,0,0,0.5);">
     <h3 id="setlist-name-modal-title" style="margin:0 0 8px; color:#f5e6c8; font-size:1.1rem;">💾 保存歌单</h3>
     <p style="margin:0 0 16px; color:rgba(255,255,255,0.55); font-size:0.85rem;">请为本次敬拜歌单命名</p>
-    <input id="setlist-name-input" type="text" placeholder="例如：主日敬拜 5月第2周" style="width:100%; padding:10px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.2); background:rgba(0,0,0,0.3); color:#fff; font-size:15px; box-sizing:border-box; margin-bottom:20px;">
+    <input id="setlist-name-input" type="text" placeholder="例如：主日敬拜 5月第2周" style="width:100%; padding:10px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.2); background:rgba(0,0,0,0.3); color:#fff; font-size:15px; box-sizing:border-box;">
+    <div class="setlist-name-modal-hints" role="note">
+      💡 歌单数据仅保存在您的浏览器本地，不上传云端<br>
+      📦 每条歌单位占用极少空间（约几百字节）
+    </div>
     <div style="display:flex; gap:10px; justify-content:flex-end;">
       <button type="button" id="setlist-name-cancel" style="padding:8px 20px; border-radius:8px; border:1px solid rgba(255,255,255,0.2); background:transparent; color:rgba(255,255,255,0.7); cursor:pointer;">取消</button>
       <button type="button" id="setlist-name-confirm" style="padding:8px 20px; border-radius:8px; border:none; background:#d4af37; color:#1a1510; font-weight:600; cursor:pointer;">保存</button>

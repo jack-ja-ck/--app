@@ -103,6 +103,10 @@ const UI = {
 
     saveCurrentLyrics() {
         const g = typeof globalThis !== "undefined" ? globalThis : window;
+        if (typeof g.saveCurrentLyrics === "function") {
+            g.saveCurrentLyrics();
+            return;
+        }
         const getSong = g.getSong;
         const AppState = g.AppState;
         if (!AppState || typeof getSong !== "function") return;
@@ -298,22 +302,40 @@ const UI = {
 
     onBgImageInputChange(ev) {
         const input = ev.target;
-        const file = input && input.files && input.files[0];
-        if (!file) return;
-        const reader = new FileReader();
+        const files = input && input.files;
+        if (!files || !files.length) return;
+        const arr = Array.from(files);
         const anchor = document.getElementById("upload-bg-btn") || document.getElementById("upload-bg-trigger");
-        reader.onload = () => {
+        const readOne = (file) =>
+            new Promise((resolve, reject) => {
+                const r = new FileReader();
+                r.onload = () => {
+                    const dataUrl = String(r.result || "").trim();
+                    if (dataUrl) resolve(dataUrl);
+                    else reject(new Error("empty"));
+                };
+                r.onerror = () => reject(r.error || new Error("read"));
+                r.readAsDataURL(file);
+            });
+        (async () => {
             const g = typeof globalThis !== "undefined" ? globalThis : window;
             const AppState = g.AppState;
-            const dataUrl = String(reader.result || "").trim();
-            if (!dataUrl) {
+            let lastOk = "";
+            for (const file of arr) {
+                try {
+                    lastOk = await readOne(file);
+                } catch {
+                    /* skip */
+                }
+            }
+            if (!lastOk) {
                 UI.showToast("未能读取文件", anchor);
                 input.value = "";
                 return;
             }
             if (AppState) AppState.bgType = "image";
             try {
-                sessionStorage.setItem("worship.ui.bgImageDataUrl", dataUrl);
+                sessionStorage.setItem("worship.ui.bgImageDataUrl", lastOk);
             } catch (_e) {
                 /* ignore */
             }
@@ -321,14 +343,12 @@ const UI = {
                 n.classList.toggle("active", n.getAttribute("data-bg") === "image");
             });
             UI._updateAll();
-            UI.showToast("已选择背景文件", anchor);
+            UI.showToast(
+                arr.length > 1 ? `已选择 ${arr.length} 个文件，已应用最后一项` : "已选择背景文件",
+                anchor
+            );
             input.value = "";
-        };
-        reader.onerror = () => {
-            UI.showToast("读取文件失败", anchor);
-            input.value = "";
-        };
-        reader.readAsDataURL(file);
+        })();
     },
 
     stopAutoplay() {
@@ -575,7 +595,7 @@ const UI = {
         };
 
         /* 新建诗歌由 app.js createNewSong 绑定（state / switchSong）；勿在此绑 legacy AppState 路径以免与主逻辑脱节 */
-        on("save-song-btn", "click", () => UI.saveCurrentLyrics());
+        /* 保存歌词由 app.js saveCurrentLyrics 绑定（含校验、曲库持久化、提示窗）；勿重复监听以免保存两次 */
         on("apply-to-display", "click", () => UI.applyToDisplay());
         on("reset-current-song", "click", () => UI.resetCurrentSong());
 
@@ -1058,6 +1078,7 @@ globalThis.renderDisplayLyric = function (opts) {
         t.fontWeight != null && t.fontWeight !== "" ? String(t.fontWeight) : "700";
     layer.style.color = fontColor;
     const skipMid = !!(opts && opts.pageTransitionMidSwap);
+    layer.style.transform = "translateY(-50%)";
     if (inner) {
         layer.style.opacity = "1";
         layer.style.transition = "";

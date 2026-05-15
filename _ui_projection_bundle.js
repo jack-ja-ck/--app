@@ -79,6 +79,18 @@ globalThis.__projectionChannel =
 
 const CSS_DYNAMIC_BG_TYPES = new Set(["gentle-light", "starry-night", "cross-glow"]);
 const PARTICLE_BG_COUNT = 135;
+
+/** 规范化转场类型 */
+function canonicalPageTransition(t) {
+    const VALID = new Set([
+        "none", "fade", "slide-left", "slide-right",
+        "slide-up", "slide-down", "zoom-in", "zoom-out",
+        "flip-x", "flip-y", "rotate-left", "rotate-right"
+    ]);
+    const s = String(t || "none").trim().toLowerCase();
+    return VALID.has(s) ? s : "none";
+}
+
 function removeProjectionCssBg() {
     document.getElementById("projection-css-bg")?.remove();
 }
@@ -252,15 +264,84 @@ globalThis.applyLive = function (mode, payload) {
         mode = globalThis.projectionMode || "display";
     }
     if (!payload || !payload.pages) return;
+    const prev = globalThis.liveState;
+    const prevIdx = prev ? (prev.pageIndex || 0) : 0;
+    const newIdx = payload.pageIndex || 0;
+    const pageChanged = prevIdx !== newIdx;
     globalThis.liveState = payload;
-    if ((mode || globalThis.projectionMode) === "display") globalThis.renderDisplayLyric();
-    else globalThis.renderLeaderLyric();
-    globalThis.restartBg();
 
+    const isDisplay = (mode || globalThis.projectionMode) === "display";
+
+    if (isDisplay) {
+        const trans = canonicalPageTransition(payload.pageTransition);
+        const dur = globalThis.clamp(Number(payload.pageTransitionSpeed || 0.6), 0.3, 1.5);
+        const fontOp = globalThis.clamp(Number(payload.fontOpacityPct || 100), 20, 100) / 100;
+
+        const rerenderLyrics = (animOpts) => {
+            globalThis.renderDisplayLyric(animOpts);
+        };
+
+        if (pageChanged && trans !== "none" && prev && !payload.playlistFade) {
+            globalThis._runBundleTransition(trans, dur, rerenderLyrics, fontOp);
+        } else {
+            rerenderLyrics();
+        }
+    } else {
+        globalThis.renderLeaderLyric();
+    }
+    globalThis.restartBg();
 };
-globalThis.renderDisplayLyric = function () {
+
+/** 投屏端交叉淡入淡出转场（与主控端一致的文字直立风格） */
+globalThis._runBundleTransition = function (trans, durSec, renderFn, fontOpacity) {
+    const layer = document.getElementById("projection-lyric");
+    const dur = globalThis.clamp(Number(durSec), 0.3, 1.5);
+    const fontOp = typeof fontOpacity === "number" ? fontOpacity : 1;
+    const t = canonicalPageTransition(trans);
+    const ease = "cubic-bezier(0.4, 0, 0.2, 1)";
+
+    if (!layer || t === "none" || typeof renderFn !== "function") {
+        if (typeof renderFn === "function") renderFn();
+        return;
+    }
+
+    /* 克隆旧层（快照当前歌词内容），放在当前层下面 */
+    const oldLyric = layer.cloneNode(true);
+    oldLyric.id = "projection-lyric-old";
+    oldLyric.style.pointerEvents = "none";
+    oldLyric.style.zIndex = "9";
+    oldLyric.style.transition = "none";
+    oldLyric.style.opacity = "1";
+    oldLyric.style.transform = "none";
+    layer.parentNode.insertBefore(oldLyric, layer);
+
+    /* 清空当前层，渲染新内容 */
+    renderFn({ pageTransitionMidSwap: true });
+
+    /* 同步新层基础样式 */
+    layer.style.transition = "none";
+    layer.style.opacity = "0";
+    layer.style.transform = "none";
+
+    /* 双 rAF 确保 DOM 已渲染后再启动动画，消除闪烁 */
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+            oldLyric.style.transition = `opacity ${dur}s ${ease}`;
+            layer.style.transition = `opacity ${dur}s ${ease}`;
+            oldLyric.style.opacity = "0";
+            layer.style.opacity = String(fontOp);
+        });
+    });
+
+    /* 动画结束后移除旧层 */
+    window.setTimeout(() => {
+        if (oldLyric.parentNode) oldLyric.parentNode.removeChild(oldLyric);
+    }, Math.round(dur * 1000) + 200);
+};
+globalThis.renderDisplayLyric = function (opts) {
     const layer = document.getElementById("projection-lyric");
     if (!layer || !globalThis.liveState) return;
+    const skipOT = !!(opts && opts.pageTransitionMidSwap);
     const pages = globalThis.liveState.pages || [];
     const idx = globalThis.clamp(globalThis.liveState.pageIndex || 0, 0, Math.max(0, pages.length - 1));
     const lines = pages[idx] || [];
@@ -268,20 +349,26 @@ globalThis.renderDisplayLyric = function () {
     const fontColor = globalThis.liveState.fontColor || t.color || "#ffffff";
     layer.style.textAlign = "center";
     layer.style.top = (t.topPct || 45) + "%";
+    if (!skipOT) layer.style.transform = "translateY(-50%)";
     layer.style.fontFamily = t.fontFamily || globalThis.__projectionUi.fontFamily;
     layer.style.fontSize = globalThis.clamp(t.fontSize || 56, 24, 160) + "px";
     layer.style.color = fontColor;
-    const applyFade = !!globalThis.liveState.playlistFade;
-    layer.style.transition = "opacity 300ms ease";
+    const applyFade = !!globalThis.liveState.playlistFade && !skipOT;
+    if (!skipOT) {
+        if (applyFade) layer.style.transition = "opacity 300ms ease";
+        else layer.style.transition = "";
+    }
     if (applyFade) layer.style.opacity = "0";
     const buildRow =
         typeof globalThis.buildLyricRowHtmlForProjectionLine === "function"
             ? globalThis.buildLyricRowHtmlForProjectionLine
             : (line) => `<div>${globalThis.escapeHtml(line)}</div>`;
     layer.innerHTML = lines.map((line) => buildRow(line, "", undefined)).join("");
-    if (applyFade) requestAnimationFrame(() => { layer.style.opacity = "1"; });
+    if (!skipOT) {
+        if (applyFade) requestAnimationFrame(() => { layer.style.opacity = "1"; });
+        else layer.style.opacity = "1";
+    }
     globalThis.updateDisplayCardPreview();
-
 };
 globalThis.renderLeaderLyric = function () {
     const layer = document.getElementById("projection-lyric");

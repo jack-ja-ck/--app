@@ -3431,12 +3431,12 @@
         {
             title: "第 1 步：歌词与页面从哪来",
             text:
-                "本窗口通过「频道 / 本机 LIVE 存储」接收主控制台同步的内容。主控台编辑歌词后点「应用到演示屏」，此处会更新页码与分页。也可点工具栏「改词」在本机直接编辑当前诗歌全文并保存（写入曲库，已连接主控台时会同步）。若暂时空白，请先回到主窗口同步或在本页「诗歌」导入包。"
+                "本窗口通过「频道 / 本机 LIVE 存储」接收主控制台同步的内容。主控台编辑歌词后点「应用到演示屏」，此处会更新页码与分页。也可在主窗口「主领诗歌 · 扫码同步」生成链接，用手机或平板浏览器打开后，一次载入歌词并尽量同步电脑上的主领偏好（显示模式、背景、字号等，详见帮助）。也可点工具栏「改词」在本机直接编辑当前诗歌全文并保存（仅写入本机曲库并更新主领画面，不会自动改会众投屏）。若暂时空白，请先回到主窗口同步或在本页「诗歌」导入包。"
         },
         {
             title: "第 2 步：底部工具栏",
             text:
-                "📋 翻页 / 📜 滚动 / 🗂️ 流程：切换主领阅读方式；「歌单」可切换播放列表中的诗歌；📐 编排可编辑敬拜流程卡片；📥 诗歌可扫码包、粘贴包文本或粘贴完整链接导入。工具栏约 3 秒无操作会收起，点右下角 ∨ 或从屏幕下缘向上轻滑可再次展开。"
+                "工具栏最左侧为「帮助」「引导」（图标略小于其它按钮，表示辅助说明）。接着是 📋 翻页 / 📜 滚动 / 🗂️ 流程、📐 编排、📥 诗歌、📋 歌单、✎ 改词、Aa 字号、歌词字色、备注、画笔、背景。主窗口「主领诗歌 · 扫码同步」生成的链接除歌词外，会尽量带上电脑上的主领偏好（显示模式、背景、字号、字色、备注与编排等，过长时自动精简）。手机窄屏时底栏会自动换行并只显示图标，避免被裁切；点右下角 ∨ 或从下缘上滑可展开。工具栏约 3 秒无操作会收起。"
         },
         {
             title: "第 3 步：翻页",
@@ -3444,14 +3444,14 @@
                 "在「翻页」模式下：点屏幕左右两侧的 ◀ ▶，或使用键盘左右方向键（画笔模式下除外）。「滚动」模式下不翻页，可自由上下阅读。流程模式下会按编排顺序跳转段落。"
         },
         {
-            title: "第 4 步：字号与背景",
+            title: "第 4 步：字号、字色与背景",
             text:
-                "点 Aa 打开字号滑块（vw 单位，适合手机/平板）；点 🎨 可选纯黑 / 纯白 / 灰 / 藏青、粒子动效或本地上传图片作背景。以上设置保存在本机浏览器。"
+                "点 Aa 打开字号滑块（vw 单位，适合手机/平板）；点字色圆点可调主领歌词颜色（仅本页显示）。点 🎨 可选纯黑 / 纯白 / 灰 / 藏青、粒子动效或本地上传图片作背景。以上设置保存在本机浏览器。"
         },
         {
-            title: "第 5 步：备注、改词与画笔",
+            title: "第 5 步：编排、备注、改词与画笔",
             text:
-                "✎ 改词：直接编辑当前诗歌歌词（写入曲库，已连接主控台时会同步）。✏️ 备注：行末 ⊕ 添加主领提示。✍️ 画笔：圈画标注；底部悬浮条可完成、清除本页或打开颜色粗细；画笔面板内 ✅ 或双击空白也可退出。"
+                "📐 编排：打开「敬拜流程编排」可生成 / 模板 / 拖拽排序；编辑完成后点底部「使用」切换到流程模式并关闭窗口。✎ 改词：仅本机曲库与主领，不自动改投屏。✏️ 备注：行末 ⊕ 添加主领提示。✍️ 画笔：底部有「完成」「清除本页」「撤销上一步」「颜色/粗细」；颜色面板会浮在「完成」条上方以免挡住；面板内可清页或点 ✅ 退出；双击空白区域也可退出画笔。"
         },
         {
             title: "第 6 步：与会众投屏",
@@ -3563,18 +3563,22 @@
     function getLeaderHelpModalInnerHtml() {
         return [
             "<h2>📖 主领视角 · 使用帮助</h2>",
-            "<p style=\"opacity:.88;font-size:0.9rem;line-height:1.55;margin:0 0 14px;\">本页与主控台、会众投屏配合使用。以下说明仅针对<b>主领窗口</b>（<code>?leader=1</code> 或「主领视图」弹窗）。完整控制台说明可在主窗口点「使用帮助」查看。</p>",
+            "<p style=\"opacity:.88;font-size:0.9rem;line-height:1.55;margin:0 0 14px;\">本页与主控台、会众投屏配合使用。以下说明仅针对<b>主领窗口</b>（<code>?leader=1</code> 或「主领视图」弹窗）。底栏最左为「帮助」「引导」，图标略小于其它按钮。完整控制台说明可在主窗口点「使用帮助」查看。</p>",
             "<h3>一、数据如何同步</h3>",
             "<ul>",
-            "<li>主控台在「编辑歌词」区域改词、分页或样式后，必须点<b>「应用到演示屏」</b>，主领页与投屏才会收到更新。</li>",
+            "<li>主控台在「编辑歌词」区域改词、分页或样式后，必须点<b>「应用到演示屏」</b>，主领页与会众投屏才会收到 LIVE 更新。</li>",
             "<li>本窗口通过 BroadcastChannel 与 <code>localStorage</code> 中的 LIVE 数据监听变更；请保持主控台与本页同时打开。</li>",
+            "<li>主窗口「主领诗歌 · 扫码同步」生成的链接，除歌词外会尽量附带电脑浏览器里保存的<b>主领偏好</b>（显示模式、背景、字号、字色、工具栏收起、备注与各诗编排等）；手机打开后写入该手机本机。不含自定义背景大图与画笔图层；若包体过大会自动省略部分备注或编排数据。</li>",
+            "<li>主领「改词」保存后<b>不会</b>写入 LIVE、也<b>不会</b>通过频道推给主控台；仅更新本机曲库与当前主领画面，避免误改会众屏。</li>",
             "</ul>",
             "<h3>二、工具栏与显示模式</h3>",
             "<ul>",
-            "<li><b>翻页 / 滚动 / 流程</b>：切换歌词呈现方式；「歌单」可切换播放列表中的诗歌；「流程」依赖诗歌上保存的敬拜流程（可在本页编排）。</li>",
-            "<li><b>编排</b>：打开流程编辑器，支持快速模板（按当前分页自动适配）、拖拽排序等。</li>",
-            "<li><b>诗歌</b>：可粘贴包文本，或粘贴扫码后的完整链接（含 <code>#wp1=</code>）一键载入。</li>",
-            "<li>工具栏一段时间不操作会自动收起；点右下角 <b>∨</b> 或从屏幕<b>下边缘向上滑</b>可重新展开。</li>",
+            "<li><b>帮助 / 引导</b>：分步说明与本页长文帮助；始终排在工具栏最左侧。</li>",
+            "<li><b>翻页 / 滚动 / 流程</b>：切换歌词呈现方式；「歌单」可切换播放列表中的诗歌；「流程」依赖诗歌上保存的敬拜流程（在本页「编排」中编辑）。</li>",
+            "<li><b>编排</b>：打开流程编辑器，支持生成、快速模板、拖拽排序；编辑完成后点弹窗底部<b>「使用」</b>可切换到流程模式并关闭。</li>",
+            "<li><b>诗歌</b>：可粘贴包文本，或粘贴扫码后的完整链接（含 <code>#wp1=</code>）一键载入。链接中除歌词外，还可携带本机在主领页保存的<b>显示模式、背景、字号、字色、备注、各诗编排流程</b>等（若过长会自动精简）。</li>",
+            "<li><b>字色</b>：调节主领歌词颜色（仅主领本机显示）。</li>",
+            "<li>手机窄屏时底栏可能<b>换行并只显示图标</b>，避免被裁切；点右下角 <b>∨</b> 或从屏幕<b>下边缘向上滑</b>可重新展开。工具栏一段时间不操作会自动收起。</li>",
             "</ul>",
             "<h3>三、翻页与快捷键</h3>",
             "<ul>",
@@ -3585,9 +3589,9 @@
             "<ul>",
             "<li><b>Aa</b>：拖动滑块调节歌词字号（vw），设置保存在本机。</li>",
             "<li><b>🎨</b>：纯黑 / 纯白 / 灰 / 藏青、粒子动效或上传图片背景。</li>",
-            "<li><b>✎ 改词</b>：编辑当前诗歌全文歌词（段落空行表示分页），保存后写入曲库并同步主控台与投屏（若已连接）。</li>",
+            "<li><b>✎ 改词</b>：编辑当前诗歌全文歌词（段落空行表示分页），保存后写入<b>本机</b>曲库并更新主领画面；<b>不会</b>自动改动会众投屏（须主控台「应用到演示屏」）。</li>",
             "<li><b>✏️ 备注</b>：按行添加主领提示；金色点可查看已存备注。</li>",
-            "<li><b>✍️ 画笔</b>：在歌词上标注；底部悬浮条可完成、清除或调整颜色线宽；也可双击空白退出。</li>",
+            "<li><b>✍️ 画笔</b>：在歌词上标注。底部条含「完成」「清除本页」「撤销上一步」「颜色/粗细」；打开颜色/粗细时，面板浮在底部条<b>上方</b>以免遮挡；面板内可清页或点 ✅ 退出；双击空白区域也可退出画笔。</li>",
             "</ul>",
             "<h3>五、与会众画面的关系</h3>",
             "<ul>",
@@ -9077,6 +9081,39 @@ ${deleteBtnHtml}
     /** 手机扫码用：本地 file / localhost 无法被另一台设备打开，可让用户填写局域网 http 根地址 */
     const LEADER_QR_BASE_LS_KEY = "worship.leaderJoinBaseUrl.v1";
 
+    function hostnameLooksPrivateOrLocal(host) {
+        const h = String(host || "").toLowerCase();
+        if (!h || h === "localhost" || h === "[::1]") return true;
+        if (h === "127.0.0.1") return true;
+        if (h.endsWith(".local")) return true;
+        const parts = h.split(".");
+        if (parts.length === 4) {
+            const a = parseInt(parts[0], 10);
+            const b = parseInt(parts[1], 10);
+            if (a === 10) return true;
+            if (a === 127) return true;
+            if (a === 192 && b === 168) return true;
+            if (a === 172 && b >= 16 && b <= 31) return true;
+            if (a === 169 && b === 254) return true;
+        }
+        return false;
+    }
+
+    /** 从当前页推导「站点根」（仅当 https 且非公网保留地址时可用，便于 GitHub Pages 等一键扫码跨网） */
+    function derivePublicHttpsLeaderJoinBaseFromLocation() {
+        try {
+            const u = new URL(location.href);
+            if (u.protocol !== "https:") return "";
+            if (hostnameLooksPrivateOrLocal(u.hostname)) return "";
+            let path = u.pathname || "/";
+            if (/\.html?$/i.test(path)) path = path.replace(/[^/]+$/i, "");
+            if (!path.endsWith("/")) path += "/";
+            return u.origin + path;
+        } catch (_e) {
+            return "";
+        }
+    }
+
     function resolveLeaderJoinUrlForQr() {
         const pageJoin = projectionEntryUrl("leader");
         let pageAbs;
@@ -9097,7 +9134,15 @@ ${deleteBtnHtml}
                 if (!/^https?:\/\//i.test(base)) base = "http://" + base;
                 const normalized = base.replace(/\/?$/, "/");
                 const join = new URL("index.html?leader=1", normalized).href;
-                return { qrEncode: join, pageAbs, mode: "custom", needsLanHint: false };
+                const ju = new URL(join);
+                const crossInternetOk = ju.protocol === "https:" && !hostnameLooksPrivateOrLocal(ju.hostname);
+                return {
+                    qrEncode: join,
+                    pageAbs,
+                    mode: "custom",
+                    needsLanHint: !crossInternetOk,
+                    crossInternetOk
+                };
             } catch (_e) {
                 /* fall through */
             }
@@ -9106,7 +9151,7 @@ ${deleteBtnHtml}
         try {
             u = new URL(pageAbs);
         } catch (_e) {
-            return { qrEncode: null, pageAbs, mode: "broken", needsLanHint: true };
+            return { qrEncode: null, pageAbs, mode: "broken", needsLanHint: true, crossInternetOk: false };
         }
         const badForPhone =
             u.protocol === "file:" ||
@@ -9114,9 +9159,36 @@ ${deleteBtnHtml}
             u.hostname === "127.0.0.1" ||
             u.hostname === "[::1]";
         if (badForPhone) {
-            return { qrEncode: null, pageAbs: u.href, mode: "local", needsLanHint: true };
+            return { qrEncode: null, pageAbs: u.href, mode: "local", needsLanHint: true, crossInternetOk: false };
         }
-        return { qrEncode: u.href, pageAbs: u.href, mode: "ok", needsLanHint: false };
+        const joinDirect = u.href;
+        const priv = hostnameLooksPrivateOrLocal(u.hostname);
+        const crossInternetOk = u.protocol === "https:" && !priv;
+        if (u.protocol === "http:" && priv) {
+            return {
+                qrEncode: joinDirect,
+                pageAbs: u.href,
+                mode: "lan-http",
+                needsLanHint: true,
+                crossInternetOk: false
+            };
+        }
+        if (u.protocol === "https:" && priv) {
+            return {
+                qrEncode: joinDirect,
+                pageAbs: u.href,
+                mode: "lan-https",
+                needsLanHint: true,
+                crossInternetOk: false
+            };
+        }
+        return {
+            qrEncode: joinDirect,
+            pageAbs: u.href,
+            mode: "ok",
+            needsLanHint: false,
+            crossInternetOk
+        };
     }
 
     /** 投屏/主领新窗口打开后抢焦点时，尽量把键盘控制权留在主窗口（放映员操作） */
@@ -9996,7 +10068,7 @@ ${deleteBtnHtml}
         }
     }
 
-    /** 主领「诗歌包」二维码：仅标题+歌词，离线可扫（手机主领页「诗歌」→ 粘贴导入） */
+    /** 主领「诗歌包」二维码：标题+歌词 + 可选主领偏好（lp），离线可扫 */
     const WORSHIP_QR_PACK_MAX_CHARS = 2400;
     /** 扫码打开链接总长度上限（含 #wp1=），兼顾常见二维码生成接口 */
     const LEADER_QR_OPEN_URL_MAX = 3000;
@@ -10023,6 +10095,133 @@ ${deleteBtnHtml}
         const ix = ordered.findIndex((x) => String(x.id) === cur);
         const currentIndex = ix >= 0 ? ix : 0;
         return { songs: ordered, currentIndex };
+    }
+
+    /** 扫码包内可选字段：主领本机偏好（与主领页 localStorage 键一致；不含自定义背景图与画笔图层以控制体积） */
+    function readLeaderQrPackPrefsForExport() {
+        const get = (k) => {
+            try {
+                return localStorage.getItem(k);
+            } catch (_e) {
+                return null;
+            }
+        };
+        let dm = get("leader_display_mode") || "multi";
+        if (dm === "single") dm = "multi";
+        if (!["multi", "scroll", "flow"].includes(dm)) dm = "multi";
+        let bm = get("leader_bg_mode") || "particles";
+        if (!["black", "white", "gray", "navy", "particles", "custom"].includes(bm)) bm = "particles";
+        if (bm === "custom") bm = "particles";
+        const tc = get("leader_toolbar_collapsed") === "1" ? 1 : 0;
+        const fs = String(get("leader_font_size") || "").trim();
+        const lc = String(get("leader_lyric_color_v1") || "").trim();
+        const out = { dm, bm, tc };
+        if (fs) out.fs = fs;
+        if (lc) out.lc = lc;
+        return out;
+    }
+
+    function readLeaderQrPackNotesForExport(maxRaw) {
+        try {
+            const raw = localStorage.getItem("leader_notes");
+            if (!raw || raw.length > maxRaw) return null;
+            const o = parseJSON(raw, null);
+            if (!o || typeof o !== "object" || Array.isArray(o)) return null;
+            return o;
+        } catch (_e) {
+            return null;
+        }
+    }
+
+    function buildLeaderQrPackWfForExport(orderedSongs, count) {
+        const wf = [];
+        for (let i = 0; i < count; i++) {
+            const s = orderedSongs[i];
+            const f = s && s.leaderWorshipFlow;
+            if (f && Array.isArray(f.cards) && f.cards.length) {
+                wf.push({ v: Number(f.version) || 1, c: f.cards });
+            } else wf.push(null);
+        }
+        return wf;
+    }
+
+    function buildLeaderQrPackLpTiers(orderedSongs, songCount) {
+        const prefs = readLeaderQrPackPrefsForExport();
+        const wf = buildLeaderQrPackWfForExport(orderedSongs, songCount);
+        const wfHas = wf.some(Boolean);
+        const nt = readLeaderQrPackNotesForExport(8000);
+        const tiers = [];
+        if (wfHas && nt) tiers.push({ ...prefs, wf, nt });
+        if (wfHas) tiers.push({ ...prefs, wf });
+        if (nt) tiers.push({ ...prefs, nt });
+        tiers.push({ ...prefs });
+        const seen = new Set();
+        const out = [];
+        tiers.forEach((t) => {
+            const k = JSON.stringify(t);
+            if (seen.has(k)) return;
+            seen.add(k);
+            out.push(t);
+        });
+        return out;
+    }
+
+    function normalizeLeaderPackLyricColorImport(raw) {
+        const s = String(raw || "").trim();
+        if (!s) return "";
+        if (/^#[0-9a-fA-F]{6}$/.test(s)) return s.toLowerCase();
+        if (/^#[0-9a-fA-F]{3}$/.test(s)) {
+            const a = s.slice(1);
+            return ("#" + a[0] + a[0] + a[1] + a[1] + a[2] + a[2]).toLowerCase();
+        }
+        return "";
+    }
+
+    function applyLeaderQrPackPrefsFromImport(lp, songsOut) {
+        if (!lp || typeof lp !== "object") return;
+        const safeSet = (k, v) => {
+            try {
+                if (v === undefined || v === null) return;
+                const s = String(v);
+                if (!s && k !== "leader_toolbar_collapsed") return;
+                localStorage.setItem(k, s);
+            } catch (_e) {
+                /* ignore */
+            }
+        };
+        try {
+            if (lp.dm && ["multi", "scroll", "flow"].includes(String(lp.dm))) safeSet("leader_display_mode", String(lp.dm));
+            if (lp.bm && ["black", "white", "gray", "navy", "particles"].includes(String(lp.bm))) {
+                safeSet("leader_bg_mode", String(lp.bm));
+            }
+            if (lp.tc === 0 || lp.tc === 1 || lp.tc === "0" || lp.tc === "1") {
+                safeSet("leader_toolbar_collapsed", lp.tc === 1 || lp.tc === "1" ? "1" : "0");
+            }
+            if (lp.fs != null && String(lp.fs).trim()) safeSet("leader_font_size", String(lp.fs).trim());
+            const lcOk = normalizeLeaderPackLyricColorImport(lp.lc);
+            if (lcOk) safeSet("leader_lyric_color_v1", lcOk);
+            else if (lp.lc === "" || lp.lc === null) {
+                try {
+                    localStorage.removeItem("leader_lyric_color_v1");
+                } catch (_e2) {
+                    /* ignore */
+                }
+            }
+            if (lp.nt && typeof lp.nt === "object" && !Array.isArray(lp.nt)) {
+                if (typeof setStore === "function") setStore("leader_notes", lp.nt);
+                else localStorage.setItem("leader_notes", JSON.stringify(lp.nt));
+            }
+        } catch (_e3) {
+            /* ignore */
+        }
+        if (Array.isArray(lp.wf) && Array.isArray(songsOut) && songsOut.length) {
+            lp.wf.forEach((entry, ix) => {
+                if (ix >= songsOut.length) return;
+                if (entry && Array.isArray(entry.c) && entry.c.length) {
+                    songsOut[ix].leaderWorshipFlow = { version: Number(entry.v) || 1, cards: entry.c };
+                }
+            });
+        }
     }
 
     function bytesToBase64Url(u8) {
@@ -10081,21 +10280,28 @@ ${deleteBtnHtml}
         let note = "";
 
         const tryPack = async (lite) => {
-            const payload = {
+            const sty = {
+                ff: state.ui.fontFamily,
+                fc: state.ui.fontColor,
+                fs: state.ui.fontSize,
+                fw: state.ui.fontWeight,
+                py: state.ui.posY,
+                dl: state.ui.defaultLines
+            };
+            const basePayload = () => ({
                 v: 1,
                 ci: clamp(ci, 0, Math.max(0, lite.length - 1)),
                 s: lite.map((x) => [x.title, x.lyrics]),
-                /** 与电脑主领/歌词区一致的精简样式（短键省体积） */
-                sty: {
-                    ff: state.ui.fontFamily,
-                    fc: state.ui.fontColor,
-                    fs: state.ui.fontSize,
-                    fw: state.ui.fontWeight,
-                    py: state.ui.posY,
-                    dl: state.ui.defaultLines
-                }
-            };
-            return encodeWorshipPackForQrString(payload);
+                sty
+            });
+            const tiers = buildLeaderQrPackLpTiers(ordered, lite.length);
+            for (let t = 0; t < tiers.length; t++) {
+                const payload = basePayload();
+                payload.lp = tiers[t];
+                const text = await encodeWorshipPackForQrString(payload);
+                if (text.length <= maxLen) return text;
+            }
+            return encodeWorshipPackForQrString(basePayload());
         };
 
         while (list.length >= 1) {
@@ -10154,7 +10360,8 @@ ${deleteBtnHtml}
                 ...built,
                 openUrl: "",
                 scanKind: "need-http",
-                scanHint: "请填写下方「手机可访问的站点根地址」并保存，二维码将变为可扫码打开的网页链接（与电脑同 Wi‑Fi）。"
+                scanHint:
+                    "请填写下方「站点根地址」并保存：公网 https（GitHub Pages、自有域名、ngrok / Cloudflare Tunnel 等）可跨 Wi‑Fi；仅局域网 http(s) 时手机须与电脑同网。"
             };
         }
         let maxPack = Math.min(
@@ -10225,6 +10432,7 @@ ${deleteBtnHtml}
             if (st.py != null && Number.isFinite(Number(st.py))) state.ui.posY = clamp(Number(st.py), 20, 70);
             if (st.dl != null && Number.isFinite(Number(st.dl))) state.ui.defaultLines = clamp(Number(st.dl), 1, 12);
         }
+        applyLeaderQrPackPrefsFromImport(data.lp, songs);
         const ci = clamp(Number(data.ci) || 0, 0, songs.length - 1);
         state.songs = songs;
         state.playlist.items = songs.map((x) => x.id);
@@ -10307,7 +10515,7 @@ ${deleteBtnHtml}
                 .filter(Boolean)
                 .join("");
             if (built.scanKind === "url" && built.openUrl) {
-                status.textContent = `含 ${songN} 首诗歌 · 扫码用手机浏览器打开主领页并载入歌词${extra ? " · " + extra : ""}`;
+                status.textContent = `含 ${songN} 首诗歌 · 请用手机相机或微信扫上方二维码（为完整网页链接，非乱码）。将打开主领页并载入歌词与主领偏好${extra ? " · " + extra : ""}`;
             } else if (built.qrText) {
                 status.textContent = `含 ${songN} 首诗歌 · ${built.scanHint || "请按下方提示完成设置"}`;
             } else {
@@ -10323,20 +10531,25 @@ ${deleteBtnHtml}
                     built.scanHint ||
                     built.note ||
                     (built.qrText
-                        ? "当前二维码为纯文本数据，部分手机只会显示代码。请填写局域网地址后点「保存地址」刷新，即可变为可打开的链接。"
+                        ? "当前无法生成「可打开的网页链接」二维码：本机是 file / localhost，或未填写公网或穿透地址。手机扫「纯文本包」易显示乱码——请勿扫备用区；请配置下方 https 根地址（如 GitHub Pages、云主机、ngrok / Cloudflare Tunnel）后点「保存地址」再刷新本窗口，或使用手机主领页「诗歌」粘贴导入。"
                         : "生成失败");
             }
         }
-        const qrData = built.openUrl || built.qrText || "";
+        const scanUrl = String(built.openUrl || "").trim();
+        const packFallback = String(built.qrText || "").trim();
+        const ph = modal.querySelector("#leader-qr-placeholder");
+        const imgWrap = modal.querySelector("#leader-qr-img-wrap");
+        if (imgWrap) imgWrap.style.display = scanUrl ? "" : "none";
+        if (ph) ph.hidden = !!scanUrl;
         if (img) {
-            img.hidden = false;
-            img.alt = built.openUrl ? "打开主领页链接" : "诗歌数据";
-            if (qrData) {
-                if (built.openUrl) modal.dataset.lastOpenUrl = built.openUrl;
+            if (scanUrl) {
+                img.hidden = false;
+                img.alt = "打开主领页链接";
+                if (scanUrl) modal.dataset.lastOpenUrl = scanUrl;
                 else delete modal.dataset.lastOpenUrl;
-                if (built.qrText) modal.dataset.lastPackQr = built.qrText;
+                if (packFallback) modal.dataset.lastPackQr = packFallback;
                 else delete modal.dataset.lastPackQr;
-                const enc = encodeURIComponent(qrData);
+                const enc = encodeURIComponent(scanUrl);
                 const primary = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=8&data=${enc}`;
                 const fallback = `https://quickchart.io/qr?size=220&margin=1&text=${enc}`;
                 img.onerror = function () {
@@ -10347,10 +10560,12 @@ ${deleteBtnHtml}
                 img.style.opacity = "1";
             } else {
                 delete modal.dataset.lastOpenUrl;
-                delete modal.dataset.lastPackQr;
+                if (packFallback) modal.dataset.lastPackQr = packFallback;
+                else delete modal.dataset.lastPackQr;
                 img.removeAttribute("src");
                 img.style.opacity = "0.2";
                 img.onerror = null;
+                img.hidden = true;
             }
         }
     }
@@ -10367,15 +10582,22 @@ ${deleteBtnHtml}
                     <button type="button" id="leader-qr-close" style="position:absolute;right:8px;top:6px;border:none;background:transparent;color:var(--text-secondary);cursor:pointer;font-size:1.1rem;">✕</button>
                     <div style="font-weight:600;color:var(--text-primary);margin-bottom:6px;">主领诗歌 · 扫码同步</div>
                     <p id="leader-qr-pack-status" style="margin:0 0 10px;font-size:0.82rem;line-height:1.45;color:var(--text-secondary);text-align:left;">正在生成…</p>
-                    <img id="leader-qr-image" width="220" height="220" alt="" style="width:220px;height:220px;border-radius:10px;background:#fff;padding:8px;box-sizing:border-box;margin:0 auto;display:block;">
-                    <div style="margin-top:10px;color:var(--text-secondary);font-size:0.82rem;line-height:1.5;text-align:left;">配置好下方地址后，用<b>手机自带浏览器</b>（Chrome / Safari）扫码，将直接打开<b>主领视角</b>并载入本机诗歌。电脑与手机需在同一 Wi‑Fi。若仅显示乱码，请展开下方填写局域网地址后点「保存地址」再刷新本窗口。<b>同一二维码可多部手机依次或同时扫描；同一台手机也可再次扫码重新载入。</b>每台设备的数据保存在该手机/平板本机。</div>
+                    <div id="leader-qr-img-wrap" style="margin:0 auto;">
+                    <img id="leader-qr-image" width="220" height="220" alt="" style="width:220px;height:220px;border-radius:10px;background:#fff;padding:8px;box-sizing:border-box;display:block;">
+                    </div>
+                    <div id="leader-qr-placeholder" hidden style="margin:0 auto;max-width:260px;padding:14px 12px;border-radius:12px;border:1px dashed var(--editor-border);color:var(--text-secondary);font-size:0.82rem;line-height:1.55;text-align:left;">
+                        此处应显示<b>网页链接</b>二维码（手机扫后直接进入浏览器主领页）。若本页是 <code>file://</code> / <code>localhost</code>，或未配置下方地址，则无法生成链接码；勿把「诗歌压缩包」做成主码，否则部分手机会显示<b>乱码</b>。<br/><br/>
+                        <b>跨 Wi‑Fi / 用手机流量</b>：必须把本应用部署在<b>公网 https</b>（如 GitHub Pages、自己的域名、或 ngrok / Cloudflare Tunnel 临时 https 地址），并把下方「站点根地址」填成该公网根路径。
+                    </div>
+                    <div style="margin-top:10px;color:var(--text-secondary);font-size:0.82rem;line-height:1.5;text-align:left;">请用<b>手机自带浏览器或可扫码的 App</b>识别上方二维码（成功时内容为以 <code>http(s)://</code> 开头的链接）。打开后将进入<b>主领视角</b>并载入歌词与主领偏好（若包体过大可能自动精简）。<b>公网 https 部署时，手机可与电脑不在同一 Wi‑Fi；</b>若仅为局域网 <code>http://192.168…</code>，则手机须在同一局域网。若无法生成主码，请展开下方填写地址，或使用主领页「诗歌」粘贴导入。<b>同一二维码可多部手机依次或同时扫描。</b>数据保存在各设备本机浏览器。</div>
                     <div id="leader-qr-warn" hidden style="margin-top:10px;padding:10px 12px;border-radius:10px;text-align:left;font-size:0.82rem;line-height:1.5;color:#e8c96b;background:rgba(212,175,55,0.12);border:1px solid rgba(212,175,55,0.35);"></div>
                     <details id="leader-qr-adv" style="margin-top:14px;text-align:left;" open>
-                        <summary style="cursor:pointer;color:var(--text-secondary);font-size:0.8rem;">手机访问地址（局域网，扫码必需）</summary>
-                        <label style="display:block;font-size:0.75rem;color:var(--text-secondary);margin-top:8px;">站点根地址（与电脑浏览器地址栏一致，到含 index.html 的文件夹）</label>
-                        <input type="text" id="leader-qr-base-input" placeholder="例：http://192.168.1.5:5500/WorshipApp/" style="width:100%;margin-top:4px;box-sizing:border-box;padding:8px 10px;border-radius:10px;border:1px solid var(--editor-border);background:var(--editor-bg);color:var(--text-primary);font-size:0.86rem;">
+                        <summary style="cursor:pointer;color:var(--text-secondary);font-size:0.8rem;">手机访问地址（公网 https 可跨网 · 局域网 / 穿透）</summary>
+                        <label style="display:block;font-size:0.75rem;color:var(--text-secondary);margin-top:8px;">站点根地址（以 <code>/</code> 结尾，指向含 index.html 的文件夹；公网示例：<code>https://你的域名/app/</code>；穿透：ngrok / trycloudflare 给出的 https 根）</label>
+                        <input type="text" id="leader-qr-base-input" placeholder="例：https://user.github.io/WorshipApp/ 或 https://xxxx.ngrok-free.app/" style="width:100%;margin-top:4px;box-sizing:border-box;padding:8px 10px;border-radius:10px;border:1px solid var(--editor-border);background:var(--editor-bg);color:var(--text-primary);font-size:0.86rem;">
                         <p id="leader-qr-url-hint" style="margin:6px 0 0;font-size:0.72rem;color:var(--text-secondary);word-break:break-all;"></p>
                         <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
+                            <button type="button" id="leader-qr-use-public-base" class="btn btn-outline" style="font-size:0.82rem;">填入当前 https 公网根地址</button>
                             <button type="button" id="leader-qr-save-base" class="btn btn-outline" style="font-size:0.82rem;">保存地址</button>
                             <button type="button" id="leader-qr-copy-url" class="btn btn-outline" style="font-size:0.82rem;">复制扫码链接</button>
                         </div>
@@ -10413,6 +10635,25 @@ ${deleteBtnHtml}
                 showCornerSuccessToast(v ? "已保存" : "已清除", e.currentTarget);
                 void refreshLeaderQrModalContent(modal);
             });
+            modal.querySelector("#leader-qr-use-public-base")?.addEventListener("click", (e) => {
+                const pub = String(derivePublicHttpsLeaderJoinBaseFromLocation() || "").trim();
+                const inp = modal.querySelector("#leader-qr-base-input");
+                if (!pub) {
+                    showToast("当前页不是「公网 https」（或为 localhost / 内网 IP），无法自动填入。请手动粘贴部署或穿透给出的 https 根地址。", e.currentTarget);
+                    return;
+                }
+                if (inp) inp.value = pub;
+                try {
+                    localStorage.setItem(LEADER_QR_BASE_LS_KEY, pub);
+                } catch (_e) {
+                    /* ignore */
+                }
+                const hint = modal.querySelector("#leader-qr-url-hint");
+                const r = resolveLeaderJoinUrlForQr();
+                if (hint) hint.textContent = r.qrEncode || r.pageAbs || pub;
+                showCornerSuccessToast("已填入并保存公网根地址", e.currentTarget);
+                void refreshLeaderQrModalContent(modal);
+            });
             modal.querySelector("#leader-qr-copy-url")?.addEventListener("click", async (e) => {
                 const text = String(modal.dataset.lastOpenUrl || "").trim();
                 if (!text) {
@@ -10446,8 +10687,8 @@ ${deleteBtnHtml}
         if (hint0) {
             const r = resolveLeaderJoinUrlForQr();
             hint0.textContent = r.qrEncode
-                ? `主领页基础地址：${r.qrEncode}`
-                : "填写本机 Live Server / http 服务地址并保存，例如 http://192.168.1.5:5500/WorshipApp/";
+                ? `主领页基础地址：${r.qrEncode}${r.crossInternetOk ? "（公网 https，可跨网扫码）" : "（跨网请用公网 https 根地址）"}`
+                : "填写站点根地址并保存：公网 https 可跨 Wi‑Fi；局域网示例 http://192.168.1.5:5500/WorshipApp/；在公网 https 页可点「填入当前 https 公网根地址」。";
         }
         void refreshLeaderQrModalContent(modal);
         modal.style.display = "flex";
@@ -12970,6 +13211,65 @@ ${deleteBtnHtml}
                 pageDrawings = {};
             }
             let leaderBrushPersistTimer = 0;
+            /** 主领画笔：每页撤销栈（仅存内存，按笔画 mousedown 前快照） */
+            const brushUndoStacks = Object.create(null);
+            const BRUSH_UNDO_MAX = 24;
+            const clearBrushUndoStackForKey = (key) => {
+                if (key && brushUndoStacks[key]) delete brushUndoStacks[key];
+            };
+            /** 画笔 canvas 内部为 devicePixelRatio 倍分辨率，且 ctx 已 setTransform(dpr)，clear/drawImage 的目标尺寸须用 CSS 像素，否则会缩放错位（撤销后偏移） */
+            const getLeaderBrushCssSize = () => {
+                if (!brushCanvas) return { w: 1, h: 1 };
+                const sw = parseFloat(brushCanvas.style.width);
+                const sh = parseFloat(brushCanvas.style.height);
+                const dpr = Math.max(1, window.devicePixelRatio || 1);
+                const w = Number.isFinite(sw) && sw > 0 ? sw : brushCanvas.width / dpr;
+                const h = Number.isFinite(sh) && sh > 0 ? sh : brushCanvas.height / dpr;
+                return { w: Math.max(1, w), h: Math.max(1, h) };
+            };
+            const pushBrushUndoSnapshot = () => {
+                if (!brushCanvas || !brushCtx || !currentPageKey) return;
+                try {
+                    const snap = brushCanvas.toDataURL("image/png");
+                    let stack = brushUndoStacks[currentPageKey];
+                    if (!stack) stack = brushUndoStacks[currentPageKey] = [];
+                    stack.push(snap);
+                    if (stack.length > BRUSH_UNDO_MAX) stack.shift();
+                } catch (_e) {
+                    /* ignore */
+                }
+            };
+            const applyBrushSnapshotDataUrl = (dataUrl) => {
+                if (!brushCanvas || !brushCtx) return;
+                if (!dataUrl) {
+                    const { w: cw, h: ch } = getLeaderBrushCssSize();
+                    brushCtx.clearRect(0, 0, cw, ch);
+                    delete pageDrawings[currentPageKey];
+                    schedulePersistPageDrawings();
+                    return;
+                }
+                const img = new Image();
+                img.onload = () => {
+                    const { w: cw, h: ch } = getLeaderBrushCssSize();
+                    brushCtx.clearRect(0, 0, cw, ch);
+                    brushCtx.drawImage(img, 0, 0, cw, ch);
+                    saveCurrentDrawing();
+                };
+                img.onerror = () => {
+                    /* ignore */
+                };
+                img.src = dataUrl;
+            };
+            const undoBrushStroke = (anchorEl) => {
+                const key = currentPageKey;
+                const stack = key ? brushUndoStacks[key] : null;
+                if (!stack || !stack.length) {
+                    showToast("没有可撤销的笔画", anchorEl || null);
+                    return;
+                }
+                const prev = stack.pop();
+                applyBrushSnapshotDataUrl(prev);
+            };
             let brushHudEl = null;
             const FLOW_CACHE_PREFIX = "leader_worship_flow_v1::";
             let localWorshipFlow = null;
@@ -13029,7 +13329,7 @@ ${deleteBtnHtml}
             const leaderBottomSwipeBand = () => (leaderTabletRange.matches ? 140 : 100);
             const leaderBottomSwipeMinDy = () => (leaderTabletRange.matches ? 36 : 20);
 
-            host.classList.add("leader-host");
+            host.classList.add("leader-host", "leader-minimal-chrome", "leader-has-bottom-rail", "leader-has-gear-dock");
             lyricLayer.classList.add("leader-lyric-shell");
             lyricLayer.style.cssText = "";
 
@@ -13046,16 +13346,24 @@ ${deleteBtnHtml}
                 const hideArrows = displayMode === "scroll";
                 leftArrow.style.display = hideArrows ? "none" : "";
                 rightArrow.style.display = hideArrows ? "none" : "";
+                host.classList.toggle("leader-show-side-arrows", !hideArrows);
             };
 
             const toolbar = document.createElement("div");
-            toolbar.className = "leader-toolbar";
-            toolbar.innerHTML = '<button class="leader-mini-btn" data-action="leader-help" title="主领视角使用说明（与控制台使用帮助类似）"><span class="leader-btn-icon">❓</span><span class="leader-btn-label">帮助</span></button><button class="leader-mini-btn" data-action="leader-guide" title="分步引导：同步、工具栏、翻页等"><span class="leader-btn-icon">🎯</span><span class="leader-btn-label">引导</span></button><button class="leader-mini-btn" data-mode="multi" title="分页翻页（当前页多行）"><span class="leader-btn-icon">📄</span><span class="leader-btn-label">翻页</span></button><button class="leader-mini-btn" data-mode="scroll" title="滚动"><span class="leader-btn-icon">📜</span><span class="leader-btn-label">滚动</span></button><button class="leader-mini-btn" data-mode="flow" title="流程视图"><span class="leader-btn-icon">🗂️</span><span class="leader-btn-label">流程</span></button><button class="leader-mini-btn" data-action="flow-arrange" title="编排 / 生成流程"><span class="leader-btn-icon">📐</span><span class="leader-btn-label">编排</span></button><button class="leader-mini-btn" data-action="import-pack" title="导入诗歌包（文本或完整链接）"><span class="leader-btn-icon">📥</span><span class="leader-btn-label">诗歌</span></button><button class="leader-mini-btn" data-action="leader-playlist" title="切换播放列表中的诗歌"><span class="leader-btn-icon">📋</span><span class="leader-btn-label">歌单</span></button><button class="leader-mini-btn" data-action="leader-edit-lyrics" title="编辑当前诗歌歌词（保存到曲库并同步主控台）"><span class="leader-btn-icon">✎</span><span class="leader-btn-label">改词</span></button><button class="leader-mini-btn" data-action="font-panel" title="字号"><span class="leader-btn-icon leader-font-aa">Aa</span><span class="leader-btn-label">字号</span></button><button class="leader-mini-btn" data-action="color-panel" title="歌词颜色（仅主领本机）"><span class="leader-btn-icon leader-color-icon" aria-hidden="true"><span class="leader-color-dot"></span></span><span class="leader-btn-label">字色</span></button><button class="leader-mini-btn" data-action="note" title="备注"><span class="leader-btn-icon">✏️</span><span class="leader-btn-label">备注</span></button><button class="leader-mini-btn leader-brush-btn" data-action="brush" title="标注"><span class="leader-btn-icon">✍️</span><span class="leader-btn-label">画笔</span><span class="leader-brush-indicator"></span></button><button class="leader-mini-btn" data-action="bg-panel" title="背景"><span class="leader-btn-icon">🎨</span><span class="leader-btn-label">背景</span></button>';
+            toolbar.className = "leader-toolbar leader-toolbar--sr-proxy";
+            toolbar.innerHTML =
+                '<div class="leader-toolbar-cluster leader-toolbar-cluster--aux">' +
+                '<button class="leader-mini-btn leader-mini-btn--compact-icon" data-action="leader-help" title="主领视角使用说明（与控制台使用帮助类似）"><span class="leader-btn-icon">❓</span><span class="leader-btn-label">帮助</span></button>' +
+                '<button class="leader-mini-btn leader-mini-btn--compact-icon" data-action="leader-guide" title="分步引导：同步、工具栏、翻页等"><span class="leader-btn-icon">🎯</span><span class="leader-btn-label">引导</span></button>' +
+                '</div><div class="leader-toolbar-cluster leader-toolbar-cluster--main">' +
+                '<button class="leader-mini-btn" data-mode="multi" title="分页翻页（当前页多行）"><span class="leader-btn-icon">📄</span><span class="leader-btn-label">翻页</span></button><button class="leader-mini-btn" data-mode="scroll" title="滚动"><span class="leader-btn-icon">📜</span><span class="leader-btn-label">滚动</span></button><button class="leader-mini-btn" data-mode="flow" title="流程视图"><span class="leader-btn-icon">🗂️</span><span class="leader-btn-label">流程</span></button><button class="leader-mini-btn" data-action="flow-arrange" title="编排 / 生成流程"><span class="leader-btn-icon">📐</span><span class="leader-btn-label">编排</span></button><button class="leader-mini-btn" data-action="import-pack" title="导入诗歌包（文本或完整链接）"><span class="leader-btn-icon">📥</span><span class="leader-btn-label">诗歌</span></button><button class="leader-mini-btn" data-action="leader-playlist" title="切换播放列表中的诗歌"><span class="leader-btn-icon">📋</span><span class="leader-btn-label">歌单</span></button><button class="leader-mini-btn" data-action="leader-edit-lyrics" title="编辑当前诗歌歌词（仅本机曲库与主领，不自动改投屏）"><span class="leader-btn-icon">✎</span><span class="leader-btn-label">改词</span></button><button class="leader-mini-btn" data-action="font-panel" title="字号"><span class="leader-btn-icon leader-font-aa">Aa</span><span class="leader-btn-label">字号</span></button><button class="leader-mini-btn" data-action="color-panel" title="歌词颜色（仅主领本机）"><span class="leader-btn-icon leader-color-icon" aria-hidden="true"><span class="leader-color-dot"></span></span><span class="leader-btn-label">字色</span></button><button class="leader-mini-btn" data-action="note" title="备注"><span class="leader-btn-icon">✏️</span><span class="leader-btn-label">备注</span></button><button class="leader-mini-btn leader-brush-btn" data-action="brush" title="标注"><span class="leader-btn-icon">✍️</span><span class="leader-btn-label">画笔</span><span class="leader-brush-indicator"></span></button><button class="leader-mini-btn" data-action="bg-panel" title="背景"><span class="leader-btn-icon">🎨</span><span class="leader-btn-label">背景</span></button>' +
+                "</div>";
             host.appendChild(toolbar);
             const toolbarRail = document.createElement("div");
             toolbarRail.className = "leader-toolbar-rail";
             toolbarRail.innerHTML = '<button type="button" class="leader-expand-fab" aria-label="展开工具栏"><span class="leader-expand-fab-icon">∨</span></button>';
             host.appendChild(toolbarRail);
+            toolbarRail.style.display = "none";
 
             const hideFontPanel = () => {
                 if (fontHideTimer) {
@@ -13073,7 +13381,7 @@ ${deleteBtnHtml}
             };
             const positionFontPanel = () => {
                 if (!fontPanel || fontPanel.style.display === "none") return;
-                const aaBtn = toolbar.querySelector('[data-action="font-panel"]');
+                const aaBtn = getLeaderUiAnchorEl();
                 if (!aaBtn) return;
                 const hostRect = host.getBoundingClientRect();
                 const btnRect = aaBtn.getBoundingClientRect();
@@ -13121,7 +13429,7 @@ ${deleteBtnHtml}
             };
             const positionColorPanel = () => {
                 if (!colorPanel || colorPanel.style.display === "none") return;
-                const cBtn = toolbar.querySelector('[data-action="color-panel"]');
+                const cBtn = getLeaderUiAnchorEl();
                 if (!cBtn) return;
                 const hostRect = host.getBoundingClientRect();
                 const btnRect = cBtn.getBoundingClientRect();
@@ -13208,6 +13516,11 @@ ${deleteBtnHtml}
                 resetColorPanelHideTimer();
             };
             const showToolbar = () => {
+                if (host.classList.contains("leader-minimal-chrome")) {
+                    if (hideTimer) clearTimeout(hideTimer);
+                    hideTimer = setTimeout(() => setToolbarCollapsed(true), 3000);
+                    return;
+                }
                 if (toolbarCollapsed) return;
                 toolbar.classList.remove("hidden");
                 if (hideTimer) clearTimeout(hideTimer);
@@ -13216,6 +13529,15 @@ ${deleteBtnHtml}
             const setToolbarCollapsed = (collapsed) => {
                 toolbarCollapsed = !!collapsed;
                 localStorage.setItem(TOOLBAR_COLLAPSED_KEY, toolbarCollapsed ? "1" : "0");
+                if (host.classList.contains("leader-minimal-chrome")) {
+                    toolbar.classList.add("hidden", "collapsed");
+                    toolbarRail.classList.remove("active");
+                    if (toolbarCollapsed) {
+                        hideFontPanel();
+                        hideColorPanel();
+                    }
+                    return;
+                }
                 toolbar.classList.toggle("collapsed", toolbarCollapsed);
                 toolbarRail.classList.toggle("active", toolbarCollapsed);
                 if (toolbarCollapsed) {
@@ -13260,7 +13582,22 @@ ${deleteBtnHtml}
                 return { pages, idx };
             };
             const globalIndex = (pages, pageIndex, lineIndex) => pages.slice(0, pageIndex).reduce((n, p) => n + (p || []).length, 0) + lineIndex;
+            const getLeaderHeaderTitle = () => {
+                const t = String(liveState?.title || "").trim();
+                if (t) return t;
+                const sid = String(liveState?.songId || state.currentSongId || "");
+                const song = sid ? state.songs.find((s) => s && String(s.id) === sid) : null;
+                return String(song?.title || "").trim() || "当前诗歌";
+            };
             const buildPageKey = () => {
+                if (displayMode === "scroll") {
+                    const songs = getLeaderPlaylistOrderedSongs();
+                    const ids = songs.map((s) => String(s?.id ?? "")).join("\u0001");
+                    return `pl-scroll::${ids || "empty"}`;
+                }
+                if (displayMode === "flow") {
+                    return `flow::${flowCursor}::${String(liveState?.title || "")}`;
+                }
                 const { idx } = getPages();
                 const song = String(liveState?.title || "");
                 return `${song}::${idx}`;
@@ -13296,8 +13633,9 @@ ${deleteBtnHtml}
                 if (!dataUrl) return;
                 const img = new Image();
                 img.onload = () => {
-                    brushCtx.clearRect(0, 0, brushCanvas.width, brushCanvas.height);
-                    brushCtx.drawImage(img, 0, 0, brushCanvas.width, brushCanvas.height);
+                    const { w: cw, h: ch } = getLeaderBrushCssSize();
+                    brushCtx.clearRect(0, 0, cw, ch);
+                    brushCtx.drawImage(img, 0, 0, cw, ch);
                 };
                 img.src = dataUrl;
             };
@@ -13320,16 +13658,25 @@ ${deleteBtnHtml}
                 if (!brushPanel || brushPanel.style.display === "none") return;
                 const hostRect = host.getBoundingClientRect();
                 const panelWidth = brushPanel.offsetWidth || 360;
+                const panelHeight = brushPanel.offsetHeight || 120;
                 const left = clamp(hostRect.width / 2 - panelWidth / 2, 8, hostRect.width - panelWidth - 8);
-                const top = hostRect.height - brushPanel.offsetHeight - 72;
+                let top;
+                if (brushHudEl && brushMode && brushHudEl.style.display !== "none") {
+                    const hudRect = brushHudEl.getBoundingClientRect();
+                    const hudTopInHost = hudRect.top - hostRect.top;
+                    const gap = 12;
+                    top = hudTopInHost - panelHeight - gap;
+                } else {
+                    top = hostRect.height - panelHeight - 72;
+                }
                 brushPanel.style.left = `${left}px`;
-                brushPanel.style.top = `${Math.max(8, top)}px`;
+                brushPanel.style.top = `${Math.max(8, Math.min(top, hostRect.height - panelHeight - 8))}px`;
             };
             const showBgPanel = () => {
                 if (!bgPanel) return;
                 hideFontPanel();
                 hideColorPanel();
-                const bgBtn = toolbar.querySelector('[data-action="bg-panel"]');
+                const bgBtn = getLeaderUiAnchorEl();
                 if (!bgBtn) return;
                 bgPanel.style.display = "block";
                 const hostRect = host.getBoundingClientRect();
@@ -13346,12 +13693,13 @@ ${deleteBtnHtml}
                 brushPanel.style.display = "block";
                 syncBrushPanelActiveState();
                 updateBrushPanelPosition();
+                requestAnimationFrame(() => updateBrushPanelPosition());
             };
             const ensureBrushPanel = () => {
                 if (brushPanel) return;
                 brushPanel = document.createElement("div");
                 brushPanel.className = "leader-brush-panel";
-                brushPanel.innerHTML = '<div class="leader-brush-row"><button class="leader-brush-color" data-brush-color="#ffff00" style="background:#ffff00;" title="黄色"></button><button class="leader-brush-color" data-brush-color="#ff6666" style="background:#ff6666;" title="红色"></button><button class="leader-brush-color" data-brush-color="#66ccff" style="background:#66ccff;" title="蓝色"></button><button class="leader-brush-color" data-brush-color="#ffffff" style="background:#ffffff;" title="白色"></button><button class="leader-brush-color" data-brush-color="#66ff66" style="background:#66ff66;" title="绿色"></button><button class="leader-brush-color" data-brush-color="#cc66ff" style="background:#cc66ff;" title="紫色"></button></div><div class="leader-brush-row"><button class="leader-brush-width" data-brush-width="2" title="细">2px</button><button class="leader-brush-width" data-brush-width="4" title="中">4px</button><button class="leader-brush-width" data-brush-width="6" title="粗">6px</button><button class="leader-brush-clear" data-action="clear-brush" title="清除">🗑️</button><button class="leader-brush-done" data-action="done-brush" title="完成">✅</button></div>';
+                brushPanel.innerHTML = '<div class="leader-brush-row"><button class="leader-brush-color" data-brush-color="#ffff00" style="background:#ffff00;" title="黄色"></button><button class="leader-brush-color" data-brush-color="#ff6666" style="background:#ff6666;" title="红色"></button><button class="leader-brush-color" data-brush-color="#66ccff" style="background:#66ccff;" title="蓝色"></button><button class="leader-brush-color" data-brush-color="#ffffff" style="background:#ffffff;" title="白色"></button><button class="leader-brush-color" data-brush-color="#66ff66" style="background:#66ff66;" title="绿色"></button><button class="leader-brush-color" data-brush-color="#cc66ff" style="background:#cc66ff;" title="紫色"></button></div><div class="leader-brush-row"><button class="leader-brush-width" data-brush-width="2" title="细">2px</button><button class="leader-brush-width" data-brush-width="4" title="中">4px</button><button class="leader-brush-width" data-brush-width="6" title="粗">6px</button><button class="leader-brush-clear" data-action="clear-brush" title="清除本页标注">🗑️</button><button class="leader-brush-done" data-action="done-brush" title="完成画笔">✅</button></div>';
                 host.appendChild(brushPanel);
                 brushPanel.addEventListener("click", (e) => {
                     if (e.target.closest("[data-action='done-brush']")) {
@@ -13376,8 +13724,10 @@ ${deleteBtnHtml}
                     }
                     if (e.target.closest("[data-action='clear-brush']")) {
                         if (brushCtx && brushCanvas) {
-                            brushCtx.clearRect(0, 0, brushCanvas.width, brushCanvas.height);
+                            const { w: cw, h: ch } = getLeaderBrushCssSize();
+                            brushCtx.clearRect(0, 0, cw, ch);
                             delete pageDrawings[currentPageKey];
+                            clearBrushUndoStackForKey(currentPageKey);
                             schedulePersistPageDrawings();
                         }
                         hideBrushPanel();
@@ -13483,6 +13833,7 @@ ${deleteBtnHtml}
             };
             const beginBrush = (ev) => {
                 if (!brushMode || !brushCtx) return;
+                pushBrushUndoSnapshot();
                 brushDrawing = true;
                 lastPoint = getCanvasPoint(ev);
                 ev.preventDefault();
@@ -13548,7 +13899,7 @@ ${deleteBtnHtml}
                     brushCanvas.style.width = `${cssW}px`;
                     brushCanvas.style.height = `${cssH}px`;
                     brushCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-                    brushCtx.clearRect(0, 0, brushCanvas.width, brushCanvas.height);
+                    brushCtx.clearRect(0, 0, cssW, cssH);
                     if (pageDrawings[currentPageKey]) restoreCurrentDrawing();
                 }
 
@@ -13562,6 +13913,7 @@ ${deleteBtnHtml}
             const setBrushMode = (enabled) => {
                 brushMode = !!enabled;
                 toolbar.querySelector('[data-action="brush"]')?.classList.toggle("active", brushMode);
+                leaderSideRailEl?.querySelector('[data-action="brush"]')?.classList.toggle("is-active", brushMode);
                 ensureBrushHud();
                 if (brushHudEl) brushHudEl.style.display = brushMode ? "flex" : "none";
                 if (brushMode) {
@@ -13595,6 +13947,7 @@ ${deleteBtnHtml}
                 brushHudEl.innerHTML =
                     '<button type="button" class="leader-brush-hud-btn" data-hud="brush-done">完成</button>' +
                     '<button type="button" class="leader-brush-hud-btn" data-hud="brush-clear">清除本页</button>' +
+                    '<button type="button" class="leader-brush-hud-btn" data-hud="brush-undo">撤销上一步</button>' +
                     '<button type="button" class="leader-brush-hud-btn" data-hud="brush-style">颜色 / 粗细</button>';
                 host.appendChild(brushHudEl);
                 brushHudEl.addEventListener("click", (e) => {
@@ -13605,13 +13958,18 @@ ${deleteBtnHtml}
                     if (act === "brush-done") setBrushMode(false);
                     else if (act === "brush-clear") {
                         if (brushCtx && brushCanvas) {
-                            brushCtx.clearRect(0, 0, brushCanvas.width, brushCanvas.height);
+                            const { w: cw, h: ch } = getLeaderBrushCssSize();
+                            brushCtx.clearRect(0, 0, cw, ch);
                             delete pageDrawings[currentPageKey];
+                            clearBrushUndoStackForKey(currentPageKey);
                             schedulePersistPageDrawings();
                         }
+                    } else if (act === "brush-undo") {
+                        undoBrushStroke(b);
                     } else if (act === "brush-style") {
                         ensureBrushPanel();
                         showBrushPanel();
+                        requestAnimationFrame(() => updateBrushPanelPosition());
                     }
                 });
                 brushHudEl.addEventListener("mousedown", (e) => e.stopPropagation());
@@ -13893,8 +14251,6 @@ ${deleteBtnHtml}
                     modal.innerHTML =
                         '<div class="leader-flow-template-box"><h3>快速模板</h3><p class="leader-flow-template-desc">选择后将清空当前流程并按模板生成；页数不足时会自动压缩到现有段落。</p><button type="button" data-tpl="standard">标准 A-B-C-B-C</button><button type="button" data-tpl="repeat">反复 A-A-B-C-B-C-B</button><button type="button" data-tpl="short">简短 A-B-C</button><button type="button" class="leader-flow-tpl-close" data-tpl-close>取消</button></div>';
                     flowEditorWrap.appendChild(modal);
-                    const tplBox = modal.querySelector(".leader-flow-template-box");
-                    tplBox?.addEventListener("click", (ev) => ev.stopPropagation());
                     modal.addEventListener("click", (e) => {
                         if (e.target.closest("[data-tpl-close]") || e.target.closest(".leader-flow-tpl-close")) {
                             modal.style.display = "none";
@@ -14014,7 +14370,7 @@ ${deleteBtnHtml}
                 flowEditorWrap = document.createElement("div");
                 flowEditorWrap.className = "leader-flow-editor-overlay";
                 flowEditorWrap.innerHTML =
-                    '<div class="leader-flow-editor-panel"><div class="leader-flow-editor-head"><span>敬拜流程编排</span><button type="button" class="leader-flow-editor-x" data-flow-close>✕</button></div><div class="leader-flow-editor-toolbar"><button type="button" data-gen>生成流程</button><button type="button" data-tpl-open>快速模板</button><button type="button" data-add="repeat">＋重复</button><button type="button" data-add="speech">＋说话/祷告</button><button type="button" data-add="free">＋自由敬拜</button></div><div class="leader-flow-editor-list" role="list"></div><p class="leader-flow-editor-tip">拖拽卡片排序 · 长按或右键打开菜单</p></div>';
+                    '<div class="leader-flow-editor-panel"><div class="leader-flow-editor-head"><span>敬拜流程编排</span><button type="button" class="leader-flow-editor-x" data-flow-close>✕</button></div><div class="leader-flow-editor-toolbar"><button type="button" data-gen>生成流程</button><button type="button" data-tpl-open>快速模板</button><button type="button" data-add="repeat">＋重复</button><button type="button" data-add="speech">＋说话/祷告</button><button type="button" data-add="free">＋自由敬拜</button></div><div class="leader-flow-editor-list" role="list"></div><p class="leader-flow-editor-tip">拖拽卡片排序 · 长按或右键打开菜单</p><div class="leader-flow-editor-footer"><button type="button" class="leader-flow-editor-use-btn" data-flow-apply-use>使用</button></div></div>';
                 host.appendChild(flowEditorWrap);
 
                 flowEditorWrap.querySelector("[data-flow-close]")?.addEventListener("click", closeFlowEditor);
@@ -14060,6 +14416,28 @@ ${deleteBtnHtml}
                         saveLeaderFlowToMain({ version: 1, cards });
                         refreshFlowEditorList();
                     });
+                });
+
+                flowEditorWrap.querySelector("[data-flow-apply-use]")?.addEventListener("click", () => {
+                    const cc = getLeaderFlowCards();
+                    if (!cc.length) {
+                        showToast("请先生成或添加流程卡片", flowEditorWrap.querySelector("[data-flow-apply-use]"));
+                        return;
+                    }
+                    displayMode = "flow";
+                    try {
+                        localStorage.setItem(DISPLAY_MODE_KEY, displayMode);
+                    } catch (_e) {
+                        /* ignore */
+                    }
+                    loadLeaderFlowSnapshot();
+                    syncFlowCursorFromLivePage();
+                    clampFlowCursor();
+                    const cardsNow = getLeaderFlowCards();
+                    if (cardsNow.length) applyLeaderFlowCardToMain(cardsNow[flowCursor]);
+                    closeFlowEditor();
+                    render();
+                    showToolbar();
                 });
 
                 const list = flowEditorWrap.querySelector(".leader-flow-editor-list");
@@ -14140,8 +14518,526 @@ ${deleteBtnHtml}
                 refreshFlowEditorList();
             };
 
+            let leaderBrowseIx = 0;
+            let leaderScrollIO = null;
+            let leaderBottomRailEl = null;
+            let leaderBottomRailWired = false;
+            let leaderSideRailEl = null;
+            let leaderSideRailWired = false;
+            let leaderSideSettingsOpen = false;
+            let leaderSideSettingsBackdropEl = null;
+            let lastLeaderFollowSongId = "";
+            let leaderPendingScrollIx = null;
+            let leaderLastPlaylistSig = "";
+            let leaderSkipNextFullRender = false;
+            let leaderSuppressRenderUntil = 0;
+            let leaderPlaylistSyncTimer = 0;
+            let leaderScrollLockIO = false;
+
+            function getLeaderUiAnchorEl() {
+                const bgBtn = leaderSideRailEl?.querySelector?.('[data-action="bg-panel"]');
+                if (bgBtn) return bgBtn;
+                return toolbar.querySelector('[data-action="bg-panel"]') || host;
+            }
+
+            const getLeaderPlaylistOrderedSongs = () => {
+                const ids = Array.isArray(state.playlist?.items) ? state.playlist.items.filter(Boolean) : [];
+                if (ids.length) {
+                    return ids
+                        .map((id) => state.songs.find((s) => s && String(s.id) === String(id)))
+                        .filter((s) => !!s);
+                }
+                const sid = String(liveState?.songId || state.currentSongId || "");
+                const one = sid ? state.songs.find((s) => s && String(s.id) === sid) : null;
+                if (one) return [one];
+                const cur = typeof currentSong === "function" ? currentSong() : null;
+                return cur ? [cur] : [];
+            };
+
+            const buildLeaderTopBarHtml = (leftTitle, progressText) => {
+                const lt = String(leftTitle || "").trim() || "当前诗歌";
+                const pl = String(progressText || "").trim() || "—";
+                return `<header class="leader-top-bar leader-top-bar--minimal" role="banner"><div class="leader-top-bar-left"><div class="leader-top-bar-title">${escapeHtml(lt)}</div></div><div class="leader-top-bar-right"><span class="leader-top-bar-progress">${escapeHtml(pl)}</span></div></header>`;
+            };
+
+            const teardownLeaderScrollIO = () => {
+                if (leaderScrollIO) {
+                    try {
+                        leaderScrollIO.disconnect();
+                    } catch (_e) {
+                        /* ignore */
+                    }
+                    leaderScrollIO = null;
+                }
+            };
+
+            const getLeaderFmtLine = (ln) =>
+                typeof globalThis.formatLyricLineForCompactPreview === "function"
+                    ? globalThis.formatLyricLineForCompactPreview(ln)
+                    : String(ln ?? "");
+
+            const updateLeaderTopBarReadout = () => {
+                const songs = getLeaderPlaylistOrderedSongs();
+                const ix = clamp(leaderBrowseIx, 0, Math.max(0, songs.length - 1));
+                const tit = lyricLayer.querySelector(".leader-top-bar-title");
+                const prog = lyricLayer.querySelector(".leader-top-bar-progress");
+                if (tit) tit.textContent = String(songs[ix]?.title || getLeaderHeaderTitle()).trim() || "当前诗歌";
+                if (prog) prog.textContent = `第 ${ix + 1} 首 / 共 ${Math.max(1, songs.length)} 首`;
+            };
+
+            const updateBottomRailHighlight = () => {
+                if (!leaderBottomRailEl) return;
+                const ix = leaderBrowseIx;
+                leaderBottomRailEl.querySelectorAll("[data-rail-ix]").forEach((btn) => {
+                    const i = parseInt(btn.getAttribute("data-rail-ix") || "0", 10) || 0;
+                    btn.classList.toggle("is-active", i === ix);
+                });
+            };
+
+            const ensureLeaderBottomRail = () => {
+                if (leaderBottomRailEl) return leaderBottomRailEl;
+                leaderBottomRailEl = document.createElement("div");
+                leaderBottomRailEl.className = "leader-bottom-rail";
+                leaderBottomRailEl.setAttribute("role", "navigation");
+                leaderBottomRailEl.setAttribute("aria-label", "诗歌快速定位");
+                leaderBottomRailEl.innerHTML = "<div class=\"leader-rail-scroll\"></div>";
+                host.insertBefore(leaderBottomRailEl, toolbar);
+                return leaderBottomRailEl;
+            };
+
+            const leaderToastAnchor = () => leaderSideRailEl || leaderBottomRailEl || null;
+
+            const renderBottomRailChips = (songs) => {
+                const el = ensureLeaderBottomRail();
+                const track = el.querySelector(".leader-rail-scroll");
+                if (!track) return;
+                el.style.display = "flex";
+                if (!songs || !songs.length) {
+                    track.innerHTML = '<span class="leader-rail-empty">暂无诗歌</span>';
+                    return;
+                }
+                const ixActive = clamp(leaderBrowseIx, 0, Math.max(0, songs.length - 1));
+                track.innerHTML = songs
+                    .map(
+                        (s, i) =>
+                            `<button type="button" class="leader-rail-chip${i === ixActive ? " is-active" : ""}" data-rail-ix="${i}">${escapeHtml(s.title || "未命名")}</button>`
+                    )
+                    .join("");
+            };
+
+            const leaderPlaylistSignature = (songs) =>
+                (songs || [])
+                    .map((s) => String(s?.id ?? ""))
+                    .join("\u0001");
+
+            const leaderPlaylistScrollDomReady = (expectedCount) => {
+                if (displayMode !== "scroll") return false;
+                const root = lyricLayer.querySelector(".leader-playlist-scroll-root");
+                if (!root) return false;
+                const n = Number(expectedCount) || 0;
+                if (n < 1) return false;
+                return root.querySelectorAll(".leader-song-block[data-pl-ix]").length === n;
+            };
+
+            const leaderApplyPlaylistIndexLocal = (targetIx) => {
+                const items = state.playlist?.items || [];
+                const ix = clamp(Number(targetIx) || 0, 0, Math.max(0, items.length - 1));
+                if (!items.length) return false;
+                const songId = items[ix];
+                if (!state.songs.some((s) => s && s.id === songId)) return false;
+                state.playlist.running = true;
+                state.playlist.activeIndex = ix;
+                if (String(state.currentSongId) !== String(songId)) {
+                    state.currentSongId = songId;
+                    state.currentPage = 0;
+                }
+                return true;
+            };
+
+            const scheduleLeaderPlaylistSync = (targetIx, opts = {}) => {
+                if (leaderPlaylistSyncTimer) clearTimeout(leaderPlaylistSyncTimer);
+                leaderPlaylistSyncTimer = setTimeout(() => {
+                    leaderPlaylistSyncTimer = 0;
+                    try {
+                        if (channel) channel.postMessage({ type: "leader_select_song", index: targetIx });
+                    } catch (_e) {
+                        /* ignore */
+                    }
+                    const items = state.playlist?.items || [];
+                    const plSongs = getLeaderPlaylistOrderedSongs();
+                    if (opts.light) {
+                        leaderApplyPlaylistIndexLocal(targetIx);
+                        try {
+                            liveState = buildLiveState();
+                            globalThis.worshipLiveState = liveState;
+                        } catch (_e2) {
+                            /* ignore */
+                        }
+                    } else if (items.length && typeof switchToPlaylistSong === "function") {
+                        switchToPlaylistSong(targetIx, false, "first");
+                    } else {
+                        const song = plSongs[targetIx];
+                        if (song?.id && typeof switchSong === "function") switchSong(song.id);
+                    }
+                    if (!opts.light) {
+                        try {
+                            liveState = buildLiveState();
+                            globalThis.worshipLiveState = liveState;
+                        } catch (_e2) {
+                            /* ignore */
+                        }
+                    }
+                }, opts.light ? 48 : 0);
+            };
+
+            const scrollLeaderToPlaylistIndex = (ix, behavior = "instant") => {
+                const root = lyricLayer.querySelector(".leader-playlist-scroll-root");
+                const anchor = document.getElementById(`leader-song-anchor-${ix}`);
+                if (!root || !anchor) return false;
+                const rootRect = root.getBoundingClientRect();
+                const anchorRect = anchor.getBoundingClientRect();
+                const targetTop = Math.max(0, anchorRect.top - rootRect.top + root.scrollTop - 60);
+                const beh = behavior === "smooth" ? "smooth" : "auto";
+                leaderScrollLockIO = true;
+                try {
+                    root.scrollTo({ top: targetTop, behavior: beh });
+                } catch (_e) {
+                    root.scrollTop = targetTop;
+                }
+                const releaseLock = () => {
+                    leaderScrollLockIO = false;
+                };
+                if (beh === "smooth") {
+                    let frames = 0;
+                    const watch = () => {
+                        if (Math.abs(root.scrollTop - targetTop) < 3 || frames > 72) releaseLock();
+                        else {
+                            frames += 1;
+                            requestAnimationFrame(watch);
+                        }
+                    };
+                    requestAnimationFrame(watch);
+                } else {
+                    requestAnimationFrame(releaseLock);
+                }
+                return true;
+            };
+
+            const jumpLeaderToPlaylistIndex = (ix, opts = {}) => {
+                const plSongs = getLeaderPlaylistOrderedSongs();
+                const n = plSongs.length;
+                if (n < 1) return;
+                const targetIx = clamp(Number(ix) || 0, 0, n - 1);
+                leaderBrowseIx = targetIx;
+                const sig = leaderPlaylistSignature(plSongs);
+                const canLightScroll =
+                    displayMode === "scroll" &&
+                    opts.forceRender !== true &&
+                    leaderPlaylistScrollDomReady(n) &&
+                    sig === leaderLastPlaylistSig;
+
+                if (canLightScroll) {
+                    leaderPendingScrollIx = null;
+                    leaderSkipNextFullRender = true;
+                    leaderSuppressRenderUntil = Date.now() + 180;
+                    scrollLeaderToPlaylistIndex(targetIx, "smooth");
+                    const targetSong = plSongs[targetIx];
+                    if (targetSong?.id) lastLeaderFollowSongId = String(targetSong.id);
+                    updateLeaderTopBarReadout();
+                    updateBottomRailHighlight();
+                    scheduleLeaderPlaylistSync(targetIx, { light: true });
+                    showToolbar();
+                    return;
+                }
+
+                if (displayMode === "scroll") leaderPendingScrollIx = targetIx;
+                scheduleLeaderPlaylistSync(targetIx);
+                if (opts.render !== false) render();
+                else {
+                    updateLeaderTopBarReadout();
+                    updateBottomRailHighlight();
+                }
+                showToolbar();
+            };
+
+
+            const applyLeaderLiveUpdateFromPayload = (payload) => {
+                if (!payload?.pages) return false;
+                liveState = payload;
+                if (liveState?.worshipFlow?.cards?.length) localWorshipFlow = liveState.worshipFlow;
+                const plSongs = getLeaderPlaylistOrderedSongs();
+                const plN = plSongs.length;
+                const sig = leaderPlaylistSignature(plSongs);
+                const lightOk =
+                    displayMode === "scroll" &&
+                    plN > 0 &&
+                    sig === leaderLastPlaylistSig &&
+                    leaderPlaylistScrollDomReady(plN);
+                const suppressRender =
+                    leaderSkipNextFullRender || Date.now() < leaderSuppressRenderUntil;
+                if (!lightOk && !suppressRender) return false;
+                leaderSkipNextFullRender = false;
+                const sid = String(liveState?.songId || "");
+                let syncIx = plSongs.findIndex((s) => String(s.id) === sid);
+                if (syncIx < 0) syncIx = clamp(state.playlist?.activeIndex ?? 0, 0, plN - 1);
+                leaderBrowseIx = syncIx;
+                updateLeaderTopBarReadout();
+                updateBottomRailHighlight();
+                return true;
+            };
+            const wireLeaderBottomRailOnce = () => {
+                if (leaderBottomRailWired || !leaderBottomRailEl) return;
+                leaderBottomRailWired = true;
+                leaderBottomRailEl.addEventListener("click", (e) => {
+                    const chip = e.target.closest("[data-rail-ix]");
+                    if (!chip) return;
+                    e.preventDefault();
+                    const ix = clamp(parseInt(chip.getAttribute("data-rail-ix") || "0", 10) || 0, 0, 999);
+                    jumpLeaderToPlaylistIndex(ix);
+                });
+            };
+
+            const bindLeaderScrollObserver = (scrollRoot, blockCount) => {
+                teardownLeaderScrollIO();
+                if (!scrollRoot || blockCount < 1) return;
+                leaderScrollIO = new IntersectionObserver(
+                    (ents) => {
+                        let best = null;
+                        let bestR = 0;
+                        ents.forEach((en) => {
+                            if (!en.isIntersecting || en.target?.dataset?.plIx == null) return;
+                            const r = en.intersectionRatio;
+                            if (r > bestR) {
+                                bestR = r;
+                                best = en.target;
+                            }
+                        });
+                        if (leaderScrollLockIO) return;
+                        if (best?.dataset?.plIx != null) {
+                            const nx = clamp(parseInt(best.dataset.plIx, 10) || 0, 0, Math.max(0, blockCount - 1));
+                            if (nx !== leaderBrowseIx) {
+                                leaderBrowseIx = nx;
+                                updateLeaderTopBarReadout();
+                                updateBottomRailHighlight();
+                            }
+                        }
+                    },
+                    { root: scrollRoot, rootMargin: "-10% 0px -32% 0px", threshold: [0, 0.12, 0.28, 0.5, 0.75, 1] }
+                );
+                scrollRoot.querySelectorAll(".leader-song-block[data-pl-ix]").forEach((el) => leaderScrollIO.observe(el));
+            };
+
+            function delegateLeaderToolbarButton(btn) {
+                if (!btn) return;
+                if (btn.dataset.action === "leader-help") {
+                    openLeaderHelpModal();
+                } else if (btn.dataset.action === "leader-guide") {
+                    openLeaderGuideModal(0, null);
+                } else if (btn.dataset.mode) {
+                    displayMode = btn.dataset.mode;
+                    localStorage.setItem(DISPLAY_MODE_KEY, displayMode);
+                    if (displayMode === "scroll") lastLeaderFollowSongId = "";
+                    if (displayMode === "flow") {
+                        loadLeaderFlowSnapshot();
+                        syncFlowCursorFromLivePage();
+                        const cc = getLeaderFlowCards();
+                        if (cc.length) applyLeaderFlowCardToMain(cc[flowCursor]);
+                    }
+                    render();
+                } else if (btn.dataset.action === "flow-arrange") {
+                    openFlowEditor();
+                } else if (btn.dataset.action === "import-pack") {
+                    openLeaderSongPackImportUI();
+                } else if (btn.dataset.action === "leader-playlist") {
+                    openLeaderPlaylistSheet();
+                } else if (btn.dataset.action === "leader-edit-lyrics") {
+                    openLeaderLyricEditor();
+                } else if (btn.dataset.bg) {
+                    bgMode = btn.dataset.bg;
+                    localStorage.setItem(BG_MODE_KEY, bgMode);
+                    applyBg();
+                } else if (btn.dataset.action === "bg-panel") {
+                    ensureBgPanel();
+                    if (bgPanel?.style.display === "block") hideBgPanel();
+                    else showBgPanel();
+                } else if (btn.dataset.action === "font-minus") {
+                    adjustLeaderFontSize(-0.2);
+                } else if (btn.dataset.action === "font-plus") {
+                    adjustLeaderFontSize(0.2);
+                } else if (btn.dataset.action === "font-panel") {
+                    toggleFontPanel();
+                } else if (btn.dataset.action === "color-panel") {
+                    toggleColorPanel();
+                } else if (btn.dataset.action === "note") {
+                    noteEditMode = !noteEditMode;
+                    closeOverlay();
+                    render();
+                } else if (btn.dataset.action === "brush") {
+                    toggleDrawMode();
+                }
+                showToolbar();
+            }
+
+            const adjustLeaderFontSize = (delta) => {
+                let v = parseFloat(leaderFontSize);
+                if (!Number.isFinite(v)) v = 5;
+                v = clamp(v + delta, 3, 8);
+                leaderFontSize = `${Number(v.toFixed(1))}vw`;
+                localStorage.setItem(FONT_SIZE_KEY, leaderFontSize);
+                render();
+            };
+
+            const closeLeaderSideSettingsPanel = () => {
+                if (!leaderSideSettingsOpen) return;
+                leaderSideSettingsOpen = false;
+                host.classList.remove("leader-side-settings-open");
+                leaderSideRailEl?.classList.remove("settings-open");
+                const panel = leaderSideRailEl?.querySelector(".leader-gear-menu");
+                const fab = leaderSideRailEl?.querySelector(".leader-gear-fab");
+                if (fab) fab.setAttribute("aria-expanded", "false");
+                if (panel) panel.setAttribute("aria-hidden", "true");
+                if (leaderSideSettingsBackdropEl?.parentNode) {
+                    leaderSideSettingsBackdropEl.parentNode.removeChild(leaderSideSettingsBackdropEl);
+                }
+                leaderSideSettingsBackdropEl = null;
+            };
+
+            const openLeaderSideSettingsPanel = () => {
+                if (leaderSideSettingsOpen) return;
+                leaderSideSettingsOpen = true;
+                host.classList.add("leader-side-settings-open");
+                leaderSideRailEl?.classList.add("settings-open");
+                const panel = leaderSideRailEl?.querySelector(".leader-gear-menu");
+                const fab = leaderSideRailEl?.querySelector(".leader-gear-fab");
+                if (panel) panel.setAttribute("aria-hidden", "false");
+                if (fab) fab.setAttribute("aria-expanded", "true");
+                if (!leaderSideSettingsBackdropEl) {
+                    leaderSideSettingsBackdropEl = document.createElement("button");
+                    leaderSideSettingsBackdropEl.type = "button";
+                    leaderSideSettingsBackdropEl.className = "leader-side-settings-backdrop";
+                    leaderSideSettingsBackdropEl.setAttribute("aria-label", "关闭设置");
+                    leaderSideSettingsBackdropEl.addEventListener("click", () => closeLeaderSideSettingsPanel());
+                    host.appendChild(leaderSideSettingsBackdropEl);
+                }
+            };
+
+            const toggleLeaderSideSettingsPanel = () => {
+                if (leaderSideSettingsOpen) closeLeaderSideSettingsPanel();
+                else openLeaderSideSettingsPanel();
+            };
+
+            const syncLeaderSideRailUI = () => {
+                if (!leaderSideRailEl) return;
+                leaderSideRailEl.querySelector('[data-mode="multi"]')?.classList.toggle("is-active", displayMode === "multi");
+                leaderSideRailEl.querySelector('[data-mode="scroll"]')?.classList.toggle("is-active", displayMode === "scroll");
+                leaderSideRailEl.querySelector('[data-action="note"]')?.classList.toggle("is-active", noteEditMode);
+                leaderSideRailEl.querySelector('[data-action="brush"]')?.classList.toggle("is-active", brushMode);
+                leaderSideRailEl.querySelector(".leader-gear-fab")?.classList.toggle("is-active", leaderSideSettingsOpen);
+                const colorInp = leaderSideRailEl.querySelector(".leader-side-color-input");
+                if (colorInp) {
+                    const c = getLeaderLyricColorForRender();
+                    const hex = normalizeLeaderLyricHex(c) || "#ffffff";
+                    colorInp.value = /^#[0-9a-fA-F]{6}$/.test(hex) ? hex : "#ffffff";
+                }
+            };
+
+            const buildLeaderSideRailHtml = () =>
+                '<div class="leader-gear-menu" role="menu" aria-label="主领工具" aria-hidden="true">' +
+                '<button type="button" class="leader-gear-item" data-action="leader-help" role="menuitem"><span class="leader-gear-icon">\u2753</span><span class="leader-gear-label">帮助</span></button>' +
+                '<button type="button" class="leader-gear-item" data-action="leader-guide" role="menuitem"><span class="leader-gear-icon">\u25CE</span><span class="leader-gear-label">引导</span></button>' +
+                '<button type="button" class="leader-gear-item" data-action="flow-arrange" role="menuitem"><span class="leader-gear-icon">\u2692</span><span class="leader-gear-label">编排</span></button>' +
+                '<button type="button" class="leader-gear-item" data-action="bg-panel" role="menuitem"><span class="leader-gear-icon">\u25A0</span><span class="leader-gear-label">背景</span></button>' +
+                '<button type="button" class="leader-gear-item" data-action="brush" role="menuitem"><span class="leader-gear-icon">\u270D</span><span class="leader-gear-label">画笔</span></button>' +
+                '<button type="button" class="leader-gear-item" data-action="note" role="menuitem"><span class="leader-gear-icon">\u270F</span><span class="leader-gear-label">备注</span></button>' +
+                '<label class="leader-gear-item leader-gear-item--color" title="字色" role="menuitem"><span class="leader-gear-icon">\u25CF</span><span class="leader-gear-label">字色</span><input type="color" class="leader-side-color-input" aria-label="歌词颜色"></label>' +
+                '<div class="leader-gear-item leader-gear-item--font" aria-label="字号" role="group">' +
+                '<span class="leader-gear-label">字号</span>' +
+                '<div class="leader-side-font-row">' +
+                '<button type="button" class="leader-side-font-btn" data-action="font-minus" title="缩小">\u2212</button>' +
+                '<button type="button" class="leader-side-font-btn" data-action="font-plus" title="放大">+</button>' +
+                "</div></div>" +
+                '<button type="button" class="leader-gear-item" data-action="leader-edit-lyrics" role="menuitem"><span class="leader-gear-icon">\u270E</span><span class="leader-gear-label">改词</span></button>' +
+                '<button type="button" class="leader-gear-item" data-action="leader-playlist" role="menuitem"><span class="leader-gear-icon">\u2630</span><span class="leader-gear-label">歌单</span></button>' +
+                '<div class="leader-gear-mode-row" role="group" aria-label="显示模式">' +
+                '<button type="button" class="leader-gear-mode-btn" data-mode="multi" title="单页模式">单页</button>' +
+                '<button type="button" class="leader-gear-mode-btn" data-mode="scroll" title="滚动模式">滚动</button>' +
+                "</div></div>" +
+                '<button type="button" class="leader-gear-fab" title="设置" aria-label="设置" aria-expanded="false" aria-haspopup="menu">\u2699\uFE0F</button>';
+
+            const ensureLeaderSideRail = () => {
+                const needsRebuild = leaderSideRailEl && !leaderSideRailEl.querySelector(".leader-gear-fab");
+                if (!leaderSideRailEl) {
+                    leaderSideRailEl = document.createElement("div");
+                    leaderSideRailEl.className = "leader-gear-dock";
+                    host.appendChild(leaderSideRailEl);
+                } else if (leaderSideRailEl.classList.contains("leader-side-rail")) {
+                    leaderSideRailEl.className = "leader-gear-dock";
+                }
+                if (!leaderSideRailEl.innerHTML || needsRebuild) {
+                    leaderSideRailEl.innerHTML = buildLeaderSideRailHtml();
+                    leaderSideRailWired = false;
+                }
+                return leaderSideRailEl;
+            };
+
+            const handleLeaderSideRailAction = (btn) => {
+                if (!btn) return;
+                const isMode = btn.dataset.mode === "multi" || btn.dataset.mode === "scroll";
+                const fromSettings = !!btn.closest(".leader-gear-menu");
+                if (fromSettings) closeLeaderSideSettingsPanel();
+                if (isMode) {
+                    const m = btn.dataset.mode;
+                    if (m !== displayMode) {
+                        displayMode = m;
+                        localStorage.setItem(DISPLAY_MODE_KEY, displayMode);
+                        if (m === "scroll") lastLeaderFollowSongId = "";
+                        render();
+                    }
+                    syncLeaderSideRailUI();
+                    return;
+                }
+                delegateLeaderToolbarButton(btn);
+                syncLeaderSideRailUI();
+            };
+
+            const wireLeaderSideRailOnce = () => {
+                if (leaderSideRailWired || !leaderSideRailEl) return;
+                leaderSideRailWired = true;
+                leaderSideRailEl.addEventListener("click", (e) => {
+                    const settingsToggle = e.target.closest(".leader-gear-fab");
+                    if (settingsToggle) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        toggleLeaderSideSettingsPanel();
+                        syncLeaderSideRailUI();
+                        return;
+                    }
+                    if (e.target.closest(".leader-side-color-input")) return;
+                    const btn = e.target.closest("button");
+                    if (!btn || btn.classList.contains("leader-gear-fab")) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleLeaderSideRailAction(btn);
+                });
+                const colorInp = leaderSideRailEl.querySelector(".leader-side-color-input");
+                colorInp?.addEventListener("input", () => {
+                    const hex = normalizeLeaderLyricHex(colorInp.value);
+                    if (!hex) return;
+                    persistLeaderLyricColorOverride(hex);
+                    render();
+                    syncLeaderSideRailUI();
+                });
+                colorInp?.addEventListener("click", (e) => e.stopPropagation());
+            };
+
             function renderLeaderFlowView() {
                 host.classList.toggle("leader-scroll-mode", false);
+                host.classList.add("leader-has-bottom-rail");
+                teardownLeaderScrollIO();
+                const plSongsFlow = getLeaderPlaylistOrderedSongs();
+                if (leaderBottomRailEl) leaderBottomRailEl.style.display = "flex";
+                renderBottomRailChips(plSongsFlow);
+                wireLeaderBottomRailOnce();
                 const { pages, idx } = getPages();
                 const color = getLeaderLyricColorForRender();
                 const cards = getLeaderFlowCards();
@@ -14170,47 +15066,148 @@ ${deleteBtnHtml}
                 } else if (card && card.type === "free") {
                     content = `<div class="leader-brush-mount leader-brush-mount--fit"><div class="leader-flow-stage"><div class="leader-flow-badge">${escapeHtml(card.label)}</div><div class="leader-flow-stage-note">会众屏：经文 / 纯色背景</div><div class="leader-flow-hint">${escapeHtml(card.leaderHint || "")}</div></div></div>`;
                 }
-                const step = cards.length ? `${flowCursor + 1} / ${cards.length}` : "—";
-                const cap = card ? escapeHtml(card.label || "") : "";
-                lyricLayer.innerHTML = `<div class="leader-page">流程 ${step}${cap ? " · " + cap : ""}</div><div class="leader-main">${content}</div>`;
-                toolbar.querySelectorAll("[data-mode]").forEach((btn) => btn.classList.toggle("active", btn.getAttribute("data-mode") === displayMode));
-                toolbar.querySelector('[data-action="note"]')?.classList.toggle("active", noteEditMode);
+                let curPlIx = plSongsFlow.findIndex((s) => String(s.id) === String(liveState?.songId || state.currentSongId || ""));
+                if (curPlIx < 0) curPlIx = 0;
+                const topBar = buildLeaderTopBarHtml(
+                    String(plSongsFlow[curPlIx]?.title || getLeaderHeaderTitle()).trim() || "当前诗歌",
+                    `第 ${curPlIx + 1} 首 / 共 ${Math.max(1, plSongsFlow.length)} 首`
+                );
+                lyricLayer.innerHTML = `${topBar}<div class="leader-main">${content}</div>`;
                 syncLeaderSideNav();
+                ensureLeaderSideRail();
+                wireLeaderSideRailOnce();
+                syncLeaderSideRailUI();
                 requestAnimationFrame(() => setupBrushCanvas());
                 updateLeaderColorBtnSwatch();
             }
 
+            /** 主歌/副歌等：行首标记行可加样式间距 */
+            const isLeaderLyricSectionHeaderLine = (raw) => {
+                const t = String(raw || "").trim();
+                if (!t) return false;
+                if (/^【[^】]{1,16}】/.test(t)) return true;
+                if (/^\[[^\]]{1,22}\]\s*/i.test(t)) return true;
+                if (/^(主歌|副歌|桥段|预副歌?|间奏|尾声|尾奏|齐唱|合唱)\s*$/i.test(t)) return true;
+                if (/^(Verse|Chorus|Bridge|Pre-Chorus|Tag|Outro)(\s+\d+)?\s*$/i.test(t)) return true;
+                return false;
+            };
+
+            const buildLeaderPlaylistSongBlocksHtml = (songs, color) => {
+                return songs
+                    .map((song, six) => {
+                        const raw = String(song.lyrics ?? "").replace(/\r/g, "");
+                        const rawLines = raw.split("\n");
+                        const linesHtml = rawLines
+                            .map((line) => {
+                                const disp = getLeaderFmtLine(line);
+                                const sec = isLeaderLyricSectionHeaderLine(line);
+                                const cls = sec ? " leader-pl-line--section" : "";
+                                if (!String(line).trim()) {
+                                    return '<div class="leader-pl-line leader-pl-line--blank" aria-hidden="true"></div>';
+                                }
+                                return `<div class="leader-pl-line${cls}">${escapeHtml(disp)}</div>`;
+                            })
+                            .join("");
+                        const sidAttr = escapeHtml(String(song.id ?? six));
+                        return `<section class="leader-song-block" id="leader-song-anchor-${six}" data-pl-ix="${six}" data-song-id="${sidAttr}"><div class="leader-song-divider" aria-hidden="true"></div><h2 class="leader-song-block-title">${escapeHtml(song.title || "未命名")}</h2><div class="leader-song-lyrics" style="color:${escapeHtml(color)}">${linesHtml || '<div class="leader-pl-line">…</div>'}</div></section>`;
+                    })
+                    .join("");
+            };
+
             function render() {
                 const keepOverlay = overlay && overlay.classList.contains("leader-note-pop-wrap");
-                if (!keepOverlay) closeOverlay();
+                if (!keepOverlay) {
+                    closeOverlay();
+                    closeLeaderSideSettingsPanel();
+                }
                 if (displayMode === "flow") {
                     loadLeaderFlowSnapshot();
                     renderLeaderFlowView();
                     return;
                 }
-                const { pages, idx } = getPages();
-                const lines = pages[idx] || [];
-                const nextLine = pages[idx + 1]?.[0] || "（无）";
                 const color = getLeaderLyricColorForRender();
-                const curStart = pages.slice(0, idx).reduce((n, p) => n + (p || []).length, 0);
-                const curEnd = curStart + lines.length - 1;
-                let content = "";
+                const plSongs = getLeaderPlaylistOrderedSongs();
+                host.classList.add("leader-has-bottom-rail");
+                if (leaderBottomRailEl) leaderBottomRailEl.style.display = "flex";
+                renderBottomRailChips(plSongs);
+                wireLeaderBottomRailOnce();
+
                 if (displayMode === "scroll") {
-                    const all = pages.flat();
-                    content = `<div class="leader-current leader-scroll" style="color:${color};font-size:${leaderFontSize};"><div class="leader-brush-mount leader-brush-mount--scroll">${all.map((line, i) => `<div class="leader-line${i >= curStart && i <= curEnd ? " current" : ""}" style="text-align:center;">${escapeHtml(line)}${!noteEditMode && loadNote(i) ? `<span class="leader-note-dot" data-line="${i}"></span>` : ""}${noteEditMode ? `<span class="leader-plus-dot" data-line="${i}" title="添加备注">⊕</span>` : ""}</div>`).join("")}</div></div>`;
+                    host.classList.add("leader-scroll-mode");
+                    lyricLayer.classList.add("leader-lyric-shell--playlist");
+                    lyricLayer.classList.remove("leader-lyric-shell--multi");
+                    const curSid = String(liveState?.songId || state.currentSongId || "");
+                    let syncIx = plSongs.findIndex((s) => String(s.id) === curSid);
+                    if (syncIx < 0) syncIx = clamp(state.playlist?.activeIndex ?? 0, 0, Math.max(0, plSongs.length - 1));
+                    let snapToSong = false;
+                    if (curSid && curSid !== lastLeaderFollowSongId) {
+                        lastLeaderFollowSongId = curSid;
+                        leaderBrowseIx = clamp(syncIx, 0, Math.max(0, plSongs.length - 1));
+                        snapToSong = true;
+                    } else {
+                        leaderBrowseIx = clamp(leaderBrowseIx, 0, Math.max(0, plSongs.length - 1));
+                    }
+                    const topLeft = String(plSongs[leaderBrowseIx]?.title || getLeaderHeaderTitle()).trim() || "当前诗歌";
+                    const topBar = buildLeaderTopBarHtml(
+                        topLeft,
+                        `第 ${leaderBrowseIx + 1} 首 / 共 ${Math.max(1, plSongs.length)} 首`
+                    );
+                    const blocks =
+                        plSongs.length > 0
+                            ? buildLeaderPlaylistSongBlocksHtml(plSongs, color)
+                            : `<section class="leader-song-block" id="leader-song-anchor-0" data-pl-ix="0"><div class="leader-song-divider" aria-hidden="true"></div><h2 class="leader-song-block-title">（暂无诗歌）</h2><div class="leader-song-lyrics" style="color:${escapeHtml(color)}"><div class="leader-pl-line">请使用「诗歌」导入或等待主控台同步</div></div></section>`;
+                    const playlistMain = `<div class="leader-playlist-layout"><div class="leader-playlist-scroll-root"><div class="leader-brush-mount leader-brush-mount--scroll">${blocks}</div></div></div>`;
+                    leaderLastPlaylistSig = leaderPlaylistSignature(plSongs);
+                    lyricLayer.innerHTML = `${topBar}<div class="leader-main leader-main-scroll leader-main--playlist">${playlistMain}</div>`;
+                    const rawFsMul = parseFloat(leaderFontSize);
+                    lyricLayer.style.setProperty(
+                        "--leader-song-fs-mul",
+                        String(Number.isFinite(rawFsMul) ? clamp(rawFsMul / 5, 0.72, 1.45) : 1)
+                    );
+                    requestAnimationFrame(() => {
+                        const root = lyricLayer.querySelector(".leader-playlist-scroll-root");
+                        bindLeaderScrollObserver(root, plSongs.length);
+                        if (leaderPendingScrollIx != null) {
+                            scrollLeaderToPlaylistIndex(leaderPendingScrollIx, "smooth");
+                            leaderBrowseIx = leaderPendingScrollIx;
+                            leaderPendingScrollIx = null;
+                        } else if (snapToSong) {
+                            scrollLeaderToPlaylistIndex(leaderBrowseIx, "instant");
+                        }
+                        updateLeaderTopBarReadout();
+                        updateBottomRailHighlight();
+                    });
                 } else {
-                    content = `<div class="leader-brush-mount leader-brush-mount--fit"><div class="leader-current leader-multi" style="color:${color};font-size:${leaderFontSize};">${lines.map((line, i) => {
-                        const gi = globalIndex(pages, idx, i);
-                        return `<div class="leader-line">${escapeHtml(line)}${!noteEditMode && loadNote(gi) ? `<span class="leader-note-dot" data-line="${gi}"></span>` : ""}${noteEditMode ? `<span class="leader-plus-dot" data-line="${gi}" title="添加备注">⊕</span>` : ""}</div>`;
-                    }).join("") || "<div class='leader-line'>...</div>"}</div></div>`;
+                    host.classList.remove("leader-scroll-mode");
+                    lyricLayer.classList.remove("leader-lyric-shell--playlist");
+                    lyricLayer.classList.add("leader-lyric-shell--multi");
+                    teardownLeaderScrollIO();
+                    const { pages, idx } = getPages();
+                    const lines = pages[idx] || [];
+                    const nextLine = pages[idx + 1]?.[0] || "（无）";
+                    const curSid = String(liveState?.songId || state.currentSongId || "");
+                    let syncIx = plSongs.findIndex((s) => String(s.id) === curSid);
+                    if (syncIx < 0) syncIx = 0;
+                    leaderBrowseIx = syncIx;
+                    const topBar = buildLeaderTopBarHtml(
+                        getLeaderHeaderTitle(),
+                        `第 ${idx + 1} 页 / 共 ${Math.max(1, pages.length)} 页`
+                    );
+                    const pageHtml = lines
+                        .map((line, i) => {
+                            const gi = globalIndex(pages, idx, i);
+                            return `<div class="leader-line">${escapeHtml(line)}${!noteEditMode && loadNote(gi) ? `<span class="leader-note-dot" data-line="${gi}"></span>` : ""}${noteEditMode ? `<span class="leader-plus-dot" data-line="${gi}" title="添加备注">⊕</span>` : ""}</div>`;
+                        })
+                        .join("") || "<div class='leader-line'>...</div>";
+                    const content = `<div class="leader-brush-mount leader-brush-mount--fit"><div class="leader-current leader-multi" style="color:${escapeHtml(color)};font-size:${leaderFontSize};">${pageHtml}</div></div>`;
+                    const nextHtml = `<div class="leader-next">下句：${escapeHtml(nextLine)}</div>`;
+                    lyricLayer.innerHTML = `${topBar}<div class="leader-main leader-main--page">${content}${nextHtml}</div>`;
+                    lyricLayer.style.removeProperty("--leader-song-fs-mul");
                 }
-                const nextHtml = displayMode === "scroll" ? "" : `<div class="leader-next">下句：${escapeHtml(nextLine)}</div>`;
-                host.classList.toggle("leader-scroll-mode", displayMode === "scroll");
-                const mainClass = displayMode === "scroll" ? "leader-main leader-main-scroll" : "leader-main";
-                lyricLayer.innerHTML = `<div class="leader-page">${idx + 1}/${Math.max(1, pages.length)}</div><div class="${mainClass}">${content}</div>${nextHtml}`;
-                toolbar.querySelectorAll("[data-mode]").forEach((btn) => btn.classList.toggle("active", btn.getAttribute("data-mode") === displayMode));
-                toolbar.querySelector('[data-action="note"]')?.classList.toggle("active", noteEditMode);
                 syncLeaderSideNav();
+                ensureLeaderSideRail();
+                wireLeaderSideRailOnce();
+                syncLeaderSideRailUI();
                 requestAnimationFrame(() => setupBrushCanvas());
                 updateLeaderColorBtnSwatch();
             }
@@ -14223,14 +15220,14 @@ ${deleteBtnHtml}
                 const sid = String(liveState?.songId || "");
                 const song = sid ? state.songs.find((s) => s && String(s.id) === String(sid)) : null;
                 if (!song) {
-                    showToast("未找到当前诗歌，请先同步主控台或导入诗歌包", toolbar.querySelector('[data-action="leader-edit-lyrics"]'));
+                    showToast("未找到当前诗歌，请先同步主控台或导入诗歌包", leaderToastAnchor());
                     return;
                 }
                 overlay = document.createElement("div");
                 overlay.className = "leader-note-pop-wrap";
                 overlay.innerHTML = `<div class="leader-note-pop leader-lyric-editor-pop" style="max-width:min(94vw,560px);text-align:left;">
                     <div style="font-weight:700;margin-bottom:8px;">编辑歌词 · ${escapeHtml(song.title || "未命名")}</div>
-                    <p style="font-size:12px;color:rgba(220,220,220,0.78);margin:0 0 8px;line-height:1.45;">保存后写入本机曲库并更新主领画面；段落之间的<b>空行</b>表示分页（与主控台一致）。若主控台已打开，将同步歌词与投屏。</p>
+                    <p style="font-size:12px;color:rgba(220,220,220,0.78);margin:0 0 8px;line-height:1.45;">保存后写入<b>本机</b>曲库并仅更新主领画面。段落之间用<b>空行</b>分段（与主控台一致）；主领「滚动」下可在行首写 <b>【主歌】</b>、<b>【副歌】</b> 等标记，会在该处留出主歌/副歌式的大空隙。另可用空行分段留出中等空隙。<b>不会</b>直接改动会众投屏；投屏仍由主控台点「应用到演示屏」更新。</p>
                     <textarea class="leader-lyric-editor-ta" rows="14" style="width:100%;box-sizing:border-box;border-radius:10px;border:1px solid rgba(255,255,255,0.15);background:#12151f;color:#eee;padding:10px;font-size:14px;line-height:1.45;"></textarea>
                     <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end;flex-wrap:wrap;">
                         <button type="button" class="leader-note-btn secondary" data-ly-edit-cancel>取消</button>
@@ -14255,20 +15252,12 @@ ${deleteBtnHtml}
                     }
                     try {
                         liveState = buildLiveState();
-                        setStore(STORAGE.LIVE, liveState);
                     } catch (_e) {
                         /* ignore */
                     }
-                    if (channel) {
-                        try {
-                            channel.postMessage({ type: "leader_lyrics_save", songId: sid, lyrics: text });
-                        } catch (_e2) {
-                            /* ignore */
-                        }
-                    }
                     render();
                     shut();
-                    showToast("歌词已保存", toolbar.querySelector('[data-action="leader-edit-lyrics"]'));
+                    showToast("歌词已保存（仅本机主领）", leaderToastAnchor());
                 });
             };
 
@@ -14282,7 +15271,7 @@ ${deleteBtnHtml}
                 overlay.setAttribute("data-pack-import", "1");
                 overlay.innerHTML = `<div class="leader-note-pop leader-pack-import-pop" style="max-width:min(92vw,480px);text-align:left;">
                     <div style="font-weight:700;margin-bottom:8px;">导入诗歌包</div>
-                    <p style="font-size:13px;color:rgba(230,230,230,0.78);margin:0 0 10px;line-height:1.45;">方式一：粘贴以 <b>W1</b> / <b>W0</b> 开头的整段包文本（与电脑「扫码同步」生成的一致）。方式二：粘贴手机扫码后浏览器地址栏里的<b>完整链接</b>（须含 <code>#wp1=</code>）。</p>
+                    <p style="font-size:13px;color:rgba(230,230,230,0.78);margin:0 0 10px;line-height:1.45;">方式一：粘贴以 <b>W1</b> / <b>W0</b> 开头的整段包文本（与电脑「扫码同步」生成的一致，可含主领偏好字段）。方式二：粘贴手机扫码后浏览器地址栏里的<b>完整链接</b>（须含 <code>#wp1=</code>）。</p>
                     <label style="font-size:12px;color:rgba(200,200,200,0.9);display:block;margin-bottom:4px;">包文本</label>
                     <textarea id="leader-pack-import-ta" rows="5" style="width:100%;box-sizing:border-box;border-radius:10px;border:1px solid rgba(255,255,255,0.15);background:#12151f;color:#eee;padding:8px;font-size:13px;" placeholder="W1..."></textarea>
                     <label style="font-size:12px;color:rgba(200,200,200,0.9);display:block;margin:12px 0 4px;">或 完整链接（可选）</label>
@@ -14383,7 +15372,7 @@ ${deleteBtnHtml}
                 closeOverlay();
                 const ids = Array.isArray(state.playlist.items) ? state.playlist.items : [];
                 if (!ids.length) {
-                    showToast("播放列表为空。请先在主控台加入诗歌，或在本机「诗歌」导入包。", toolbar.querySelector('[data-action="leader-playlist"]'));
+                    showToast("播放列表为空。请先在主控台加入诗歌，或在本机「诗歌」导入包。", leaderToastAnchor());
                     return;
                 }
                 overlay = document.createElement("div");
@@ -14412,14 +15401,8 @@ ${deleteBtnHtml}
                     const row = e.target.closest("[data-pl-ix]");
                     if (!row) return;
                     const ix = clamp(parseInt(row.getAttribute("data-pl-ix") || "0", 10) || 0, 0, ids.length - 1);
-                    try {
-                        if (channel) channel.postMessage({ type: "leader_select_song", index: ix });
-                    } catch (_e) {
-                        /* ignore */
-                    }
-                    switchToPlaylistSong(ix, false, "first");
                     shut();
-                    render();
+                    jumpLeaderToPlaylistIndex(ix);
                 });
             };
 
@@ -14434,50 +15417,10 @@ ${deleteBtnHtml}
             toolbar.addEventListener("click", (e) => {
                 const btn = e.target.closest("button");
                 if (!btn) return;
-                if (btn.dataset.action === "leader-help") {
-                    openLeaderHelpModal();
-                } else if (btn.dataset.action === "leader-guide") {
-                    openLeaderGuideModal(0, null);
-                } else if (btn.dataset.mode) {
-                    displayMode = btn.dataset.mode;
-                    localStorage.setItem(DISPLAY_MODE_KEY, displayMode);
-                    if (displayMode === "flow") {
-                        loadLeaderFlowSnapshot();
-                        syncFlowCursorFromLivePage();
-                        const cc = getLeaderFlowCards();
-                        if (cc.length) applyLeaderFlowCardToMain(cc[flowCursor]);
-                    }
-                    render();
-                } else if (btn.dataset.action === "flow-arrange") {
-                    openFlowEditor();
-                } else if (btn.dataset.action === "import-pack") {
-                    openLeaderSongPackImportUI();
-                } else if (btn.dataset.action === "leader-playlist") {
-                    openLeaderPlaylistSheet();
-                } else if (btn.dataset.action === "leader-edit-lyrics") {
-                    openLeaderLyricEditor();
-                } else if (btn.dataset.bg) {
-                    bgMode = btn.dataset.bg;
-                    localStorage.setItem(BG_MODE_KEY, bgMode);
-                    applyBg();
-                } else if (btn.dataset.action === "bg-panel") {
-                    ensureBgPanel();
-                    if (bgPanel?.style.display === "block") hideBgPanel();
-                    else showBgPanel();
-                } else if (btn.dataset.action === "font-panel") {
-                    toggleFontPanel();
-                } else if (btn.dataset.action === "color-panel") {
-                    toggleColorPanel();
-                } else if (btn.dataset.action === "note") {
-                    noteEditMode = !noteEditMode;
-                    closeOverlay();
-                    render();
-                } else if (btn.dataset.action === "brush") {
-                    toggleDrawMode();
-                }
-                showToolbar();
+                delegateLeaderToolbarButton(btn);
             });
             toolbarRail.addEventListener("click", (e) => {
+                if (host.classList.contains("leader-minimal-chrome")) return;
                 e.stopPropagation();
                 setToolbarCollapsed(false);
             });
@@ -14490,7 +15433,7 @@ ${deleteBtnHtml}
                 showToolbar();
             });
             host.addEventListener("touchstart", (e) => {
-                if (toolbarCollapsed && !brushMode) setToolbarCollapsed(false);
+                if (!host.classList.contains("leader-minimal-chrome") && toolbarCollapsed && !brushMode) setToolbarCollapsed(false);
                 touchStartX = e.changedTouches?.[0]?.clientX || 0;
                 touchStartY = e.changedTouches?.[0]?.clientY || 0;
                 if (toolbarCollapsed && touchStartY > window.innerHeight - leaderBottomSwipeBand()) swipeFromBottomY = touchStartY;
@@ -14504,7 +15447,7 @@ ${deleteBtnHtml}
                 const dx = x - touchStartX;
                 const dy = y - touchStartY;
                 if (displayMode !== "scroll" && Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) flip(dx < 0 ? 1 : -1);
-                if (toolbarCollapsed && swipeFromBottomY != null && y < swipeFromBottomY - leaderBottomSwipeMinDy()) setToolbarCollapsed(false);
+                if (!host.classList.contains("leader-minimal-chrome") && toolbarCollapsed && swipeFromBottomY != null && y < swipeFromBottomY - leaderBottomSwipeMinDy()) setToolbarCollapsed(false);
                 swipeFromBottomY = null;
                 showToolbar();
             }, { passive: true });
@@ -14526,7 +15469,7 @@ ${deleteBtnHtml}
                 showToolbar();
             });
             document.addEventListener("mousemove", () => {
-                if (toolbarCollapsed && !brushMode) {
+                if (!host.classList.contains("leader-minimal-chrome") && toolbarCollapsed && !brushMode) {
                     setToolbarCollapsed(false);
                     return;
                 }
@@ -14538,7 +15481,7 @@ ${deleteBtnHtml}
             });
             window.addEventListener("mouseup", (e) => {
                 if (brushMode || mouseBottomStartY == null) return;
-                if (toolbarCollapsed && e.clientY < mouseBottomStartY - leaderBottomSwipeMinDy()) setToolbarCollapsed(false);
+                if (!host.classList.contains("leader-minimal-chrome") && toolbarCollapsed && e.clientY < mouseBottomStartY - leaderBottomSwipeMinDy()) setToolbarCollapsed(false);
                 mouseBottomStartY = null;
             });
             document.addEventListener("click", (e) => {
@@ -14554,28 +15497,32 @@ ${deleteBtnHtml}
                 }
                 if (fontPanel && fontPanel.style.display !== "none") {
                     const inFont = e.target?.closest?.(".leader-font-pop");
-                    const inAa = e.target?.closest?.('[data-action="font-panel"]');
+                    const inAa =
+                        e.target?.closest?.('[data-action="font-panel"]') || e.target?.closest?.(".leader-gear-dock");
                     if (!inFont && !inAa) hideFontPanel();
                 }
                 if (colorPanel && colorPanel.style.display !== "none") {
                     const inColor = e.target?.closest?.(".leader-color-pop");
-                    const inColorBtn = e.target?.closest?.('[data-action="color-panel"]');
+                    const inColorBtn =
+                        e.target?.closest?.('[data-action="color-panel"]') || e.target?.closest?.(".leader-gear-dock");
                     if (!inColor && !inColorBtn) hideColorPanel();
                 }
                 if (bgPanel && bgPanel.style.display !== "none") {
                     const inBgPanel = e.target?.closest?.(".leader-bg-panel");
-                    const inBgBtn = e.target?.closest?.('[data-action="bg-panel"]');
+                    const inBgBtn =
+                        e.target?.closest?.('[data-action="bg-panel"]') || e.target?.closest?.(".leader-gear-dock");
                     if (!inBgPanel && !inBgBtn) hideBgPanel();
                 }
                 if (flowCtxMenuEl && !e.target?.closest?.(".leader-flow-ctx-menu")) hideFlowCtxMenu();
-                if (toolbarCollapsed) {
+                if (toolbarCollapsed && !host.classList.contains("leader-minimal-chrome")) {
                     const inToolbar = e.target?.closest?.(".leader-toolbar");
                     const inFab = e.target?.closest?.(".leader-expand-fab");
+                    const inRail = e.target?.closest?.(".leader-bottom-rail");
                     const inLeaderModal =
                         e.target?.closest?.("#leader-help-modal") ||
                         e.target?.closest?.("#leader-step-guide-overlay") ||
                         e.target?.closest?.(".leader-note-pop-wrap");
-                    if (!inToolbar && !inFab && !inLeaderModal) setToolbarCollapsed(false);
+                    if (!inToolbar && !inFab && !inLeaderModal && !inRail) setToolbarCollapsed(false);
                 }
                 showToolbar();
             });
@@ -14583,9 +15530,7 @@ ${deleteBtnHtml}
             if (channel) {
                 channel.onmessage = (e) => {
                     if (e.data?.type === "update" && e.data.payload?.pages) {
-                        liveState = e.data.payload;
-                        if (liveState?.worshipFlow?.cards?.length) localWorshipFlow = liveState.worshipFlow;
-                        render();
+                        if (!applyLeaderLiveUpdateFromPayload(e.data.payload)) render();
                     }
                 };
                 channel.postMessage({ type: "request_state" });
@@ -14594,9 +15539,7 @@ ${deleteBtnHtml}
                 if (e.key === STORAGE.LIVE && e.newValue) {
                     const payload = parseJSON(e.newValue, null);
                     if (payload?.pages) {
-                        liveState = payload;
-                        if (liveState?.worshipFlow?.cards?.length) localWorshipFlow = liveState.worshipFlow;
-                        render();
+                        if (!applyLeaderLiveUpdateFromPayload(payload)) render();
                     }
                 }
             });
@@ -14612,6 +15555,8 @@ ${deleteBtnHtml}
             const initState = getStore(STORAGE.LIVE, null);
             if (initState?.pages) liveState = initState;
             ensureBrushHud();
+            ensureLeaderSideRail();
+            wireLeaderSideRailOnce();
             applyBg();
             render();
             setToolbarCollapsed(toolbarCollapsed);
@@ -14622,6 +15567,18 @@ ${deleteBtnHtml}
             } catch (_e) {
                 /* ignore */
             }
+            globalThis.__worshipLeaderApplyLive = function () {
+                try {
+                    const ls = globalThis.liveState;
+                    if (ls && typeof ls === "object") {
+                        liveState = ls;
+                        globalThis.worshipLiveState = liveState;
+                    }
+                    render();
+                } catch (_e2) {
+                    /* ignore */
+                }
+            };
             try {
                 if (localStorage.getItem(LEADER_ONBOARDING_LS) !== "1") {
                     queueMicrotask(() => openLeaderGuideModal(0, { firstVisit: true }));
@@ -14631,8 +15588,60 @@ ${deleteBtnHtml}
             }
             globalThis.__leaderReloadAfterPackImport = () => {
                 try {
+                    displayMode = localStorage.getItem(DISPLAY_MODE_KEY) || "multi";
+                    if (displayMode === "single") displayMode = "multi";
+                    if (!["multi", "scroll", "flow"].includes(displayMode)) displayMode = "multi";
+                    bgMode = localStorage.getItem(BG_MODE_KEY) || "particles";
+                    if (!["black", "white", "gray", "navy", "particles", "custom"].includes(bgMode)) bgMode = "particles";
+                    try {
+                        leaderBgCustomDataUrl = String(localStorage.getItem(LEADER_BG_CUSTOM_IMAGE_LS) || "");
+                    } catch (_e0) {
+                        leaderBgCustomDataUrl = "";
+                    }
+                    if (bgMode === "custom" && !leaderBgCustomDataUrl) {
+                        bgMode = "particles";
+                        try {
+                            localStorage.setItem(BG_MODE_KEY, bgMode);
+                        } catch (_e1) {
+                            /* ignore */
+                        }
+                    }
+                    toolbarCollapsed = localStorage.getItem(TOOLBAR_COLLAPSED_KEY) === "1";
+                    if (localStorage.getItem(TOOLBAR_COLLAPSED_KEY) === null && window.innerWidth < 480) toolbarCollapsed = true;
+                    setToolbarCollapsed(toolbarCollapsed);
+                    leaderFontSize = localStorage.getItem(FONT_SIZE_KEY) || "5vw";
+                    const parsedLf = parseFloat(leaderFontSize);
+                    if (!Number.isFinite(parsedLf) || parsedLf < 3 || parsedLf > 8) leaderFontSize = "5vw";
+                    const cr = localStorage.getItem(LEADER_LYRIC_COLOR_LS_KEY);
+                    leaderLyricColorOverride = normalizeLeaderLyricHex(cr);
+                    if (cr && !leaderLyricColorOverride) {
+                        try {
+                            localStorage.removeItem(LEADER_LYRIC_COLOR_LS_KEY);
+                        } catch (_e2) {
+                            /* ignore */
+                        }
+                    }
+                    const nm = migrateLeaderNotes(getStore(NOTES_KEY, {}));
+                    notesMap = nm;
+                    try {
+                        setStore(NOTES_KEY, notesMap);
+                    } catch (_e3) {
+                        /* ignore */
+                    }
                     loadLeaderFlowSnapshot();
+                    applyBg();
+                    hideFontPanel();
+                    hideColorPanel();
+                    const rangeEl = fontPanel?.querySelector(".leader-font-range");
+                    if (rangeEl) {
+                        const parsed = parseFloat(leaderFontSize);
+                        if (Number.isFinite(parsed)) rangeEl.value = String(parsed);
+                    }
                     render();
+                    updateBrushPanelPosition();
+                    positionFontPanel();
+                    positionColorPanel();
+                    updateLeaderColorBtnSwatch();
                 } catch (_e) {
                     /* ignore */
                 }
@@ -14680,6 +15689,11 @@ ${deleteBtnHtml}
 
             return;
         }
+        try {
+            globalThis.__worshipAppInitLeaderView = initLeaderView;
+        } catch (_eAssign) {
+            /* ignore */
+        }
     }
 
     function changePage(delta) {
@@ -14713,10 +15727,13 @@ ${deleteBtnHtml}
             }
         } else if (cur >= maxIdx) {
             const items = state.playlist.items || [];
-            let base = items.indexOf(state.currentSongId);
-            if (base < 0) base = clamp(state.playlist.activeIndex, 0, Math.max(0, items.length - 1));
+            const songIdx = items.indexOf(state.currentSongId);
+            const base = songIdx >= 0 ? songIdx : clamp(state.playlist.activeIndex, 0, Math.max(0, items.length - 1));
             const nextIdx = base + 1;
-            if (state.playlist.running && nextIdx < items.length) {
+            /** 当前曲在歌单内时：最后一页「下一页」直接进下一首，不必先点「开始播放列表」；否则仍按「连播已开始」逻辑 */
+            const canNextSong =
+                nextIdx < items.length && (state.playlist.running || songIdx >= 0);
+            if (canNextSong) {
                 if (
                     switchToPlaylistSong(
                         nextIdx,

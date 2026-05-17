@@ -587,6 +587,49 @@ body[data-theme-custom-bg="1"]::before {
         display: none;
     }
 }
+/* 投屏侧栏变宽：预设/我的/共享背景缩略图随可用宽度放大（有上限，避免过大） */
+@container preview-panel (min-width: 320px) {
+    #preview-panel .bg-selector .bg-option {
+        max-width: 72px;
+    }
+    #my-backgrounds-container .lyric-bg-thumb-wrap,
+    #my-backgrounds-container .lyric-bg-slot-empty {
+        max-width: 104px;
+    }
+    #shared-backgrounds-container .lyric-bg-thumb-wrap {
+        max-width: 56px;
+    }
+}
+@container preview-panel (min-width: 400px) {
+    #preview-panel .bg-selector .bg-option {
+        max-width: 80px;
+    }
+    #my-backgrounds-container .lyric-bg-thumb-wrap,
+    #my-backgrounds-container .lyric-bg-slot-empty {
+        max-width: 112px;
+    }
+    #shared-backgrounds-container .lyric-bg-thumb-wrap {
+        max-width: 60px;
+    }
+}
+/* 极窄侧栏：略缩小格宽，仍保持比例、仅换行不压扁 */
+@container preview-panel (max-width: 248px) {
+    #my-backgrounds-container.my-backgrounds {
+        grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+    }
+    #my-backgrounds-container .lyric-bg-thumb-wrap,
+    #my-backgrounds-container .lyric-bg-slot-empty {
+        min-width: 64px;
+        max-width: 88px;
+    }
+    #shared-backgrounds-container.my-backgrounds {
+        grid-template-columns: repeat(auto-fill, minmax(36px, 1fr));
+    }
+    #shared-backgrounds-container .lyric-bg-thumb-wrap {
+        min-width: 36px;
+        max-width: 48px;
+    }
+}
 
 .projection-close-panel-btn {
     display: none;
@@ -3799,7 +3842,7 @@ mark { background:rgba(255,215,0,.38); color:inherit; padding:0 2px; border-radi
     min-height: 160px;
     overflow-y: auto;
     overflow-x: hidden;
-    align-content: flex-start;
+    align-content: start;
 }
 #preview-panel .bg-tab-panel.active #upload-bg-btn,
 #preview-panel .bg-tab-panel.active .bg-privacy-hint {
@@ -4549,7 +4592,22 @@ input[type="range"] { width:100%; height:5px; background:var(--slider-track); bo
 input[type="range"]::-webkit-slider-thumb { -webkit-appearance:none; width:18px; height:18px; background:var(--accent); border-radius:50%; cursor:pointer; border:2px solid white; }
 input[type="text"], input[type="number"], textarea, select, input[type="range"] { transition:box-shadow 0.15s ease, border-color 0.15s ease; }
 input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:focus, input[type="range"]:focus { outline:none; border-color:var(--accent-light); box-shadow:0 0 0 2px rgba(107,142,201,0.25); }
-.bg-selector { display:flex; gap:8px; margin-top:6px; flex-wrap:wrap; }
+.bg-selector {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
+    gap: 8px;
+    margin-top: 6px;
+    justify-content: start;
+    align-content: start;
+}
+#preview-panel .bg-selector .bg-option {
+    width: 100%;
+    max-width: 64px;
+    height: auto;
+    aspect-ratio: 1;
+    justify-self: start;
+    box-sizing: border-box;
+}
 .bg-option[data-bg="solid-black"] { background:#000; }
 .bg-option[data-bg="solid-white"] { background:#fff; }
 .bg-option[data-bg="solid-gray"] { background:#555; }
@@ -4757,24 +4815,28 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
 }
 .my-backgrounds { margin-top:10px; }
 #shared-backgrounds-container.my-backgrounds {
-    display:grid;
-    grid-template-columns:repeat(auto-fill, minmax(44px, 1fr));
-    gap:8px;
-    max-height:min(42vh, 280px);
-    overflow-y:auto;
-}
-/* 「我的背景」标签页：横向 flex 换行（与页面画廊一致），缩略图卡片固定宽不被压扁 */
-#my-backgrounds-container.my-backgrounds {
-    display: flex;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
     gap: 8px;
-    align-content: flex-start;
-    justify-content: flex-start;
+    justify-content: start;
+    align-content: start;
+    max-height: min(42vh, 280px);
+    overflow-x: auto;
+    overflow-y: auto;
+}
+/* 「我的背景」：格宽随侧栏伸缩（有上下限），窄时换行、宽时放大，不压扁 */
+#my-backgrounds-container.my-backgrounds {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+    gap: 8px;
+    justify-content: start;
+    align-content: start;
     max-height: min(42vh, 320px);
+    overflow-x: auto;
     overflow-y: auto;
 }
 #my-backgrounds-container.my-backgrounds .my-backgrounds-empty-hint {
-    flex: 1 1 100%;
+    grid-column: 1 / -1;
     width: 100%;
     box-sizing: border-box;
 }
@@ -4785,12 +4847,18 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
     max-height: none;
 }
 #shared-backgrounds-container .lyric-bg-thumb-wrap {
+    width: 100%;
+    min-width: 40px;
+    max-width: 52px;
+    height: auto;
+    aspect-ratio: 1;
+    justify-self: start;
     border: none !important;
     background: transparent !important;
     box-shadow: none !important;
     padding: 0 !important;
 }
-.lyric-bg-thumb-wrap { position:relative; aspect-ratio:1; min-height:0; }
+.lyric-bg-thumb-wrap { position: relative; aspect-ratio: 1; min-height: 0; box-sizing: border-box; }
 .lyric-bg-thumb {
     width:100%;
     height:100%;
@@ -4814,9 +4882,9 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
     box-shadow: 0 0 0 2px rgba(212,175,55,0.4), 0 2px 10px rgba(0,0,0,0.45);
 }
 #my-backgrounds-container .lyric-bg-thumb--video {
-    position:relative;
-    display:block;
-    overflow:hidden;
+    position: absolute;
+    display: block;
+    overflow: hidden;
 }
 #my-backgrounds-container .lyric-bg-thumb .lyric-bg-thumb-cover-img {
     position: absolute;
@@ -4870,14 +4938,14 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
 }
 
 #my-backgrounds-container .lyric-bg-thumb-wrap {
-    flex-shrink: 0;
     position: relative;
     box-sizing: border-box;
-    width: 76px;
-    min-width: 76px;
-    max-width: 76px;
-    aspect-ratio: auto;
-    height: 45px;
+    width: 100%;
+    min-width: 72px;
+    max-width: 96px;
+    height: auto;
+    aspect-ratio: 76 / 45;
+    justify-self: start;
     overflow: visible;
     border: none !important;
     background: transparent !important;
@@ -5078,10 +5146,13 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
     animation:dissolve-particles 0.72s ease-out forwards;
 }
 #my-backgrounds-container .lyric-bg-slot-empty {
-    flex-shrink: 0;
-    width: 76px;
-    height:45px;
-    box-sizing:border-box;
+    width: 100%;
+    min-width: 72px;
+    max-width: 96px;
+    height: auto;
+    aspect-ratio: 76 / 45;
+    justify-self: start;
+    box-sizing: border-box;
     border:1px dashed rgba(255,255,255,0.35);
     border-radius:8px;
     background:rgba(255,255,255,0.04);
@@ -5104,12 +5175,19 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
     font-weight:300;
 }
 #my-backgrounds-container .lyric-bg-thumb {
-    width:56px;
-    height:45px;
-    min-height:0;
-    margin-left:12px;
-    border-radius:8px;
-    border:1px solid rgba(255,255,255,0.38);
+    position: absolute;
+    left: 14px;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: auto;
+    height: auto;
+    min-width: 0;
+    min-height: 0;
+    margin: 0;
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.38);
+    box-sizing: border-box;
 }
 #my-backgrounds-container .lyric-bg-thumb:hover {
     border-color:rgba(255,255,255,0.78);

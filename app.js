@@ -3925,12 +3925,13 @@
         }
     }
 
-    /** 列表/分类：搜索仅匹配标题 */
+    /** 列表/分类：搜索匹配标题、歌词与标签 */
     function songTitleMatchesSearch(song, keyLower) {
         if (!keyLower) return true;
-        return String(song.title || "")
-            .toLowerCase()
-            .includes(keyLower);
+        const title = String(song.title || "").toLowerCase();
+        const lyrics = String(song.lyrics || "").toLowerCase();
+        const tags = String(song.tags || "").toLowerCase();
+        return title.includes(keyLower) || lyrics.includes(keyLower) || tags.includes(keyLower);
     }
 
     function getLibraryFilteredSongRows() {
@@ -5336,13 +5337,32 @@
     }
 
     function saveSongs() {
-        /* ==========================================================
-           [迁移标记 round1] 已迁移至 js/state.js；以下为旧实现，保留作安全网。
-           当 globalThis.saveSongs 不可用时可恢复块内逻辑。
-           ==========================================================
-        setStore(STORAGE.SONGS, state.songs);
-        */
-        return globalThis.saveSongs();
+        /* 必须写入 app.js 的 state.songs。若仅委托 globalThis.saveSongs（state.js），
+         * 会持久化未与编辑器同步的 AppState.songs，导致「保存」后刷新丢失、搜索不到。 */
+        try {
+            setStore(STORAGE.SONGS, state.songs);
+        } catch (err) {
+            if (!isStorageQuotaExceededError(err)) console.warn("saveSongs", err);
+        }
+        try {
+            const AS = globalThis.AppState;
+            if (AS && Array.isArray(AS.songs) && AS.songs !== state.songs) {
+                AS.songs.length = 0;
+                for (let i = 0; i < state.songs.length; i++) AS.songs.push(state.songs[i]);
+            }
+            const rootSongs = globalThis.songs;
+            if (rootSongs && rootSongs !== state.songs && Array.isArray(rootSongs)) {
+                rootSongs.length = 0;
+                for (let i = 0; i < state.songs.length; i++) rootSongs.push(state.songs[i]);
+            }
+            const WD = globalThis.WorshipData;
+            if (WD && WD.songs !== state.songs) {
+                WD.songs = state.songs;
+                WD.currentSongId = state.currentSongId;
+            }
+        } catch (_e) {
+            /* ignore */
+        }
     }
 
     function saveSettings() {
@@ -7140,6 +7160,7 @@ ${deleteBtnHtml}
     }
 
     function applySavedSetlist(sl, triggerBtn) {
+        restoreSetlistLibrarySnapshots(sl);
         const rawIds = Array.isArray(sl.songs) ? sl.songs : Array.isArray(sl.items) ? sl.items : [];
         const next = [];
         rawIds.forEach((songId) => {
@@ -7149,7 +7170,13 @@ ${deleteBtnHtml}
         });
         if (!next.length && rawIds.length > 0) {
             closeSetlistModal();
-            showToast("歌单中的诗歌已不在本机曲库，无法加载", triggerBtn || $("load-setlist-btn"));
+            const hadLibSnap = Array.isArray(sl.librarySnapshots) && sl.librarySnapshots.length > 0;
+            showToast(
+                hadLibSnap
+                    ? "歌单恢复失败，请重试；若仍失败请重新保存该歌单"
+                    : "歌单中的诗歌已不在本机曲库。请先把各首诗歌点「保存歌词」写入曲库，再重新「保存歌单」后加载",
+                triggerBtn || $("load-setlist-btn")
+            );
             return;
         }
         const pres = sl.presentation;
@@ -7277,6 +7304,81 @@ ${deleteBtnHtml}
     /** 歌单快照 v1：defaults=保存瞬间的全局歌词排版；tracks=各首在曲库中的背景与垂直/透明度（与投屏一致） */
     const SETLIST_PRESENTATION_SNAPSHOT_V = 1;
 
+    /** 保存歌单时附带各首诗歌副本，刷新后 ID 对不上时仍可还原进本机曲库 */
+    function gatherSetlistSongLibrarySnapshot(songId) {
+        const song = state.songs.find((s) => String(s.id) === String(songId));
+        if (!song) return null;
+        const bg = getStoredSongBackgroundOrDefaults(song);
+        const row = {
+            id: String(songId),
+            title: String(song.title ?? ""),
+            lyrics: String(song.lyrics ?? ""),
+            key: String(song.key ?? "").trim(),
+            tempo: String(song.tempo ?? "").trim(),
+            notes: String(song.notes ?? "").trim(),
+            tags: String(song.tags ?? "").trim(),
+            background: {
+                bgType: bg.bgType,
+                bgImage: String(bg.bgImage || ""),
+                bgImageId: String(bg.bgImageId || ""),
+                bgMediaType: bg.bgMediaType === "video" ? "video" : "image"
+            }
+        };
+        if (Number.isFinite(Number(song.overlayOpacityPct))) {
+            row.overlayOpacityPct = clamp(Number(song.overlayOpacityPct), 0, 80);
+        }
+        if (Number.isFinite(Number(song.fontOpacityPct))) {
+            row.fontOpacityPct = clamp(Number(song.fontOpacityPct), 20, 100);
+        }
+        if (Number.isFinite(Number(song.posY))) row.posY = clamp(Number(song.posY), 20, 70);
+        return row;
+    }
+
+    function restoreSetlistLibrarySnapshots(sl) {
+        const snaps = Array.isArray(sl?.librarySnapshots) ? sl.librarySnapshots : [];
+        if (!snaps.length) return false;
+        let added = false;
+        snaps.forEach((snap) => {
+            if (!snap || snap.id == null || snap.id === "") return;
+            const sid = String(snap.id);
+            if (state.songs.some((s) => String(s.id) === sid)) return;
+            const bg = snap.background && typeof snap.background === "object" ? snap.background : {};
+            const song = {
+                id: snap.id,
+                title: String(snap.title ?? "").trim() || "未命名",
+                lyrics: String(snap.lyrics ?? ""),
+                key: String(snap.key ?? "").trim(),
+                tempo: String(snap.tempo ?? "").trim(),
+                notes: String(snap.notes ?? "").trim(),
+                tags: String(snap.tags ?? "").trim(),
+                overlayOpacityPct: Number.isFinite(Number(snap.overlayOpacityPct))
+                    ? clamp(Number(snap.overlayOpacityPct), 0, 80)
+                    : 30,
+                fontOpacityPct: Number.isFinite(Number(snap.fontOpacityPct))
+                    ? clamp(Number(snap.fontOpacityPct), 20, 100)
+                    : 100,
+                bgType: String(bg.bgType || snap.bgType || "particles").trim() || "particles",
+                bgImage: String(bg.bgImage ?? snap.bgImage ?? ""),
+                bgImageId: String(bg.bgImageId ?? snap.bgImageId ?? ""),
+                bgMediaType: bg.bgMediaType === "video" || snap.bgMediaType === "video" ? "video" : "image"
+            };
+            if (snap.posY != null && Number.isFinite(Number(snap.posY))) {
+                song.posY = clamp(Number(snap.posY), 20, 70);
+            }
+            state.songs.push(song);
+            added = true;
+        });
+        if (added) {
+            try {
+                saveSongs();
+                renderSongList();
+            } catch (_e) {
+                /* ignore */
+            }
+        }
+        return added;
+    }
+
     function gatherSetlistTypographyDefaultsForSnapshot() {
         const u = state.ui;
         return {
@@ -7385,8 +7487,16 @@ ${deleteBtnHtml}
             syncEditorToSong();
             persistSongBackgroundFromUi(state.currentSongId);
         }
+        try {
+            saveSongs();
+        } catch (_e) {
+            /* ignore */
+        }
+        const librarySnapshots = [];
         const tracks = [];
         ctx.ids.forEach((id) => {
+            const libSnap = gatherSetlistSongLibrarySnapshot(id);
+            if (libSnap) librarySnapshots.push(libSnap);
             const row = gatherSetlistTrackPresentationSnapshot(id);
             if (row) tracks.push(row);
         });
@@ -7396,6 +7506,7 @@ ${deleteBtnHtml}
             name: trimmed,
             songs: [...ctx.ids],
             createdAt: Date.now(),
+            librarySnapshots,
             presentation: {
                 v: SETLIST_PRESENTATION_SNAPSHOT_V,
                 defaults: gatherSetlistTypographyDefaultsForSnapshot(),
@@ -9879,7 +9990,6 @@ ${deleteBtnHtml}
             }
         }
         syncEditorToSong();
-        if (typeof WorshipActions !== "undefined") WorshipActions.saveLyrics();
         saveSongs();
         renderSongList();
         updateSpeakerCards();
@@ -11672,7 +11782,7 @@ ${deleteBtnHtml}
         on("online-search-input", "focus", () => {
             if (onlineSearchNotReadyHintShownForFocus) return;
             onlineSearchNotReadyHintShownForFocus = true;
-            showToast("在线搜索功能尚未正式开放，当前无法使用；请使用本机诗歌库或导入。", $("online-search-input"));
+            showToast("输入关键词后将搜索在线诗歌库；需联网。结果可导入到本机诗歌库。", $("online-search-input"));
         });
         on("online-search-input", "blur", () => {
             onlineSearchNotReadyHintShownForFocus = false;

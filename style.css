@@ -5476,7 +5476,6 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
     --leader-bottom-rail-pad: 52px;
     --leader-gear-dock-size: 52px;
 }
-.leader-host.leader-has-gear-dock .leader-lyric-shell.leader-lyric-shell--playlist,
 .leader-host.leader-has-gear-dock .leader-lyric-shell.leader-lyric-shell--multi {
     padding-right: clamp(8px, 2.4vw, 16px);
 }
@@ -5486,7 +5485,8 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
     right: 0;
     bottom: 0;
     height: auto;
-    padding: 0 clamp(8px, 2.4vw, 16px) 0 clamp(8px, 2.4vw, 18px);
+    /* 右侧无 padding，滚动条贴窗口右缘；歌词留白在 scroll-root 内层 */
+    padding: 0 0 0 clamp(8px, 2.4vw, 18px);
     overflow: hidden;
     display: flex;
     flex-direction: column;
@@ -5626,7 +5626,11 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
     overscroll-behavior: contain;
     padding-top: 60px;
     padding-bottom: max(48px, var(--leader-bottom-rail-pad, 52px));
-    padding-right: 8px;
+    padding-right: 0;
+    box-sizing: border-box;
+}
+.leader-playlist-scroll-root .leader-brush-mount--scroll {
+    padding-right: clamp(8px, 2.4vw, 16px);
     box-sizing: border-box;
 }
 .leader-song-divider {
@@ -5769,6 +5773,9 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
 }
 .leader-host.leader-show-side-arrows .leader-lyric-shell.leader-lyric-shell--playlist .leader-playlist-scroll-root {
     padding-left: clamp(36px, 10vw, 52px);
+    padding-right: 0;
+}
+.leader-host.leader-show-side-arrows .leader-lyric-shell.leader-lyric-shell--playlist .leader-playlist-scroll-root .leader-brush-mount--scroll {
     padding-right: clamp(36px, 10vw, 52px);
 }
 .leader-host.leader-minimal-chrome.leader-has-bottom-rail .leader-lyric-shell {
@@ -5970,9 +5977,13 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
 }
 @media (min-width: 768px) {
     .leader-lyric-shell.leader-lyric-shell--playlist {
-        left: 3%;
-        right: 3%;
+        left: 0;
+        right: 0;
         bottom: 0;
+    }
+    .leader-lyric-shell.leader-lyric-shell--playlist .leader-playlist-scroll-root .leader-brush-mount--scroll {
+        padding-left: clamp(12px, 2vw, 24px);
+        padding-right: clamp(12px, 2vw, 24px);
     }
     .leader-top-bar:not(.leader-top-bar--minimal) {
         padding: 12px 8px 12px 4px;

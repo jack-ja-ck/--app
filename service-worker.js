@@ -1,4 +1,4 @@
-const CACHE_NAME = "worship-app-v5";
+const CACHE_NAME = "worship-app-v6";
 const ASSETS = [
   "index.html",
   "manifest.json",
@@ -18,36 +18,36 @@ const ASSETS = [
 ];
 
 self.addEventListener("install", (event) => {
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      console.log("缓存核心文件...");
+      console.log("[SW] 缓存核心文件…");
       return Promise.all(
         ASSETS.map((url) =>
-          cache.add(url).catch(function (err) {
+          cache.add(url).catch((err) => {
             console.warn("[SW] 跳过缓存:", url, err);
           })
         )
       );
-    }).then(() => self.skipWaiting())
-  );
-});
-
-self.addEventListener("fetch", (event) => {
-  event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      return cachedResponse || fetch(event.request);
     })
   );
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames
-          .filter((name) => name !== CACHE_NAME)
-          .map((name) => caches.delete(name))
-      );
-    }).then(() => self.clients.claim())
+    caches
+      .keys()
+      .then((cacheNames) =>
+        Promise.all(
+          cacheNames.filter((name) => name !== CACHE_NAME).map((name) => caches.delete(name))
+        )
+      )
+      .then(() => self.clients.claim())
+  );
+});
+
+self.addEventListener("fetch", (event) => {
+  event.respondWith(
+    caches.match(event.request).then((cachedResponse) => cachedResponse || fetch(event.request))
   );
 });

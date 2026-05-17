@@ -137,6 +137,7 @@ function loadState() {
         }
     } else {
         AppState.currentSongId = songs[0].id;
+        ui.theme = "dark";
     }
 
     if (!songs.some((s) => s && s.id === AppState.currentSongId)) {

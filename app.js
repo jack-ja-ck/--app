@@ -38,7 +38,7 @@
         return false;
     }
     const THEME_BG_SLOTS_MAX = 4;
-    /** 无自定义主题背景时的默认壁纸（相对路径，置于项目根目录） */
+    /** 旧版自动注入的默认十字架壁纸（迁移时清除，不再作为默认） */
     const DEFAULT_THEME_BG_REL_PATH = "./cross.jpg";
     const DEFAULT_THEME_BG_SLOT_ID = "tbg_default_cross";
     const UPLOADED_BACKGROUNDS_STORAGE = "uploaded_backgrounds";
@@ -333,17 +333,65 @@
         }
     }
 
-    /** 仅在 IndexedDB / 本地槽位均无主题背景时注入默认十字架图（不写存储，不影响已有用户数据） */
+    function isLegacyDefaultCrossThemeBgPath(imageData) {
+        const t = String(imageData || "").trim();
+        if (!t) return false;
+        if (t === DEFAULT_THEME_BG_REL_PATH) return true;
+        return /(?:^|[\\/])cross\.jpg$/i.test(t);
+    }
+
+    /** 是否已上传/选择自定义控制台主题壁纸或视频 */
+    function hasCustomThemeConsoleBackground() {
+        if (isThemeConsoleVideoActive()) return true;
+        const userSlots = _themeBgSlotsCache.filter(
+            (x) => x && x.imageData && x.id !== DEFAULT_THEME_BG_SLOT_ID
+        );
+        if (userSlots.length > 0) return true;
+        const raw = String(_idbThemeBgCache || "").trim();
+        if (!raw) return false;
+        return !isLegacyDefaultCrossThemeBgPath(raw);
+    }
+
+    /** 清除旧版自动注入的十字架默认图；无自定义壁纸时不注入图片，沿用深色界面主题 */
+    function stripLegacyDefaultCrossThemeBg() {
+        let changed = false;
+        const before = _themeBgSlotsCache.length;
+        _themeBgSlotsCache = _themeBgSlotsCache.filter((s) => {
+            if (s && s.id === DEFAULT_THEME_BG_SLOT_ID && isLegacyDefaultCrossThemeBgPath(s.imageData)) {
+                return false;
+            }
+            if (s && isLegacyDefaultCrossThemeBgPath(s.imageData) && !s.id) {
+                return false;
+            }
+            return true;
+        });
+        if (_themeBgSlotsCache.length !== before) changed = true;
+        if (isLegacyDefaultCrossThemeBgPath(_idbThemeBgCache)) {
+            _idbThemeBgCache = "";
+            changed = true;
+        }
+        if (
+            _themeBgActiveId === DEFAULT_THEME_BG_SLOT_ID ||
+            (_themeBgActiveId && !_themeBgSlotsCache.some((s) => s && s.id === _themeBgActiveId))
+        ) {
+            _themeBgActiveId = _themeBgSlotsCache[0]?.id || "";
+            changed = true;
+        }
+        if (changed) {
+            syncActiveThemeBgCacheFromSlots();
+            persistFullThemeBgFromSlots();
+        }
+        return changed;
+    }
+
     function ensureDefaultThemeBackgroundAtBoot() {
-        if ((_idbThemeBgCache || "").trim()) return;
-        if (Array.isArray(_themeBgSlotsCache) && _themeBgSlotsCache.length > 0) return;
-        _idbThemeBgCache = DEFAULT_THEME_BG_REL_PATH;
-        _themeBgSlotsCache = [{
-            id: DEFAULT_THEME_BG_SLOT_ID,
-            imageData: DEFAULT_THEME_BG_REL_PATH,
-            timestamp: Date.now()
-        }];
-        _themeBgActiveId = DEFAULT_THEME_BG_SLOT_ID;
+        const hadLegacyCross = stripLegacyDefaultCrossThemeBg();
+        if (!hasCustomThemeConsoleBackground()) {
+            const isFirstVisit = !getStore(STORAGE.SETTINGS, null);
+            if (isFirstVisit || hadLegacyCross) {
+                state.ui.theme = "dark";
+            }
+        }
     }
 
     function removeThemeBgSlot(slotId) {
@@ -587,11 +635,17 @@
         _themeConsoleVideoDataUrl = "";
         _themeBgSlotsCache = [];
         _themeBgActiveId = "";
+        _idbThemeBgCache = "";
         persistFullThemeBgFromSlots();
-        ensureDefaultThemeBackgroundAtBoot();
-        persistFullThemeBgFromSlots();
+        state.ui.theme = "dark";
+        saveSettings();
         applyThemeBackground();
-        showToast("已恢复默认主题背景", $("worship-console-wallpaper-preview") || $("worship-console-wallpaper-reset"));
+        if (typeof updateUIFromState === "function") updateUIFromState();
+        else {
+            document.body.setAttribute("data-theme", "dark");
+            if ($("theme-selector")) $("theme-selector").value = "dark";
+        }
+        showToast("已恢复深色默认背景", $("worship-console-wallpaper-preview") || $("worship-console-wallpaper-reset"));
     }
 
     function loadThemeConsoleVideoFromStorage() {
@@ -976,6 +1030,8 @@
 
     /** 主窗口缓存的投屏窗口引用（?display=1），关闭或失效后置空 */
     let projectionDisplayWindowRef = null;
+    /** 主控台主动结束投屏时置 true，避免 unload 再弹出「窗口已关闭」提示 */
+    let projectionCloseInitiatedByMain = false;
     /** 固定 window.name：同一时刻只保留一个投屏窗口，重复打开时聚焦并刷新状态 */
     const WORSHIP_PROJECTION_DISPLAY_WINDOW_NAME = "worship_projection_display_v1";
     /** 主控台：投屏窗关闭/退出全屏后的居中提示层 */
@@ -2744,9 +2800,9 @@
         },
         {
             selector: "#open-display-btn",
-            title: "第 6 步：开启投屏",
+            title: "第 6 步：开启与结束投屏",
             text:
-                "在右侧「投屏控制」点「开启投屏」打开会众窗口（若被拦截请在地址栏允许弹窗）。投屏窗口可按 F 全屏。主控台可用「投屏监视」小窗查看现场；投屏中后，中间还会出现金色状态栏，可「分享云端」等。"
+                "右侧「投屏控制」有三枚卡片：「开启投屏」打开会众窗口（投屏中会显示「投屏中」，再点可聚焦会众窗）；下方会出现「结束投屏」按钮，或按 Ctrl+Shift+E 在主控台关闭，无需切到副屏。旁有「主领视图」「扫码」入口。会众窗按 F 全屏；绿色按钮右上角 ? 可看投屏帮助。投屏中中间金色状态栏另有「结束投屏」与「分享云端」等。"
         }
     ];
 
@@ -3003,6 +3059,7 @@
                 "<dt>翻页</dt><dd>← → 或空格；焦点在输入框/滑块时可 Alt+←/→/空格，或 Ctrl+Shift+←/→</dd>" +
                 "<dt>全屏</dt><dd>F 键</dd>" +
                 "<dt>黑屏 / 白屏</dt><dd>B 键 / W 键</dd>" +
+                "<dt>结束投屏</dt><dd>Ctrl+Shift+E（主控台关闭会众窗口，无需切到副屏）</dd>" +
                 "<dt>高级编辑</dt><dd>点击右侧「🎨 高级编辑」按钮</dd>" +
                 "<dt>退出全屏</dt><dd>ESC 键</dd>" +
                 "</dl></div>";
@@ -3424,6 +3481,10 @@
             .replace(/>/g, "&gt;");
     }
 
+    function escapeAttr(text) {
+        return escapeHtml(text).replace(/"/g, "&quot;");
+    }
+
     /** 主领视角：首次自动分步引导完成后写入，不再自动弹出 */
     const LEADER_ONBOARDING_LS = "worship_leader_onboarding_v1";
 
@@ -3431,32 +3492,32 @@
         {
             title: "第 1 步：歌词与页面从哪来",
             text:
-                "本窗口通过「频道 / 本机 LIVE 存储」接收主控制台同步的内容。主控台编辑歌词后点「应用到演示屏」，此处会更新页码与分页。也可在主窗口「主领诗歌 · 扫码同步」生成链接，用手机或平板浏览器打开后，一次载入歌词并尽量同步电脑上的主领偏好（显示模式、背景、字号等，详见帮助）。也可点工具栏「改词」在本机直接编辑当前诗歌全文并保存（仅写入本机曲库并更新主领画面，不会自动改会众投屏）。若暂时空白，请先回到主窗口同步或在本页「诗歌」导入包。"
+                "本页通过频道与本机 LIVE 数据接收主控台同步。主控台改词或样式后须点「应用到演示屏」。也可用主窗口「主领诗歌 · 扫码同步」：手机扫二维码打开主领页，一次载入歌词并尽量带上主领偏好（默认多为「滚动」模式；详见帮助）。右侧 ⚙ 设置里可「改词」「歌单」「诗歌」导入；若空白请先同步或导入包。"
         },
         {
-            title: "第 2 步：底部工具栏",
+            title: "第 2 步：界面布局",
             text:
-                "工具栏最左侧为「帮助」「引导」（图标略小于其它按钮，表示辅助说明）。接着是 📋 翻页 / 📜 滚动 / 🗂️ 流程、📐 编排、📥 诗歌、📋 歌单、✎ 改词、Aa 字号、歌词字色、备注、画笔、背景。主窗口「主领诗歌 · 扫码同步」生成的链接除歌词外，会尽量带上电脑上的主领偏好（显示模式、背景、字号、字色、备注与编排等，过长时自动精简）。手机窄屏时底栏会自动换行并只显示图标，避免被裁切；点右下角 ∨ 或从下缘上滑可展开。工具栏约 3 秒无操作会收起。"
+                "默认「滚动」模式：整份歌单可上下滑动阅读，顶栏显示当前歌名，底部有歌名芯片可点切歌。右侧 ⚙ 打开设置菜单（帮助、引导、编排、背景、画笔、备注、字色、字号、改词、歌单、单页/滚动切换）。底部工具栏可展开（点 ∨ 或从下缘上滑）；收起后约 3 秒无操作自动隐藏。手机窄屏时以 ⚙ 与底栏为主，图标更紧凑。"
         },
         {
-            title: "第 3 步：翻页",
+            title: "第 3 步：翻页与滚动",
             text:
-                "在「翻页」模式下：点屏幕左右两侧的 ◀ ▶，或使用键盘左右方向键（画笔模式下除外）。「滚动」模式下不翻页，可自由上下阅读。流程模式下会按编排顺序跳转段落。"
+                "「单页」模式：点左右 ◀ ▶ 或键盘 ← → 翻页（画笔开启时除外）。「滚动」模式：不翻页，上下滑动阅读多首诗歌；点底栏歌名可跳转。 「流程」模式：按编排卡片顺序前进。扫码同步的偏好里若未改过，首次进入多为滚动模式。"
         },
         {
             title: "第 4 步：字号、字色与背景",
             text:
-                "点 Aa 打开字号滑块（vw 单位，适合手机/平板）；点字色圆点可调主领歌词颜色（仅本页显示）。点 🎨 可选纯黑 / 纯白 / 灰 / 藏青、粒子动效或本地上传图片作背景。以上设置保存在本机浏览器。"
+                "在 ⚙ 菜单中调节字号（±）与字色；或展开底部工具栏点 Aa / 字色圆点。背景在 ⚙ 或 🎨 中选择纯黑 / 白 / 灰 / 藏青、粒子动效或本地上传图片。设置保存在本机浏览器。"
         },
         {
             title: "第 5 步：编排、备注、改词与画笔",
             text:
-                "📐 编排：打开「敬拜流程编排」可生成 / 模板 / 拖拽排序；编辑完成后点底部「使用」切换到流程模式并关闭窗口。✎ 改词：仅本机曲库与主领，不自动改投屏。✏️ 备注：行末 ⊕ 添加主领提示。✍️ 画笔：底部有「完成」「清除本页」「撤销上一步」「颜色/粗细」；颜色面板会浮在「完成」条上方以免挡住；面板内可清页或点 ✅ 退出；双击空白区域也可退出画笔。"
+                "📐 编排：生成 / 模板 / 拖拽流程，点「使用」进入流程模式。✎ 改词：仅本机，不自动改会众投屏。✏️ 备注：点备注进入编辑模式，顶栏提示「点歌词行或 ⊕」；保存后行末有金点，点金点可查看（手机请直接点圆点）。✍️ 画笔：标注后点「完成」或双击空白退出；可撤销、清页。"
         },
         {
             title: "第 6 步：与会众投屏",
             text:
-                "主领页用于主领同工预览与标注；会众看见的投屏画面仍以主控台「开启投屏」窗口为准。若使用流程里的经文卡等能力，请确保主控台与会众投屏窗口已打开并保持同一套数据同步。"
+                "主领页仅供同工预览与标注；会众画面以主控台「开启投屏」为准。主控台投屏中可用「结束投屏」或 Ctrl+Shift+E 关闭会众窗，无需切到投影仪。流程中的经文卡等须主控台与会众窗均已打开并保持同步。"
         }
     ];
 
@@ -3563,40 +3624,39 @@
     function getLeaderHelpModalInnerHtml() {
         return [
             "<h2>📖 主领视角 · 使用帮助</h2>",
-            "<p style=\"opacity:.88;font-size:0.9rem;line-height:1.55;margin:0 0 14px;\">本页与主控台、会众投屏配合使用。以下说明仅针对<b>主领窗口</b>（<code>?leader=1</code> 或「主领视图」弹窗）。底栏最左为「帮助」「引导」，图标略小于其它按钮。完整控制台说明可在主窗口点「使用帮助」查看。</p>",
+            "<p style=\"opacity:.88;font-size:0.9rem;line-height:1.55;margin:0 0 14px;\">本页与主控台、会众投屏配合使用。适用于<b>主领窗口</b>（<code>?leader=1</code>、「主领视图」或扫码打开）。手机/平板常用右侧 <b>⚙ 设置</b>；底部工具栏可展开，内含帮助与引导。主控台完整说明请点「使用帮助」。</p>",
             "<h3>一、数据如何同步</h3>",
             "<ul>",
-            "<li>主控台在「编辑歌词」区域改词、分页或样式后，必须点<b>「应用到演示屏」</b>，主领页与会众投屏才会收到 LIVE 更新。</li>",
-            "<li>本窗口通过 BroadcastChannel 与 <code>localStorage</code> 中的 LIVE 数据监听变更；请保持主控台与本页同时打开。</li>",
-            "<li>主窗口「主领诗歌 · 扫码同步」生成的链接，除歌词外会尽量附带电脑浏览器里保存的<b>主领偏好</b>（显示模式、背景、字号、字色、工具栏收起、备注与各诗编排等）；手机打开后写入该手机本机。不含自定义背景大图与画笔图层；若包体过大会自动省略部分备注或编排数据。</li>",
-            "<li>主领「改词」保存后<b>不会</b>写入 LIVE、也<b>不会</b>通过频道推给主控台；仅更新本机曲库与当前主领画面，避免误改会众屏。</li>",
+            "<li>主控台改词、分页或样式后须点<b>「应用到演示屏」</b>，主领页与会众投屏才会更新。</li>",
+            "<li>本页通过频道与 <code>localStorage</code> LIVE 数据监听变更；请保持主控台与本页同时打开。</li>",
+            "<li>「主领诗歌 · 扫码同步」：二维码弹窗默认简短说明，可展开查看详情；链接除歌词外尽量附带<b>主领偏好</b>（默认多为滚动模式、背景、字号、字色、备注与编排等），写入打开手机的本机。不含自定义背景大图与画笔图层；包过大时会精简部分数据。</li>",
+            "<li>主领「改词」仅更新本机曲库与当前主领画面，<b>不会</b>自动改会众投屏或主控台 LIVE。</li>",
             "</ul>",
-            "<h3>二、工具栏与显示模式</h3>",
+            "<h3>二、界面与显示模式</h3>",
             "<ul>",
-            "<li><b>帮助 / 引导</b>：分步说明与本页长文帮助；始终排在工具栏最左侧。</li>",
-            "<li><b>翻页 / 滚动 / 流程</b>：切换歌词呈现方式；「歌单」可切换播放列表中的诗歌；「流程」依赖诗歌上保存的敬拜流程（在本页「编排」中编辑）。</li>",
-            "<li><b>编排</b>：打开流程编辑器，支持生成、快速模板、拖拽排序；编辑完成后点弹窗底部<b>「使用」</b>可切换到流程模式并关闭。</li>",
-            "<li><b>诗歌</b>：可粘贴包文本，或粘贴扫码后的完整链接（含 <code>#wp1=</code>）一键载入。链接中除歌词外，还可携带本机在主领页保存的<b>显示模式、背景、字号、字色、备注、各诗编排流程</b>等（若过长会自动精简）。</li>",
-            "<li><b>字色</b>：调节主领歌词颜色（仅主领本机显示）。</li>",
-            "<li>手机窄屏时底栏可能<b>换行并只显示图标</b>，避免被裁切；点右下角 <b>∨</b> 或从屏幕<b>下边缘向上滑</b>可重新展开。工具栏一段时间不操作会自动收起。</li>",
+            "<li><b>默认滚动</b>：整份歌单可上下滑动；顶栏显示当前歌名；底栏有歌名芯片可点切歌。</li>",
+            "<li><b>右侧 ⚙</b>：帮助、引导、编排、背景、画笔、备注、字色、字号、改词、歌单；<b>单页 / 滚动</b>切换显示模式。「流程」在编排完成后点「使用」进入。</li>",
+            "<li><b>底部工具栏</b>：点 <b>∨</b> 或从下缘上滑展开；约 3 秒无操作自动收起。窄屏时以 ⚙ 为主。</li>",
+            "<li><b>诗歌 / 歌单</b>：⚙ 或工具栏可粘贴扫码链接（含 <code>#wp1=</code>）或诗歌包文本载入。</li>",
             "</ul>",
             "<h3>三、翻页与快捷键</h3>",
             "<ul>",
-            "<li><b>翻页</b>模式：左右大箭头或键盘 <b>← →</b>（非画笔模式）。<b>滚动</b>模式：不翻页，可上下阅读整首。</li>",
-            "<li>流程视图中翻页会跟随流程卡片与当前会众页索引。</li>",
+            "<li><b>单页</b>：左右 ◀ ▶ 或键盘 <b>← →</b>（画笔开启时除外）。<b>滚动</b>：不翻页，上下阅读；点底栏歌名跳转。</li>",
+            "<li>流程模式按编排卡片顺序前进，并与会众页索引联动。</li>",
             "</ul>",
             "<h3>四、字号、背景、改词、备注、画笔</h3>",
             "<ul>",
-            "<li><b>Aa</b>：拖动滑块调节歌词字号（vw），设置保存在本机。</li>",
-            "<li><b>🎨</b>：纯黑 / 纯白 / 灰 / 藏青、粒子动效或上传图片背景。</li>",
-            "<li><b>✎ 改词</b>：编辑当前诗歌全文歌词（段落空行表示分页），保存后写入<b>本机</b>曲库并更新主领画面；<b>不会</b>自动改动会众投屏（须主控台「应用到演示屏」）。</li>",
-            "<li><b>✏️ 备注</b>：按行添加主领提示；金色点可查看已存备注。</li>",
-            "<li><b>✍️ 画笔</b>：在歌词上标注。底部条含「完成」「清除本页」「撤销上一步」「颜色/粗细」；打开颜色/粗细时，面板浮在底部条<b>上方</b>以免遮挡；面板内可清页或点 ✅ 退出；双击空白区域也可退出画笔。</li>",
+            "<li><b>字号 / 字色</b>：在 ⚙ 菜单或展开工具栏的 Aa、字色圆点调节（vw，仅本机）。</li>",
+            "<li><b>背景</b>：纯黑 / 白 / 灰 / 藏青、粒子或本地上传图片。</li>",
+            "<li><b>✎ 改词</b>：编辑当前诗歌全文；保存后仅本机，会众屏须主控台「应用到演示屏」。</li>",
+            "<li><b>✏️ 备注</b>：点备注进入编辑，顶栏提示「点歌词行或 ⊕」；保存后行末金点可查看（手机请直接点金点）。</li>",
+            "<li><b>✍️ 画笔</b>：标注后点「完成」、面板内 ✅ 或双击空白退出；可撤销、清页。</li>",
             "</ul>",
             "<h3>五、与会众画面的关系</h3>",
             "<ul>",
-            "<li>主领页<b>不会</b>替代会众投屏窗口；会众画面仍以「开启投屏」窗口为准。</li>",
-            "<li>部分流程操作（如经文覆盖层）会通过频道通知主控台与会众端，请以现场实际画面为准。</li>",
+            "<li>主领页<b>不会</b>替代会众投屏；会众画面以主控台「开启投屏」为准。</li>",
+            "<li>主控台投屏中可用「结束投屏」或 <b>Ctrl+Shift+E</b> 关闭会众窗，无需切到投影仪。</li>",
+            "<li>流程中的经文覆盖层等会通过频道同步，请以现场画面为准。</li>",
             "</ul>"
         ].join("");
     }
@@ -5378,6 +5438,7 @@
             state.ui.fontSize = clamp(Number(state.ui.fontSize) || 60, 8, cap);
         } else {
             state.currentSongId = state.songs[0].id;
+            state.ui.theme = "dark";
         }
 
         if (!state.songs.some((s) => s.id === state.currentSongId)) {
@@ -6360,9 +6421,51 @@
         return true;
     }
 
+    function isProjectionDisplayWindowOpen() {
+        let w = projectionDisplayWindowRef;
+        if (w) {
+            if (w.closed) {
+                projectionDisplayWindowRef = null;
+                try {
+                    globalThis.__displayWindowOpened = false;
+                } catch (_e) {
+                    /* ignore */
+                }
+                return false;
+            }
+            return true;
+        }
+        if (globalThis.__displayWindowOpened) {
+            try {
+                globalThis.__displayWindowOpened = false;
+            } catch (_e2) {
+                /* ignore */
+            }
+        }
+        return false;
+    }
+
+    function syncProjectionPanelControls() {
+        const open = isProjectionDisplayWindowOpen();
+        const panelClose = $("close-projection-panel-btn");
+        const galleryClose = $("close-projection-display-btn");
+        const displayBtn = $("open-display-btn");
+        if (panelClose) panelClose.hidden = !open;
+        if (galleryClose) galleryClose.hidden = !open;
+        if (displayBtn) {
+            displayBtn.classList.toggle("projection-action-card--live", open);
+            const titleEl = displayBtn.querySelector(".projection-action-card__title");
+            const hintEl = displayBtn.querySelector(".projection-action-card__hint");
+            if (titleEl) titleEl.textContent = open ? "投屏中" : "开启投屏";
+            if (hintEl) hintEl.textContent = open ? "点击可聚焦会众窗" : "会众大屏";
+        }
+    }
+
     function updateGalleryStatusBar() {
         const bar = $("gallery-status-bar");
-        if (!globalThis.__displayWindowOpened) {
+        const open = isProjectionDisplayWindowOpen();
+        syncProjectionPanelControls();
+        if (!open) {
             if (bar) bar.style.display = "none";
             return;
         }
@@ -10019,6 +10122,15 @@ ${deleteBtnHtml}
                 } catch (_e2) {
                     /* ignore */
                 }
+                if (projectionCloseInitiatedByMain) {
+                    projectionCloseInitiatedByMain = false;
+                    try {
+                        syncProjectionPanelControls();
+                    } catch (_e3) {
+                        /* ignore */
+                    }
+                    return;
+                }
                 showRestoreProjectionBanner();
             });
         } catch (_) {
@@ -10047,6 +10159,7 @@ ${deleteBtnHtml}
 
     function closeProjectionDisplayWindow(opts) {
         const silent = !!(opts && opts.silent);
+        if (!silent) projectionCloseInitiatedByMain = true;
         purgeOrphanProjectionDisplayWindows();
         try {
             globalThis.__displayWindowOpened = false;
@@ -10059,9 +10172,20 @@ ${deleteBtnHtml}
             /* ignore */
         }
         hideRestoreProjectionBanner();
+        try {
+            syncProjectionPanelControls();
+            refocusMainWindowForOperator();
+        } catch (_eSync) {
+            /* ignore */
+        }
         if (!silent) {
             try {
-                showToast("已结束投屏", $("close-projection-display-btn") || $("open-display-btn"));
+                showToast(
+                    "已结束投屏",
+                    $("close-projection-panel-btn") ||
+                        $("close-projection-display-btn") ||
+                        $("open-display-btn")
+                );
             } catch (_e3) {
                 /* ignore */
             }
@@ -10360,8 +10484,7 @@ ${deleteBtnHtml}
                 ...built,
                 openUrl: "",
                 scanKind: "need-http",
-                scanHint:
-                    "请填写下方「站点根地址」并保存：公网 https（GitHub Pages、自有域名、ngrok / Cloudflare Tunnel 等）可跨 Wi‑Fi；仅局域网 http(s) 时手机须与电脑同网。"
+                scanHint: "请展开下方填写站点根地址并保存（公网 https 可跨网；局域网须同 Wi‑Fi）。"
             };
         }
         let maxPack = Math.min(
@@ -10510,16 +10633,15 @@ ${deleteBtnHtml}
         }
         const cnt = Number(built.songCount);
         const songN = Number.isFinite(cnt) ? cnt : 0;
+        const adv = modal.querySelector("#leader-qr-adv");
         if (status) {
-            const extra = [built.note, built.truncated ? "（为适配扫码可能已省略部分诗歌或歌词）" : ""]
-                .filter(Boolean)
-                .join("");
+            const extra = [built.note, built.truncated ? "部分内容已精简" : ""].filter(Boolean).join(" · ");
             if (built.scanKind === "url" && built.openUrl) {
-                status.textContent = `含 ${songN} 首诗歌 · 请用手机相机或微信扫上方二维码（为完整网页链接，非乱码）。将打开主领页并载入歌词与主领偏好${extra ? " · " + extra : ""}`;
+                status.textContent = `含 ${songN} 首 · 手机扫二维码打开主领页${extra ? `（${extra}）` : ""}`;
             } else if (built.qrText) {
-                status.textContent = `含 ${songN} 首诗歌 · ${built.scanHint || "请按下方提示完成设置"}`;
+                status.textContent = `含 ${songN} 首 · ${built.scanHint || "请配置下方访问地址"}`;
             } else {
-                status.textContent = built.scanHint || built.note || "无法生成";
+                status.textContent = built.scanHint || built.note || "无法生成二维码";
             }
         }
         if (warn) {
@@ -10531,10 +10653,11 @@ ${deleteBtnHtml}
                     built.scanHint ||
                     built.note ||
                     (built.qrText
-                        ? "当前无法生成「可打开的网页链接」二维码：本机是 file / localhost，或未填写公网或穿透地址。手机扫「纯文本包」易显示乱码——请勿扫备用区；请配置下方 https 根地址（如 GitHub Pages、云主机、ngrok / Cloudflare Tunnel）后点「保存地址」再刷新本窗口，或使用手机主领页「诗歌」粘贴导入。"
+                        ? "无法生成网页链接码（file/localhost 或未填地址）。勿扫纯文本备用码；请配置下方地址或主领页「诗歌」粘贴导入。"
                         : "生成失败");
             }
         }
+        if (adv) adv.open = !(built.scanKind === "url" && built.openUrl);
         const scanUrl = String(built.openUrl || "").trim();
         const packFallback = String(built.qrText || "").trim();
         const ph = modal.querySelector("#leader-qr-placeholder");
@@ -10570,49 +10693,70 @@ ${deleteBtnHtml}
         }
     }
 
+    function setLeaderQrModalOpen(modal, open) {
+        if (!modal) return;
+        modal.classList.toggle("is-open", !!open);
+        modal.style.display = open ? "flex" : "none";
+    }
+
     function openLeaderQrModal() {
         let modal = $("leader-qr-modal");
+        if (modal && !modal.querySelector(".leader-qr-panel")) {
+            modal.remove();
+            modal = null;
+        }
         if (!modal) {
             modal = document.createElement("div");
             modal.id = "leader-qr-modal";
-            modal.style.cssText =
-                "position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:2600;display:flex;align-items:center;justify-content:center;padding:16px;";
             modal.innerHTML = `
-                <div style="background:var(--bg-secondary);border-radius:16px;padding:18px 20px;text-align:center;max-width:360px;width:100%;position:relative;box-sizing:border-box;">
-                    <button type="button" id="leader-qr-close" style="position:absolute;right:8px;top:6px;border:none;background:transparent;color:var(--text-secondary);cursor:pointer;font-size:1.1rem;">✕</button>
-                    <div style="font-weight:600;color:var(--text-primary);margin-bottom:6px;">主领诗歌 · 扫码同步</div>
-                    <p id="leader-qr-pack-status" style="margin:0 0 10px;font-size:0.82rem;line-height:1.45;color:var(--text-secondary);text-align:left;">正在生成…</p>
-                    <div id="leader-qr-img-wrap" style="margin:0 auto;">
-                    <img id="leader-qr-image" width="220" height="220" alt="" style="width:220px;height:220px;border-radius:10px;background:#fff;padding:8px;box-sizing:border-box;display:block;">
+                <div class="leader-qr-panel" role="dialog" aria-modal="true" aria-labelledby="leader-qr-title">
+                    <button type="button" id="leader-qr-close" class="leader-qr-close" aria-label="关闭">✕</button>
+                    <h2 id="leader-qr-title" class="leader-qr-title">主领诗歌 · 扫码同步</h2>
+                    <p id="leader-qr-pack-status" class="leader-qr-status">正在生成…</p>
+                    <div id="leader-qr-img-wrap" class="leader-qr-img-wrap">
+                        <img id="leader-qr-image" width="220" height="220" alt="主领页扫码链接">
                     </div>
-                    <div id="leader-qr-placeholder" hidden style="margin:0 auto;max-width:260px;padding:14px 12px;border-radius:12px;border:1px dashed var(--editor-border);color:var(--text-secondary);font-size:0.82rem;line-height:1.55;text-align:left;">
-                        此处应显示<b>网页链接</b>二维码（手机扫后直接进入浏览器主领页）。若本页是 <code>file://</code> / <code>localhost</code>，或未配置下方地址，则无法生成链接码；勿把「诗歌压缩包」做成主码，否则部分手机会显示<b>乱码</b>。<br/><br/>
-                        <b>跨 Wi‑Fi / 用手机流量</b>：必须把本应用部署在<b>公网 https</b>（如 GitHub Pages、自己的域名、或 ngrok / Cloudflare Tunnel 临时 https 地址），并把下方「站点根地址」填成该公网根路径。
+                    <div id="leader-qr-placeholder" class="leader-qr-placeholder" hidden>
+                        暂无法显示链接二维码。请展开下方「配置访问地址」填写站点根路径后点「保存地址」。
                     </div>
-                    <div style="margin-top:10px;color:var(--text-secondary);font-size:0.82rem;line-height:1.5;text-align:left;">请用<b>手机自带浏览器或可扫码的 App</b>识别上方二维码（成功时内容为以 <code>http(s)://</code> 开头的链接）。打开后将进入<b>主领视角</b>并载入歌词与主领偏好（若包体过大可能自动精简）。<b>公网 https 部署时，手机可与电脑不在同一 Wi‑Fi；</b>若仅为局域网 <code>http://192.168…</code>，则手机须在同一局域网。若无法生成主码，请展开下方填写地址，或使用主领页「诗歌」粘贴导入。<b>同一二维码可多部手机依次或同时扫描。</b>数据保存在各设备本机浏览器。</div>
-                    <div id="leader-qr-warn" hidden style="margin-top:10px;padding:10px 12px;border-radius:10px;text-align:left;font-size:0.82rem;line-height:1.5;color:#e8c96b;background:rgba(212,175,55,0.12);border:1px solid rgba(212,175,55,0.35);"></div>
-                    <details id="leader-qr-adv" style="margin-top:14px;text-align:left;" open>
-                        <summary style="cursor:pointer;color:var(--text-secondary);font-size:0.8rem;">手机访问地址（公网 https 可跨网 · 局域网 / 穿透）</summary>
-                        <label style="display:block;font-size:0.75rem;color:var(--text-secondary);margin-top:8px;">站点根地址（以 <code>/</code> 结尾，指向含 index.html 的文件夹；公网示例：<code>https://你的域名/app/</code>；穿透：ngrok / trycloudflare 给出的 https 根）</label>
-                        <input type="text" id="leader-qr-base-input" placeholder="例：https://user.github.io/WorshipApp/ 或 https://xxxx.ngrok-free.app/" style="width:100%;margin-top:4px;box-sizing:border-box;padding:8px 10px;border-radius:10px;border:1px solid var(--editor-border);background:var(--editor-bg);color:var(--text-primary);font-size:0.86rem;">
-                        <p id="leader-qr-url-hint" style="margin:6px 0 0;font-size:0.72rem;color:var(--text-secondary);word-break:break-all;"></p>
-                        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
-                            <button type="button" id="leader-qr-use-public-base" class="btn btn-outline" style="font-size:0.82rem;">填入当前 https 公网根地址</button>
-                            <button type="button" id="leader-qr-save-base" class="btn btn-outline" style="font-size:0.82rem;">保存地址</button>
-                            <button type="button" id="leader-qr-copy-url" class="btn btn-outline" style="font-size:0.82rem;">复制扫码链接</button>
+                    <div id="leader-qr-warn" class="leader-qr-warn" hidden></div>
+                    <details id="leader-qr-help" class="leader-qr-details">
+                        <summary>使用说明</summary>
+                        <div class="leader-qr-details-body">
+                            <p>用手机相机或微信扫上方码，在浏览器打开<b>主领视角</b>，载入歌词与主领偏好（过大时可能自动精简）。</p>
+                            <ul>
+                                <li><b>公网 https</b>：手机可与电脑不同 Wi‑Fi（如 GitHub Pages、自有域名、ngrok 等）。</li>
+                                <li><b>局域网地址</b>：手机须与电脑同一 Wi‑Fi。</li>
+                                <li>同一码可多部手机使用；数据保存在各设备本机。</li>
+                                <li>无法扫码：配置下方地址，或在主领页「诗歌」粘贴导入。</li>
+                            </ul>
                         </div>
                     </details>
-                    <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;justify-content:center;">
-                        <button type="button" id="leader-qr-copy" class="btn btn-outline" style="font-size:0.86rem;">复制链接或备用文本</button>
+                    <details id="leader-qr-adv" class="leader-qr-details">
+                        <summary>配置访问地址</summary>
+                        <div class="leader-qr-details-body">
+                            <label class="leader-qr-base-label" for="leader-qr-base-input">站点根地址（以 <code>/</code> 结尾，指向含 index.html 的目录）</label>
+                            <input type="url" id="leader-qr-base-input" class="leader-qr-base-input" placeholder="https://你的域名/WorshipApp/" autocomplete="url" inputmode="url">
+                            <p id="leader-qr-url-hint" class="leader-qr-url-hint"></p>
+                            <div class="leader-qr-actions">
+                                <button type="button" id="leader-qr-use-public-base" class="btn btn-outline">填入当前 https</button>
+                                <button type="button" id="leader-qr-save-base" class="btn btn-outline">保存地址</button>
+                                <button type="button" id="leader-qr-copy-url" class="btn btn-outline">复制链接</button>
+                            </div>
+                        </div>
+                    </details>
+                    <div class="leader-qr-footer">
+                        <button type="button" id="leader-qr-copy" class="btn btn-outline">复制链接或备用文本</button>
                     </div>
                 </div>
             `;
             modal.addEventListener("click", (e) => {
-                if (e.target === modal) modal.style.display = "none";
+                if (e.target === modal) setLeaderQrModalOpen(modal, false);
             });
+            modal.querySelector(".leader-qr-panel")?.addEventListener("click", (e) => e.stopPropagation());
             document.body.appendChild(modal);
             modal.querySelector("#leader-qr-close")?.addEventListener("click", () => {
-                modal.style.display = "none";
+                setLeaderQrModalOpen(modal, false);
             });
             try {
                 const inp = modal.querySelector("#leader-qr-base-input");
@@ -10631,7 +10775,7 @@ ${deleteBtnHtml}
                 }
                 const hint = modal.querySelector("#leader-qr-url-hint");
                 const r = resolveLeaderJoinUrlForQr();
-                if (hint) hint.textContent = r.qrEncode || r.pageAbs || "（未填写则无法用网页链接打开）";
+                if (hint) hint.textContent = r.qrEncode || r.pageAbs || "（未填写）";
                 showCornerSuccessToast(v ? "已保存" : "已清除", e.currentTarget);
                 void refreshLeaderQrModalContent(modal);
             });
@@ -10639,7 +10783,7 @@ ${deleteBtnHtml}
                 const pub = String(derivePublicHttpsLeaderJoinBaseFromLocation() || "").trim();
                 const inp = modal.querySelector("#leader-qr-base-input");
                 if (!pub) {
-                    showToast("当前页不是「公网 https」（或为 localhost / 内网 IP），无法自动填入。请手动粘贴部署或穿透给出的 https 根地址。", e.currentTarget);
+                    showToast("当前页不是公网 https，请手动粘贴部署或穿透地址。", e.currentTarget);
                     return;
                 }
                 if (inp) inp.value = pub;
@@ -10657,7 +10801,7 @@ ${deleteBtnHtml}
             modal.querySelector("#leader-qr-copy-url")?.addEventListener("click", async (e) => {
                 const text = String(modal.dataset.lastOpenUrl || "").trim();
                 if (!text) {
-                    showToast("请先生成可扫码链接（填写地址并保存后刷新本窗口）", e.currentTarget);
+                    showToast("请先生成可扫码链接（填写地址并保存）", e.currentTarget);
                     return;
                 }
                 try {
@@ -10677,7 +10821,10 @@ ${deleteBtnHtml}
                 }
                 try {
                     await navigator.clipboard.writeText(text);
-                    showCornerSuccessToast(openU ? "已复制打开链接" : "已复制备用文本，可在主领页「诗歌」里粘贴", e.currentTarget);
+                    showCornerSuccessToast(
+                        openU ? "已复制打开链接" : "已复制备用文本，可在主领页「诗歌」里粘贴",
+                        e.currentTarget
+                    );
                 } catch (_e) {
                     showToast("复制失败", e.currentTarget);
                 }
@@ -10687,11 +10834,11 @@ ${deleteBtnHtml}
         if (hint0) {
             const r = resolveLeaderJoinUrlForQr();
             hint0.textContent = r.qrEncode
-                ? `主领页基础地址：${r.qrEncode}${r.crossInternetOk ? "（公网 https，可跨网扫码）" : "（跨网请用公网 https 根地址）"}`
-                : "填写站点根地址并保存：公网 https 可跨 Wi‑Fi；局域网示例 http://192.168.1.5:5500/WorshipApp/；在公网 https 页可点「填入当前 https 公网根地址」。";
+                ? `将生成：${r.qrEncode}${r.crossInternetOk ? "（可跨网）" : "（跨网请用公网 https）"}`
+                : "未配置地址：公网 https 可跨 Wi‑Fi；局域网须同网。在公网页可点「填入当前 https」。";
         }
         void refreshLeaderQrModalContent(modal);
-        modal.style.display = "flex";
+        setLeaderQrModalOpen(modal, true);
     }
 
     function exportData() {
@@ -10883,9 +11030,8 @@ ${deleteBtnHtml}
             window.setTimeout(applyPlacement, 100);
             window.setTimeout(applyPlacement, 380);
         }
-        /** 会众投屏窗（display=1）保留焦点，便于副屏上 Alt+F4 / Ctrl+W 直接关闭，无需先点进窗口 */
-        const audienceProjectionUrl = /\bdisplay=1\b/.test(targetUrl);
-        if (!isDisplay && !isLeader && !audienceProjectionUrl) refocusMainWindowForOperator();
+        /** 新窗口打开后焦点回到主控台，便于继续在控制台操作或点「结束投屏」 */
+        if (!isDisplay && !isLeader) refocusMainWindowForOperator();
         return win;
     }
 
@@ -10909,6 +11055,7 @@ ${deleteBtnHtml}
             } catch (_e) {
                 /* ignore */
             }
+            syncProjectionPanelControls();
             return;
         }
         /** 新开前：通知所有会众投屏页自行关闭并释放主控引用，避免多窗口残留后台；仍须与 window.open 同一次点击栈内完成 */
@@ -10927,6 +11074,7 @@ ${deleteBtnHtml}
             } catch (_e) {
                 /* ignore */
             }
+            syncProjectionPanelControls();
         }
         hideRestoreProjectionBanner();
     }
@@ -11133,6 +11281,8 @@ ${deleteBtnHtml}
             '<p style="margin:0 0 10px;font-weight:600;">第三步：在控制台翻页</p>' +
             "<p style=\"margin:0 0 10px;\">在控制台页面，使用 ← → 方向键或空格 控制下一页/上一页。</p>" +
             "<p style=\"margin:0 0 6px;\">此窗口仅您可见，投屏画面保持干净。</p>" +
+            '<p style="margin:0 0 10px;font-weight:600;">结束投屏</p>' +
+            "<p style=\"margin:0 0 14px;\">在主控台投屏区点「结束投屏」，或按 <b>Ctrl+Shift+E</b>，无需切换到投影仪窗口。</p>" +
             "<p style=\"margin:0;color:rgba(255,255,255,0.72);font-size:0.82rem;\">因浏览器安全策略限制，暂不支持一键自动全屏。</p>" +
             "</div>";
 
@@ -11159,17 +11309,23 @@ ${deleteBtnHtml}
         if (isDisplay || isLeader) return;
         const btn = $("open-display-btn");
         if (!btn) return;
-        if (btn.querySelector(".open-display-shortcuts-icon")) return;
+
+        let addons = btn.querySelector(".projection-action-card__addons");
+        if (!addons) {
+            addons = document.createElement("span");
+            addons.className = "projection-action-card__addons";
+            btn.appendChild(addons);
+        }
 
         const attachShortcutsIcon = () => {
-            if (btn.querySelector(".open-display-shortcuts-icon")) return;
+            if (addons.querySelector(".open-display-shortcuts-icon")) return;
             const shortcuts = document.createElement("span");
             shortcuts.className = "open-display-shortcuts-icon";
             shortcuts.setAttribute("role", "button");
             shortcuts.setAttribute("tabindex", "0");
             shortcuts.setAttribute("aria-label", "快捷键");
             shortcuts.title = "快捷键";
-            shortcuts.textContent = "⌨️";
+            shortcuts.textContent = "⌨";
             const onShortcutsActivate = (e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -11179,35 +11335,13 @@ ${deleteBtnHtml}
             shortcuts.addEventListener("keydown", (e) => {
                 if (e.key === "Enter" || e.key === " ") onShortcutsActivate(e);
             });
-            btn.appendChild(shortcuts);
+            addons.appendChild(shortcuts);
         };
 
-        if (btn.querySelector(".open-display-help-icon")) {
+        if (addons.querySelector(".open-display-help-icon")) {
             attachShortcutsIcon();
             return;
         }
-
-        const prevLabel = (btn.textContent || "").trim() || "📺 开启投屏";
-        btn.textContent = "";
-        btn.style.display = "flex";
-        btn.style.alignItems = "center";
-        btn.style.justifyContent = "center";
-        btn.style.gap = "14px";
-        btn.style.flexWrap = "wrap";
-        btn.style.boxSizing = "border-box";
-        btn.style.whiteSpace = "normal";
-        btn.style.wordBreak = "break-word";
-        btn.style.minWidth = "80px";
-        btn.style.padding = "8px 12px";
-
-        const lab = document.createElement("span");
-        lab.className = "open-display-btn-label";
-        lab.style.flex = "1 1 auto";
-        lab.style.minWidth = "0";
-        lab.style.whiteSpace = "normal";
-        lab.style.wordBreak = "break-word";
-        lab.style.textAlign = "center";
-        lab.textContent = prevLabel;
 
         const help = document.createElement("span");
         help.className = "open-display-help-icon";
@@ -11215,25 +11349,7 @@ ${deleteBtnHtml}
         help.setAttribute("tabindex", "0");
         help.setAttribute("aria-label", "投屏帮助");
         help.title = "投屏帮助";
-        help.textContent = "❓";
-        help.style.cssText = [
-            "flex-shrink:0",
-            "width:20px",
-            "height:20px",
-            "min-width:20px",
-            "min-height:20px",
-            "border-radius:50%",
-            "display:inline-flex",
-            "align-items:center",
-            "justify-content:center",
-            "font-size:12px",
-            "line-height:1",
-            "cursor:pointer",
-            "background:rgba(255,255,255,0.28)",
-            "color:inherit",
-            "user-select:none",
-            "box-sizing:border-box"
-        ].join(";");
+        help.textContent = "?";
 
         const onHelpActivate = (e) => {
             e.preventDefault();
@@ -11245,8 +11361,7 @@ ${deleteBtnHtml}
             if (e.key === "Enter" || e.key === " ") onHelpActivate(e);
         });
 
-        btn.appendChild(lab);
-        btn.appendChild(help);
+        addons.appendChild(help);
         attachShortcutsIcon();
     }
 
@@ -11780,6 +11895,28 @@ ${deleteBtnHtml}
 
         on("open-display-btn", "click", openDisplayWindow);
         on("close-projection-display-btn", "click", () => closeProjectionDisplayWindow());
+        on("close-projection-panel-btn", "click", () => closeProjectionDisplayWindow());
+        if (!document.body.dataset.boundCloseProjectionHotkey) {
+            document.body.dataset.boundCloseProjectionHotkey = "1";
+            document.addEventListener("keydown", (e) => {
+                if (isDisplay || isLeader) return;
+                const endChord = e.ctrlKey && e.shiftKey && (e.key === "E" || e.key === "e");
+                if (!endChord) return;
+                if (!isProjectionDisplayWindowOpen()) return;
+                const t = e.target;
+                if (t && t instanceof Element) {
+                    if (t.isContentEditable) return;
+                    if (t.tagName === "TEXTAREA") return;
+                    if (t.tagName === "SELECT") return;
+                    if (t.tagName === "INPUT") {
+                        const ty = (t.type || "text").toLowerCase();
+                        if (ty !== "button" && ty !== "submit" && ty !== "reset") return;
+                    }
+                }
+                e.preventDefault();
+                closeProjectionDisplayWindow();
+            });
+        }
         on("restore-projection-btn", "click", openDisplayWindow);
         on("restore-projection-dismiss", "click", hideRestoreProjectionBanner);
         on("restore-projection-overlay", "click", (e) => {
@@ -13562,14 +13699,23 @@ ${deleteBtnHtml}
                 else notesMap[key] = { note: text, icon: "💬" };
                 setStore(NOTES_KEY, notesMap);
             };
+            const lookupLeaderNoteEntry = (lineIndex, songId) => {
+                const primary = leaderNoteStorageKey(lineIndex, songId);
+                if (notesMap[primary] != null) return notesMap[primary];
+                if (displayMode === "scroll" && songId != null && String(songId) !== "") {
+                    const legacy = notesMap[String(lineIndex)];
+                    if (legacy != null) return legacy;
+                }
+                return null;
+            };
             const loadNote = (lineIndex, songId) => {
-                const v = notesMap[leaderNoteStorageKey(lineIndex, songId)];
+                const v = lookupLeaderNoteEntry(lineIndex, songId);
                 if (v == null) return "";
                 if (typeof v === "string") return v;
                 return String(v.note || "");
             };
             const loadNoteRecord = (lineIndex, songId) => {
-                const v = notesMap[leaderNoteStorageKey(lineIndex, songId)];
+                const v = lookupLeaderNoteEntry(lineIndex, songId);
                 if (v == null) return null;
                 if (typeof v === "string") {
                     const t = v.trim();
@@ -13578,9 +13724,21 @@ ${deleteBtnHtml}
                 const t = String(v.note || "").trim();
                 return t ? { note: t, icon: String(v.icon || "💬") } : null;
             };
+            const resolveLeaderNoteSongId = (el, attrSongId) => {
+                const fromAttr = attrSongId != null ? String(attrSongId) : "";
+                if (fromAttr) return fromAttr;
+                const block = el && el.closest ? el.closest("[data-song-id]") : null;
+                if (block) {
+                    const sid = block.getAttribute("data-song-id");
+                    if (sid) return String(sid);
+                }
+                return String(liveState?.songId || state.currentSongId || "");
+            };
             const closeOverlay = () => {
                 if (overlay?.parentNode) overlay.parentNode.removeChild(overlay);
                 overlay = null;
+                document.body.classList.remove("leader-note-modal-open");
+                document.body.style.overflow = "";
             };
             let leaderNoteBannerEl = null;
             const exitNoteEditMode = () => {
@@ -14052,11 +14210,16 @@ ${deleteBtnHtml}
                     requestAnimationFrame(() => ta.focus());
                 }
                 wrap.appendChild(box);
-                wrap.addEventListener("click", (e) => {
+                const onBackdropClose = (e) => {
                     if (e.target !== wrap) return;
+                    e.preventDefault();
                     closeOverlay();
-                });
+                };
+                wrap.addEventListener("click", onBackdropClose);
+                wrap.addEventListener("touchend", onBackdropClose, { passive: false });
                 document.body.appendChild(wrap);
+                document.body.classList.add("leader-note-modal-open");
+                document.body.style.overflow = "hidden";
                 overlay = wrap;
             }
 
@@ -15140,9 +15303,9 @@ const linesHtml = rawLines
         }
         const noteMarks =
             !noteEditMode && loadNote(li, sidForNotes)
-                ? `<span class="leader-note-dot" data-line="${li}" data-song-id="${escapeHtml(sidForNotes)}" title="查看备注"></span>`
+                ? `<span class="leader-note-dot" data-line="${li}" data-song-id="${escapeAttr(sidForNotes)}" title="查看备注" role="button" tabindex="0" aria-label="查看备注"></span>`
                 : noteEditMode
-                  ? `<span class="leader-plus-dot" data-line="${li}" data-song-id="${escapeHtml(sidForNotes)}" title="添加备注">⊕</span>`
+                  ? `<span class="leader-plus-dot" data-line="${li}" data-song-id="${escapeAttr(sidForNotes)}" title="添加备注" role="button" tabindex="0" aria-label="添加备注">⊕</span>`
                   : "";
         return `<div class="leader-pl-line${cls}" data-line="${li}">${escapeHtml(disp)}${noteMarks}</div>`;
     })
@@ -15448,34 +15611,88 @@ const linesHtml = rawLines
 
             const flip = (delta) => navigateLeaderFlow(delta);
 
-            lyricLayer.addEventListener("click", (e) => {
-                const plus = e.target.closest(".leader-plus-dot");
+            let leaderLyricNotePtrDown = null;
+            let leaderLyricNoteSuppressClick = false;
+
+            const handleLeaderLyricNoteTarget = (hitEl, ev) => {
+                if (!hitEl || !(hitEl instanceof Element)) return false;
+                if (brushMode) return false;
+                const plus = hitEl.closest(".leader-plus-dot");
                 if (plus) {
-                    return openNote(
+                    ev?.preventDefault?.();
+                    ev?.stopPropagation?.();
+                    openNote(
                         Number(plus.getAttribute("data-line")) || 0,
                         false,
                         plus,
-                        plus.getAttribute("data-song-id") || ""
+                        resolveLeaderNoteSongId(plus, plus.getAttribute("data-song-id"))
                     );
+                    return true;
                 }
-                const dot = e.target.closest(".leader-note-dot");
+                const dot = hitEl.closest(".leader-note-dot");
                 if (dot) {
-                    return openNote(
+                    ev?.preventDefault?.();
+                    ev?.stopPropagation?.();
+                    openNote(
                         Number(dot.getAttribute("data-line")) || 0,
                         true,
                         dot,
-                        dot.getAttribute("data-song-id") || ""
+                        resolveLeaderNoteSongId(dot, dot.getAttribute("data-song-id"))
                     );
+                    return true;
                 }
                 if (noteEditMode && displayMode === "scroll") {
-                    const line = e.target.closest(".leader-pl-line:not(.leader-pl-line--blank)");
-                    if (line && !e.target.closest(".leader-plus-dot,.leader-note-dot")) {
-                        const block = line.closest("[data-song-id]");
-                        const songId = block?.getAttribute("data-song-id") || "";
+                    const line = hitEl.closest(".leader-pl-line:not(.leader-pl-line--blank)");
+                    if (line && !hitEl.closest(".leader-plus-dot,.leader-note-dot")) {
+                        ev?.preventDefault?.();
+                        ev?.stopPropagation?.();
                         const li = parseInt(line.getAttribute("data-line") || "0", 10) || 0;
-                        return openNote(li, false, line, songId);
+                        openNote(li, false, line, resolveLeaderNoteSongId(line, null));
+                        return true;
                     }
                 }
+                return false;
+            };
+
+            lyricLayer.addEventListener(
+                "pointerdown",
+                (e) => {
+                    if (brushMode || e.pointerType === "mouse") return;
+                    leaderLyricNotePtrDown = {
+                        id: e.pointerId,
+                        x: e.clientX,
+                        y: e.clientY
+                    };
+                },
+                { passive: true }
+            );
+            lyricLayer.addEventListener(
+                "pointerup",
+                (e) => {
+                    if (brushMode || !leaderLyricNotePtrDown || e.pointerId !== leaderLyricNotePtrDown.id) return;
+                    const dx = e.clientX - leaderLyricNotePtrDown.x;
+                    const dy = e.clientY - leaderLyricNotePtrDown.y;
+                    leaderLyricNotePtrDown = null;
+                    if (dx * dx + dy * dy > 28 * 28) return;
+                    const hit =
+                        document.elementFromPoint(e.clientX, e.clientY) ||
+                        (e.target instanceof Element ? e.target : null);
+                    if (!hit || !lyricLayer.contains(hit)) return;
+                    if (handleLeaderLyricNoteTarget(hit, e)) {
+                        leaderLyricNoteSuppressClick = true;
+                        window.setTimeout(() => {
+                            leaderLyricNoteSuppressClick = false;
+                        }, 480);
+                    }
+                },
+                { passive: false }
+            );
+            lyricLayer.addEventListener("click", (e) => {
+                if (leaderLyricNoteSuppressClick) {
+                    leaderLyricNoteSuppressClick = false;
+                    return;
+                }
+                handleLeaderLyricNoteTarget(e.target, e);
             });
             toolbar.addEventListener("click", (e) => {
                 const btn = e.target.closest("button");

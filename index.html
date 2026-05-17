@@ -224,12 +224,27 @@
         <input type="checkbox" id="adv-drawer-toggle" class="adv-drawer-checkbox" aria-hidden="true" tabindex="-1">
         <p class="console-zone-label">投屏控制</p>
         <button type="button" class="adv-drawer-open-btn" onclick="var d=document.getElementById('adv-drawer-toggle');if(d){d.checked=true;}" title="打开高级编辑">
-            <span class="adv-drawer-open-icon" aria-hidden="true">🎨</span>
+            <span class="ui-icon ui-icon--tune adv-drawer-open-icon" aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+                    <circle cx="4" cy="14" r="2" fill="currentColor"/>
+                    <circle cx="12" cy="12" r="2" fill="currentColor"/>
+                    <circle cx="20" cy="16" r="2" fill="currentColor"/>
+                </svg>
+            </span>
             <span class="adv-drawer-open-text">高级编辑</span>
         </button>
         <div class="projection-settings-flex-fill">
         <div class="setting-group bg-panel-group">
-            <label>🎨 背景</label>
+            <label class="setting-label-with-icon">
+                <span class="ui-icon ui-icon--bg" aria-hidden="true">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.75"/>
+                        <path d="M3 15l5-5 4 4 5-6 4 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </span>
+                <span>背景</span>
+            </label>
             <div class="bg-tabs" role="tablist">
                 <button type="button" class="bg-tab active" data-bg-tab="preset" role="tab" aria-selected="true">预设背景</button>
                 <button type="button" class="bg-tab" data-bg-tab="mine" role="tab" aria-selected="false">我的背景</button>
@@ -248,7 +263,15 @@
                     <div class="bg-option" data-bg="image" id="upload-bg-trigger" title="从文件上传"></div>
                     <input type="file" id="bg-image-input" multiple accept="image/png,image/jpeg,image/jpg,image/gif,image/bmp,image/webp,video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov" hidden>
                 </div>
-                <button type="button" id="upload-bg-btn" class="btn-outline" style="width:100%; margin-top:8px;">🖼️ 上传背景图片</button>
+                <button type="button" id="upload-bg-btn" class="btn-outline bg-action-btn">
+                    <span class="ui-icon ui-icon--upload" aria-hidden="true">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M12 15V4m0 0l4 4m-4-4-4 4" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M5 19h14a2 2 0 0 0 2-2v-1H3v1a2 2 0 0 0 2 2z" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+                        </svg>
+                    </span>
+                    <span class="bg-action-btn__text">上传背景图片</span>
+                </button>
                 <p class="bg-privacy-hint">您上传的背景默认为私密，可在「我的背景」中共享到云端。</p>
             </div>
             <div id="bg-tab-mine" class="bg-tab-panel" role="tabpanel">
@@ -258,7 +281,17 @@
             <div id="bg-tab-shared" class="bg-tab-panel" role="tabpanel">
                 <div id="shared-backgrounds-container" class="my-backgrounds shared-cloud-backgrounds" aria-label="云端共享背景"></div>
             </div>
-            <button type="button" id="free-bg-link" class="btn-outline" style="width:100%; margin-top:10px;">🎨 免费背景素材</button>
+            <button type="button" id="free-bg-link" class="btn-outline bg-action-btn bg-action-btn--resources">
+                <span class="ui-icon ui-icon--resources" aria-hidden="true">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <rect x="3" y="3" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/>
+                        <rect x="14" y="3" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/>
+                        <rect x="3" y="14" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/>
+                        <path d="M14 17h7M17.5 14v7" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+                    </svg>
+                </span>
+                <span class="bg-action-btn__text">免费背景素材</span>
+            </button>
         </div>
         <div class="setting-group">
             <label>⏱️ 自动播放</label>
@@ -270,10 +303,40 @@
             <div class="progress-bar"><div class="progress-fill" id="autoplay-progress"></div></div>
         </div>
         </div>
-        <div class="projection-actions-row" style="display:flex;gap:8px;margin-top:8px;">
-            <button id="open-display-btn" class="btn" style="background:#2e7d32; flex:1; height:42px; display:flex; align-items:center; justify-content:center;">📺 开启投屏</button>
-            <button id="open-leader-btn" class="btn btn-outline" style="flex:1; height:42px; display:flex; align-items:center; justify-content:center;">📱 主领视图</button>
-            <button id="leader-qr-btn" class="btn btn-outline" style="width:42px; height:42px; display:flex; align-items:center; justify-content:center;" title="主领视图二维码">📱</button>
+        <div class="projection-actions-row leader-projection-actions">
+            <button type="button" id="open-display-btn" class="btn projection-entry-btn projection-entry-btn--display">
+                <span class="projection-entry-btn__icon" aria-hidden="true">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <rect x="2" y="4" width="20" height="14" rx="2" stroke="currentColor" stroke-width="1.75"/>
+                        <path d="M8 21h8" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+                        <path d="M12 18v3" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+                    </svg>
+                </span>
+                <span class="projection-entry-btn__label">开启投屏</span>
+            </button>
+            <button type="button" id="open-leader-btn" class="btn-outline leader-entry-btn leader-entry-btn--open">
+                <span class="leader-entry-btn__icon" aria-hidden="true">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <rect x="4" y="2" width="16" height="20" rx="2.5" stroke="currentColor" stroke-width="1.75"/>
+                        <path d="M8 7.5h8M8 11h6.5M8 14.5h8M8 18h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                    </svg>
+                </span>
+                <span class="leader-entry-btn__body">
+                    <span class="leader-entry-btn__title">主领视图</span>
+                    <span class="leader-entry-btn__hint">平板同工预览</span>
+                </span>
+            </button>
+            <button type="button" id="leader-qr-btn" class="btn-outline leader-entry-btn leader-entry-btn--qr" title="主领诗歌 · 扫码同步（手机打开主领页）">
+                <span class="leader-entry-btn__icon leader-entry-btn__icon--qr" aria-hidden="true">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M4 4h6v6H4V4zm10 0h6v6h-6V4zM4 14h6v6H4v-6zm7 0h1v1h-1v-1zm2 0h1v1h-1v-1zm2 0h3v1h-1v-1h-2v-1h2zm-5 2h1v1h-1v-1zm4 0h2v3h-3v-2h1zm2-2h1v1h-1v-1zm0 3h1v3h-1v-3zm2-1h1v1h-1v-1z" fill="currentColor"/>
+                    </svg>
+                </span>
+                <span class="leader-entry-btn__body leader-entry-btn__body--compact">
+                    <span class="leader-entry-btn__title">扫码</span>
+                    <span class="leader-entry-btn__hint">手机打开</span>
+                </span>
+            </button>
         </div>
         <footer class="worship-footer-stack" id="worship-footer-stack" aria-label="页脚信息">
             <p class="worship-footer-line worship-footer-line--copyright">
@@ -297,7 +360,17 @@
             <div class="adv-drawer-width-handle" id="adv-drawer-width-handle" title="拖动调节面板宽度" aria-hidden="true"></div>
             <div class="adv-drawer-panel-inner">
                 <header class="adv-drawer-header">
-                    <span class="adv-drawer-panel-title">🎨 高级编辑</span>
+                    <span class="adv-drawer-panel-title">
+                        <span class="ui-icon ui-icon--tune" aria-hidden="true">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+                                <circle cx="4" cy="14" r="2" fill="currentColor"/>
+                                <circle cx="12" cy="12" r="2" fill="currentColor"/>
+                                <circle cx="20" cy="16" r="2" fill="currentColor"/>
+                            </svg>
+                        </span>
+                        <span>高级编辑</span>
+                    </span>
                     <label class="adv-drawer-close" for="adv-drawer-toggle" title="关闭">✕</label>
                 </header>
                 <div class="adv-drawer-scroll">
@@ -354,7 +427,7 @@
                             </div>
                         </section>
                         <section class="adv-drawer-acc-item is-open" data-adv-acc data-adv-acc-id="bgfine">
-                            <button type="button" class="adv-drawer-acc-trigger" aria-expanded="true"><span>🖼️ 背景微调</span><span class="adv-drawer-acc-chevron" aria-hidden="true"></span></button>
+                            <button type="button" class="adv-drawer-acc-trigger" aria-expanded="true"><span class="adv-drawer-acc-trigger-label"><span class="ui-icon ui-icon--bg-fine" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="1.75"/><path d="M12 8v4l2.5 2.5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/></svg></span>背景微调</span><span class="adv-drawer-acc-chevron" aria-hidden="true"></span></button>
                             <div class="adv-drawer-acc-panel">
                                 <div class="adv-drawer-acc-panel-inner adv-drawer-card-body" id="adv-bg-fine-body">
                                     <p class="adv-bg-fine-scope-hint">以下设置主要影响投屏画面与歌词预览</p>

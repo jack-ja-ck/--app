@@ -5247,11 +5247,11 @@
         const inner = document.createElement("div");
         inner.style.cssText = "background:var(--bg-secondary);border-radius:16px;padding:20px 22px;max-width:560px;width:100%;max-height:90vh;overflow-y:auto;border:1px solid var(--border-color);position:relative;";
         inner.innerHTML = `<button type="button" id="free-bg-modal-close" style="position:absolute;right:12px;top:10px;border:none;background:transparent;color:var(--text-secondary);cursor:pointer;font-size:1.1rem;">✕</button>
-            <h3 style="margin:0 0 4px;color:var(--text-primary);font-size:1.05rem;">🎨 免费背景素材</h3>
+            <h3 class="free-bg-modal-title" style="margin:0 0 4px;color:var(--text-primary);font-size:1.05rem;display:flex;align-items:center;gap:8px;"><span class="ui-icon ui-icon--resources" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M14 17h7M17.5 14v7" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/></svg></span>免费背景素材</h3>
             <p class="hint-text" style="margin-top:6px;">点击卡片在新标签页打开网站</p>
             <p class="hint-text" style="margin-top:10px;line-height:1.55;color:rgba(245,230,200,0.9);">在各站搜索框可中英文混合尝试，例如中文：<b>敬拜</b>、<b>十字架</b>、<b>祈祷</b>、教会、赞美、信仰、光效、粒子；英文如 <b>worship</b>、<b>cross</b>、<b>prayer</b>、church、faith、bokeh、particles、ambient 等，多换几个词组合更易找到合适背景。</p>
             <div class="free-bg-modal-grid" id="free-bg-modal-grid"></div>
-            <p class="free-bg-modal-foot">💡 下载后回到本页，用「上传背景图片」即可使用</p>`;
+            <p class="free-bg-modal-foot">下载后回到本页，用「上传背景图片」即可使用</p>`;
         const grid = inner.querySelector("#free-bg-modal-grid");
         sites.forEach((s) => {
             const card = document.createElement("button");
@@ -10106,9 +10106,9 @@ ${deleteBtnHtml}
                 return null;
             }
         };
-        let dm = get("leader_display_mode") || "multi";
-        if (dm === "single") dm = "multi";
-        if (!["multi", "scroll", "flow"].includes(dm)) dm = "multi";
+        let dm = get("leader_display_mode") || "scroll";
+        if (dm === "single") dm = "scroll";
+        if (!["multi", "scroll", "flow"].includes(dm)) dm = "scroll";
         let bm = get("leader_bg_mode") || "particles";
         if (!["black", "white", "gray", "navy", "particles", "custom"].includes(bm)) bm = "particles";
         if (bm === "custom") bm = "particles";
@@ -13143,9 +13143,9 @@ ${deleteBtnHtml}
                 projectionRaf = 0;
             }
 
-            let displayMode = localStorage.getItem(DISPLAY_MODE_KEY) || "multi";
-            if (displayMode === "single") displayMode = "multi";
-            if (!["multi", "scroll", "flow"].includes(displayMode)) displayMode = "multi";
+            let displayMode = localStorage.getItem(DISPLAY_MODE_KEY) || "scroll";
+            if (displayMode === "single") displayMode = "scroll";
+            if (!["multi", "scroll", "flow"].includes(displayMode)) displayMode = "scroll";
             let bgMode = localStorage.getItem(BG_MODE_KEY) || "particles";
             if (!["black", "white", "gray", "navy", "particles", "custom"].includes(bgMode)) bgMode = "particles";
             let leaderBgCustomDataUrl = "";
@@ -13549,21 +13549,27 @@ ${deleteBtnHtml}
                     showToolbar();
                 }
             };
-            const saveNote = (lineIndex, note) => {
-                const key = String(lineIndex);
+            const leaderNoteStorageKey = (lineIndex, songId) => {
+                if (displayMode === "scroll" && songId != null && String(songId) !== "") {
+                    return `${String(songId)}::${lineIndex}`;
+                }
+                return String(lineIndex);
+            };
+            const saveNote = (lineIndex, note, songId) => {
+                const key = leaderNoteStorageKey(lineIndex, songId);
                 const text = String(note || "").trim();
                 if (!text) delete notesMap[key];
                 else notesMap[key] = { note: text, icon: "💬" };
                 setStore(NOTES_KEY, notesMap);
             };
-            const loadNote = (lineIndex) => {
-                const v = notesMap[String(lineIndex)];
+            const loadNote = (lineIndex, songId) => {
+                const v = notesMap[leaderNoteStorageKey(lineIndex, songId)];
                 if (v == null) return "";
                 if (typeof v === "string") return v;
                 return String(v.note || "");
             };
-            const loadNoteRecord = (lineIndex) => {
-                const v = notesMap[String(lineIndex)];
+            const loadNoteRecord = (lineIndex, songId) => {
+                const v = notesMap[leaderNoteStorageKey(lineIndex, songId)];
                 if (v == null) return null;
                 if (typeof v === "string") {
                     const t = v.trim();
@@ -13575,6 +13581,28 @@ ${deleteBtnHtml}
             const closeOverlay = () => {
                 if (overlay?.parentNode) overlay.parentNode.removeChild(overlay);
                 overlay = null;
+            };
+            let leaderNoteBannerEl = null;
+            const exitNoteEditMode = () => {
+                if (!noteEditMode) return;
+                noteEditMode = false;
+                closeOverlay();
+                syncNoteEditBanner();
+                syncLeaderSideRailUI();
+                render();
+            };
+            const syncNoteEditBanner = () => {
+                if (!leaderNoteBannerEl) {
+                    leaderNoteBannerEl = document.createElement("div");
+                    leaderNoteBannerEl.className = "leader-note-edit-banner";
+                    leaderNoteBannerEl.setAttribute("role", "status");
+                    leaderNoteBannerEl.innerHTML =
+                        '<span class="leader-note-edit-banner-text">备注模式：点歌词行或右侧 ⊕ 添加备注</span><button type="button" class="leader-note-edit-banner-done">完成</button>';
+                    leaderNoteBannerEl.querySelector(".leader-note-edit-banner-done")?.addEventListener("click", () => exitNoteEditMode());
+                    host.appendChild(leaderNoteBannerEl);
+                }
+                leaderNoteBannerEl.style.display = noteEditMode ? "flex" : "none";
+                host.classList.toggle("leader-note-edit-active", noteEditMode);
             };
             const getPages = () => {
                 const pages = Array.isArray(liveState?.pages) ? liveState.pages : [];
@@ -13976,24 +14004,24 @@ ${deleteBtnHtml}
                 brushHudEl.addEventListener("touchstart", (e) => e.stopPropagation(), { passive: true });
             };
 
-            function openNote(lineIndex, readOnly, anchorEl) {
+            function openNote(lineIndex, readOnly, anchorEl, songId) {
                 closeOverlay();
                 hideFontPanel();
                 hideColorPanel();
                 const wrap = document.createElement("div");
-                wrap.className = "leader-note-pop-wrap";
+                wrap.className = "leader-note-pop-wrap leader-note-pop-wrap--modal";
                 wrap.dataset.noteReadonly = readOnly ? "1" : "0";
                 const box = document.createElement("div");
                 box.className = "leader-note-pop";
-                box.style.width = "300px";
                 const stopBoxBubble = (ev) => ev.stopPropagation();
                 box.addEventListener("mousedown", stopBoxBubble);
                 box.addEventListener("touchstart", stopBoxBubble, { passive: true });
-                const rec = loadNoteRecord(lineIndex);
+                const rec = loadNoteRecord(lineIndex, songId);
                 const noteVal = rec ? rec.note : "";
                 const closeBtn = document.createElement("button");
                 closeBtn.type = "button";
                 closeBtn.className = "leader-note-close";
+                closeBtn.setAttribute("aria-label", "关闭");
                 closeBtn.textContent = "✕";
                 closeBtn.addEventListener("click", closeOverlay);
                 box.appendChild(closeBtn);
@@ -14002,35 +14030,33 @@ ${deleteBtnHtml}
                     view.className = "leader-note-view";
                     view.textContent = rec ? `${rec.icon} ${rec.note}` : "（无备注）";
                     box.appendChild(view);
+                    const foot = document.createElement("div");
+                    foot.className = "leader-note-actions";
+                    foot.innerHTML =
+                        '<button type="button" class="leader-note-btn secondary leader-note-dismiss-btn">关闭</button>';
+                    foot.querySelector(".leader-note-dismiss-btn")?.addEventListener("click", closeOverlay);
+                    box.appendChild(foot);
                 } else {
-                    box.insertAdjacentHTML("beforeend", '<textarea class="leader-note-input"></textarea><div class="leader-note-actions"><button class="leader-note-btn">保存</button><button class="leader-note-btn secondary">取消</button></div>');
+                    box.insertAdjacentHTML(
+                        "beforeend",
+                        '<textarea class="leader-note-input" placeholder="输入主领提示…"></textarea><div class="leader-note-actions"><button type="button" class="leader-note-btn leader-note-save-btn">保存</button><button type="button" class="leader-note-btn secondary leader-note-cancel-btn">取消</button></div>'
+                    );
                     const ta = box.querySelector(".leader-note-input");
                     ta.value = noteVal;
-                    box.querySelector(".leader-note-btn")?.addEventListener("click", () => {
-                        saveNote(lineIndex, ta.value);
+                    box.querySelector(".leader-note-save-btn")?.addEventListener("click", () => {
+                        saveNote(lineIndex, ta.value, songId);
                         closeOverlay();
                         render();
                     });
-                    box.querySelector(".leader-note-btn.secondary")?.addEventListener("click", closeOverlay);
+                    box.querySelector(".leader-note-cancel-btn")?.addEventListener("click", closeOverlay);
+                    requestAnimationFrame(() => ta.focus());
                 }
                 wrap.appendChild(box);
                 wrap.addEventListener("click", (e) => {
                     if (e.target !== wrap) return;
                     closeOverlay();
-                    if (!readOnly) {
-                        noteEditMode = false;
-                        render();
-                    }
                 });
                 document.body.appendChild(wrap);
-                if (anchorEl) {
-                    const rect = anchorEl.getBoundingClientRect();
-                    const left = clamp(rect.left + rect.width / 2 - 150, 12, window.innerWidth - 312);
-                    const top = clamp(rect.bottom + 8, 12, window.innerHeight - 240);
-                    box.style.position = "absolute";
-                    box.style.left = `${left}px`;
-                    box.style.top = `${top}px`;
-                }
                 overlay = wrap;
             }
 
@@ -14869,9 +14895,15 @@ ${deleteBtnHtml}
                 } else if (btn.dataset.action === "color-panel") {
                     toggleColorPanel();
                 } else if (btn.dataset.action === "note") {
-                    noteEditMode = !noteEditMode;
-                    closeOverlay();
-                    render();
+                    if (noteEditMode) exitNoteEditMode();
+                    else {
+                        noteEditMode = true;
+                        closeOverlay();
+                        closeLeaderSideSettingsPanel();
+                        syncNoteEditBanner();
+                        syncLeaderSideRailUI();
+                        render();
+                    }
                 } else if (btn.dataset.action === "brush") {
                     toggleDrawMode();
                 }
@@ -15097,16 +15129,23 @@ ${deleteBtnHtml}
                     .map((song, six) => {
                         const raw = String(song.lyrics ?? "").replace(/\r/g, "");
                         const rawLines = raw.split("\n");
-                        const linesHtml = rawLines
-                            .map((line) => {
-                                const disp = getLeaderFmtLine(line);
-                                const sec = isLeaderLyricSectionHeaderLine(line);
-                                const cls = sec ? " leader-pl-line--section" : "";
-                                if (!String(line).trim()) {
-                                    return '<div class="leader-pl-line leader-pl-line--blank" aria-hidden="true"></div>';
-                                }
-                                return `<div class="leader-pl-line${cls}">${escapeHtml(disp)}</div>`;
-                            })
+                        const sidForNotes = String(song.id ?? six);
+const linesHtml = rawLines
+    .map((line, li) => {
+        const disp = getLeaderFmtLine(line);
+        const sec = isLeaderLyricSectionHeaderLine(line);
+        const cls = sec ? " leader-pl-line--section" : "";
+        if (!String(line).trim()) {
+            return '<div class="leader-pl-line leader-pl-line--blank" aria-hidden="true"></div>';
+        }
+        const noteMarks =
+            !noteEditMode && loadNote(li, sidForNotes)
+                ? `<span class="leader-note-dot" data-line="${li}" data-song-id="${escapeHtml(sidForNotes)}" title="查看备注"></span>`
+                : noteEditMode
+                  ? `<span class="leader-plus-dot" data-line="${li}" data-song-id="${escapeHtml(sidForNotes)}" title="添加备注">⊕</span>`
+                  : "";
+        return `<div class="leader-pl-line${cls}" data-line="${li}">${escapeHtml(disp)}${noteMarks}</div>`;
+    })
                             .join("");
                         const sidAttr = escapeHtml(String(song.id ?? six));
                         return `<section class="leader-song-block" id="leader-song-anchor-${six}" data-pl-ix="${six}" data-song-id="${sidAttr}"><div class="leader-song-divider" aria-hidden="true"></div><h2 class="leader-song-block-title">${escapeHtml(song.title || "未命名")}</h2><div class="leader-song-lyrics" style="color:${escapeHtml(color)}">${linesHtml || '<div class="leader-pl-line">…</div>'}</div></section>`;
@@ -15210,6 +15249,7 @@ ${deleteBtnHtml}
                 syncLeaderSideRailUI();
                 requestAnimationFrame(() => setupBrushCanvas());
                 updateLeaderColorBtnSwatch();
+                syncNoteEditBanner();
             }
 
             const openLeaderLyricEditor = () => {
@@ -15410,9 +15450,32 @@ ${deleteBtnHtml}
 
             lyricLayer.addEventListener("click", (e) => {
                 const plus = e.target.closest(".leader-plus-dot");
-                if (plus) return openNote(Number(plus.getAttribute("data-line")) || 0, false, plus);
+                if (plus) {
+                    return openNote(
+                        Number(plus.getAttribute("data-line")) || 0,
+                        false,
+                        plus,
+                        plus.getAttribute("data-song-id") || ""
+                    );
+                }
                 const dot = e.target.closest(".leader-note-dot");
-                if (dot) return openNote(Number(dot.getAttribute("data-line")) || 0, true, dot);
+                if (dot) {
+                    return openNote(
+                        Number(dot.getAttribute("data-line")) || 0,
+                        true,
+                        dot,
+                        dot.getAttribute("data-song-id") || ""
+                    );
+                }
+                if (noteEditMode && displayMode === "scroll") {
+                    const line = e.target.closest(".leader-pl-line:not(.leader-pl-line--blank)");
+                    if (line && !e.target.closest(".leader-plus-dot,.leader-note-dot")) {
+                        const block = line.closest("[data-song-id]");
+                        const songId = block?.getAttribute("data-song-id") || "";
+                        const li = parseInt(line.getAttribute("data-line") || "0", 10) || 0;
+                        return openNote(li, false, line, songId);
+                    }
+                }
             });
             toolbar.addEventListener("click", (e) => {
                 const btn = e.target.closest("button");
@@ -15465,7 +15528,19 @@ ${deleteBtnHtml}
                 if (!brushMode && displayMode !== "scroll" && e.key === "ArrowLeft") flip(-1);
                 if (!brushMode && displayMode !== "scroll" && e.key === "ArrowRight") flip(1);
                 if (brushMode && e.key === "Escape") setBrushMode(false);
-                if (e.key === "Escape") closeOverlay();
+                if (e.key === "Escape") {
+                    if (overlay?.classList?.contains("leader-note-pop-wrap")) {
+                        closeOverlay();
+                        showToolbar();
+                        return;
+                    }
+                    if (noteEditMode) {
+                        exitNoteEditMode();
+                        showToolbar();
+                        return;
+                    }
+                    closeOverlay();
+                }
                 showToolbar();
             });
             document.addEventListener("mousemove", () => {
@@ -15486,12 +15561,7 @@ ${deleteBtnHtml}
             });
             document.addEventListener("click", (e) => {
                 if (overlay && e.target === overlay && overlay.classList.contains("leader-note-pop-wrap")) {
-                    const ro = overlay.dataset.noteReadonly === "1";
                     closeOverlay();
-                    if (!ro) {
-                        noteEditMode = false;
-                        render();
-                    }
                 } else if (overlay && e.target === overlay) {
                     closeOverlay();
                 }
@@ -15588,9 +15658,9 @@ ${deleteBtnHtml}
             }
             globalThis.__leaderReloadAfterPackImport = () => {
                 try {
-                    displayMode = localStorage.getItem(DISPLAY_MODE_KEY) || "multi";
-                    if (displayMode === "single") displayMode = "multi";
-                    if (!["multi", "scroll", "flow"].includes(displayMode)) displayMode = "multi";
+                    displayMode = localStorage.getItem(DISPLAY_MODE_KEY) || "scroll";
+                    if (displayMode === "single") displayMode = "scroll";
+                    if (!["multi", "scroll", "flow"].includes(displayMode)) displayMode = "scroll";
                     bgMode = localStorage.getItem(BG_MODE_KEY) || "particles";
                     if (!["black", "white", "gray", "navy", "particles", "custom"].includes(bgMode)) bgMode = "particles";
                     try {

@@ -5336,19 +5336,13 @@
         modal.style.display = "flex";
     }
 
-    function saveSongs() {
-        /* 必须写入 app.js 的 state.songs。若仅委托 globalThis.saveSongs（state.js），
-         * 会持久化未与编辑器同步的 AppState.songs，导致「保存」后刷新丢失、搜索不到。 */
-        try {
-            setStore(STORAGE.SONGS, state.songs);
-        } catch (err) {
-            if (!isStorageQuotaExceededError(err)) console.warn("saveSongs", err);
-        }
+    function syncGlobalSongStoresFromState() {
         try {
             const AS = globalThis.AppState;
             if (AS && Array.isArray(AS.songs) && AS.songs !== state.songs) {
                 AS.songs.length = 0;
                 for (let i = 0; i < state.songs.length; i++) AS.songs.push(state.songs[i]);
+                if (state.currentSongId != null) AS.currentSongId = state.currentSongId;
             }
             const rootSongs = globalThis.songs;
             if (rootSongs && rootSongs !== state.songs && Array.isArray(rootSongs)) {
@@ -5363,6 +5357,17 @@
         } catch (_e) {
             /* ignore */
         }
+    }
+
+    function saveSongs() {
+        /* 必须写入 app.js 的 state.songs。若仅委托 globalThis.saveSongs（state.js），
+         * 会持久化未与编辑器同步的 AppState.songs，导致「保存」后刷新丢失、搜索不到。 */
+        try {
+            setStore(STORAGE.SONGS, state.songs);
+        } catch (err) {
+            if (!isStorageQuotaExceededError(err)) console.warn("saveSongs", err);
+        }
+        syncGlobalSongStoresFromState();
     }
 
     function saveSettings() {
@@ -5499,12 +5504,8 @@
        保留此结构作为安全网；未来版本可考虑收紧或移除本地 hydrate。
        ========================================================== */
     function loadState() {
-        let ret;
-        if (typeof globalThis.loadState === "function") {
-            ret = globalThis.loadState();
-        }
         hydrateAppStateFromStorage();
-        return ret;
+        syncGlobalSongStoresFromState();
     }
 
     function persistStateBeforeHide() {
@@ -7110,6 +7111,11 @@ ${deleteBtnHtml}
     function openSetlistModal() {
         const m = $("setlist-modal");
         if (!m) return;
+        try {
+            upgradeSavedSetlistsInPlace();
+        } catch (_e) {
+            /* ignore */
+        }
         renderSetlistModalList();
         m.hidden = false;
         m.setAttribute("aria-hidden", "false");
@@ -7160,19 +7166,14 @@ ${deleteBtnHtml}
     }
 
     function applySavedSetlist(sl, triggerBtn) {
-        restoreSetlistLibrarySnapshots(sl);
-        const rawIds = Array.isArray(sl.songs) ? sl.songs : Array.isArray(sl.items) ? sl.items : [];
-        const next = [];
-        rawIds.forEach((songId) => {
-            const hit = state.songs.find((s) => String(s.id) === String(songId));
-            if (!hit) return;
-            if (!next.some((id) => String(id) === String(hit.id))) next.push(hit.id);
-        });
-        if (!next.length && rawIds.length > 0) {
+        const next = resolveSetlistPlaylistIds(sl);
+        if (!next.length) {
             closeSetlistModal();
-            const hadLibSnap = Array.isArray(sl.librarySnapshots) && sl.librarySnapshots.length > 0;
+            const hadBackup =
+                (Array.isArray(sl.songEntries) && sl.songEntries.length > 0) ||
+                (Array.isArray(sl.librarySnapshots) && sl.librarySnapshots.length > 0);
             showToast(
-                hadLibSnap
+                hadBackup
                     ? "歌单恢复失败，请重试；若仍失败请重新保存该歌单"
                     : "歌单中的诗歌已不在本机曲库。请先把各首诗歌点「保存歌词」写入曲库，再重新「保存歌单」后加载",
                 triggerBtn || $("load-setlist-btn")
@@ -7304,6 +7305,162 @@ ${deleteBtnHtml}
     /** 歌单快照 v1：defaults=保存瞬间的全局歌词排版；tracks=各首在曲库中的背景与垂直/透明度（与投屏一致） */
     const SETLIST_PRESENTATION_SNAPSHOT_V = 1;
 
+    function normalizeSetlistSongRef(ref) {
+        if (ref == null || ref === "") return null;
+        if (typeof ref === "object") {
+            if (ref.id != null && ref.id !== "") return String(ref.id);
+            return null;
+        }
+        return String(ref);
+    }
+
+    function songFromSetlistSnapshot(snap) {
+        const bg = snap.background && typeof snap.background === "object" ? snap.background : {};
+        const song = {
+            id: snap.id,
+            title: String(snap.title ?? "").trim() || "未命名",
+            lyrics: String(snap.lyrics ?? ""),
+            key: String(snap.key ?? "").trim(),
+            tempo: String(snap.tempo ?? "").trim(),
+            notes: String(snap.notes ?? "").trim(),
+            tags: String(snap.tags ?? "").trim(),
+            overlayOpacityPct: Number.isFinite(Number(snap.overlayOpacityPct))
+                ? clamp(Number(snap.overlayOpacityPct), 0, 80)
+                : 30,
+            fontOpacityPct: Number.isFinite(Number(snap.fontOpacityPct))
+                ? clamp(Number(snap.fontOpacityPct), 20, 100)
+                : 100,
+            bgType: String(bg.bgType || snap.bgType || "particles").trim() || "particles",
+            bgImage: String(bg.bgImage ?? snap.bgImage ?? ""),
+            bgImageId: String(bg.bgImageId ?? snap.bgImageId ?? ""),
+            bgMediaType: bg.bgMediaType === "video" || snap.bgMediaType === "video" ? "video" : "image"
+        };
+        if (snap.posY != null && Number.isFinite(Number(snap.posY))) {
+            song.posY = clamp(Number(snap.posY), 20, 70);
+        }
+        return song;
+    }
+
+    /** 将歌单内嵌的诗歌副本写回本机曲库（按 id 合并或新增） */
+    function ensureSongFromSetlistSnapshot(snap) {
+        if (!snap || snap.id == null || snap.id === "") return null;
+        const sid = String(snap.id);
+        let hit = state.songs.find((s) => String(s.id) === sid);
+        if (hit) {
+            const snapLy = String(snap.lyrics ?? "");
+            const curLy = String(hit.lyrics ?? "");
+            if (snapLy.length > curLy.length) hit.lyrics = snapLy;
+            const snapTitle = String(snap.title ?? "").trim();
+            if (snapTitle && (!String(hit.title || "").trim() || hit.title === "未命名")) {
+                hit.title = snapTitle;
+            }
+            return hit;
+        }
+        hit = songFromSetlistSnapshot(snap);
+        state.songs.push(hit);
+        return hit;
+    }
+
+    function restoreAllSetlistSnapshots(sl) {
+        const pools = [];
+        if (Array.isArray(sl.songEntries)) pools.push(...sl.songEntries);
+        if (Array.isArray(sl.librarySnapshots)) pools.push(...sl.librarySnapshots);
+        const presTracks = sl.presentation?.tracks;
+        if (Array.isArray(presTracks)) {
+            presTracks.forEach((tr) => {
+                if (tr && tr.id != null && (tr.lyrics != null || tr.title != null)) pools.push(tr);
+            });
+        }
+        let touched = false;
+        const seen = new Set();
+        pools.forEach((snap) => {
+            if (!snap || snap.id == null || snap.id === "") return;
+            const sid = String(snap.id);
+            if (seen.has(sid)) return;
+            seen.add(sid);
+            if (ensureSongFromSetlistSnapshot(snap)) touched = true;
+        });
+        if (touched) {
+            try {
+                saveSongs();
+                renderSongList();
+            } catch (_e) {
+                /* ignore */
+            }
+        }
+        return touched;
+    }
+
+    /** 解析歌单播放顺序：优先用内嵌诗歌副本，再回退到 id 列表 */
+    function resolveSetlistPlaylistIds(sl) {
+        restoreAllSetlistSnapshots(sl);
+        const ordered = [];
+        const seen = new Set();
+        const pushRef = (ref) => {
+            const id = normalizeSetlistSongRef(ref);
+            if (!id || seen.has(id)) return;
+            const hit = state.songs.find((s) => String(s.id) === id);
+            if (!hit) return;
+            seen.add(id);
+            ordered.push(hit.id);
+        };
+
+        const snapOrder = Array.isArray(sl.librarySnapshots) ? sl.librarySnapshots : [];
+        if (snapOrder.length) {
+            snapOrder.forEach((snap) => pushRef(snap));
+            if (ordered.length) return ordered;
+        }
+
+        const entries = Array.isArray(sl.songEntries) ? sl.songEntries : [];
+        if (entries.length) {
+            entries.forEach((snap) => pushRef(snap));
+            if (ordered.length) return ordered;
+        }
+
+        const raw = Array.isArray(sl.songs) ? sl.songs : Array.isArray(sl.items) ? sl.items : [];
+        raw.forEach((ref) => pushRef(ref));
+
+        if (!ordered.length && Array.isArray(sl.presentation?.tracks)) {
+            sl.presentation.tracks.forEach((tr) => pushRef(tr));
+        }
+
+        return ordered;
+    }
+
+    /** 启动时：旧歌单若曲库中仍有对应诗歌，补全 songEntries 便于刷新后加载 */
+    function upgradeSavedSetlistsInPlace() {
+        const lists = loadSavedSetlists();
+        let changed = false;
+        lists.forEach((sl) => {
+            if (Array.isArray(sl.songEntries) && sl.songEntries.length) return;
+            const ids = [];
+            const raw = Array.isArray(sl.songs) ? sl.songs : Array.isArray(sl.items) ? sl.items : [];
+            raw.forEach((ref) => {
+                const id = normalizeSetlistSongRef(ref);
+                if (id && !ids.includes(id)) ids.push(id);
+            });
+            if (!ids.length) return;
+            const entries = [];
+            ids.forEach((id) => {
+                const s = state.songs.find((x) => String(x.id) === String(id));
+                if (s) entries.push(JSON.parse(JSON.stringify(s)));
+            });
+            if (!entries.length) return;
+            sl.songEntries = entries;
+            if (!Array.isArray(sl.librarySnapshots) || !sl.librarySnapshots.length) {
+                sl.librarySnapshots = entries.map((s) => gatherSetlistSongLibrarySnapshot(s.id)).filter(Boolean);
+            }
+            changed = true;
+        });
+        if (changed) {
+            try {
+                persistSavedSetlists(lists);
+            } catch (_e) {
+                /* ignore */
+            }
+        }
+    }
+
     /** 保存歌单时附带各首诗歌副本，刷新后 ID 对不上时仍可还原进本机曲库 */
     function gatherSetlistSongLibrarySnapshot(songId) {
         const song = state.songs.find((s) => String(s.id) === String(songId));
@@ -7334,51 +7491,6 @@ ${deleteBtnHtml}
         return row;
     }
 
-    function restoreSetlistLibrarySnapshots(sl) {
-        const snaps = Array.isArray(sl?.librarySnapshots) ? sl.librarySnapshots : [];
-        if (!snaps.length) return false;
-        let added = false;
-        snaps.forEach((snap) => {
-            if (!snap || snap.id == null || snap.id === "") return;
-            const sid = String(snap.id);
-            if (state.songs.some((s) => String(s.id) === sid)) return;
-            const bg = snap.background && typeof snap.background === "object" ? snap.background : {};
-            const song = {
-                id: snap.id,
-                title: String(snap.title ?? "").trim() || "未命名",
-                lyrics: String(snap.lyrics ?? ""),
-                key: String(snap.key ?? "").trim(),
-                tempo: String(snap.tempo ?? "").trim(),
-                notes: String(snap.notes ?? "").trim(),
-                tags: String(snap.tags ?? "").trim(),
-                overlayOpacityPct: Number.isFinite(Number(snap.overlayOpacityPct))
-                    ? clamp(Number(snap.overlayOpacityPct), 0, 80)
-                    : 30,
-                fontOpacityPct: Number.isFinite(Number(snap.fontOpacityPct))
-                    ? clamp(Number(snap.fontOpacityPct), 20, 100)
-                    : 100,
-                bgType: String(bg.bgType || snap.bgType || "particles").trim() || "particles",
-                bgImage: String(bg.bgImage ?? snap.bgImage ?? ""),
-                bgImageId: String(bg.bgImageId ?? snap.bgImageId ?? ""),
-                bgMediaType: bg.bgMediaType === "video" || snap.bgMediaType === "video" ? "video" : "image"
-            };
-            if (snap.posY != null && Number.isFinite(Number(snap.posY))) {
-                song.posY = clamp(Number(snap.posY), 20, 70);
-            }
-            state.songs.push(song);
-            added = true;
-        });
-        if (added) {
-            try {
-                saveSongs();
-                renderSongList();
-            } catch (_e) {
-                /* ignore */
-            }
-        }
-        return added;
-    }
-
     function gatherSetlistTypographyDefaultsForSnapshot() {
         const u = state.ui;
         return {
@@ -7403,6 +7515,8 @@ ${deleteBtnHtml}
         const bg = getStoredSongBackgroundOrDefaults(song);
         const row = {
             id: String(songId),
+            title: String(song.title ?? ""),
+            lyrics: String(song.lyrics ?? ""),
             background: {
                 bgType: bg.bgType,
                 bgImage: String(bg.bgImage || ""),
@@ -7493,8 +7607,17 @@ ${deleteBtnHtml}
             /* ignore */
         }
         const librarySnapshots = [];
+        const songEntries = [];
         const tracks = [];
         ctx.ids.forEach((id) => {
+            const song = state.songs.find((s) => String(s.id) === String(id));
+            if (song) {
+                try {
+                    songEntries.push(JSON.parse(JSON.stringify(song)));
+                } catch (_e) {
+                    songEntries.push({ ...song });
+                }
+            }
             const libSnap = gatherSetlistSongLibrarySnapshot(id);
             if (libSnap) librarySnapshots.push(libSnap);
             const row = gatherSetlistTrackPresentationSnapshot(id);
@@ -7506,6 +7629,7 @@ ${deleteBtnHtml}
             name: trimmed,
             songs: [...ctx.ids],
             createdAt: Date.now(),
+            songEntries,
             librarySnapshots,
             presentation: {
                 v: SETLIST_PRESENTATION_SNAPSHOT_V,
@@ -16324,6 +16448,11 @@ const linesHtml = rawLines
             tryFreeLocalStorageForWorshipBoot();
             ensureBgImageInputAcceptsVideo();
             loadState();
+            try {
+                upgradeSavedSetlistsInPlace();
+            } catch (_e) {
+                /* ignore */
+            }
             try {
                 globalThis.__displayWindowOpened = false;
             } catch (_e) {

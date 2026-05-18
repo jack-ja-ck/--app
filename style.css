@@ -2607,6 +2607,19 @@ body.worship-audience-projection #popup-blocked-banner {
     backdrop-filter: blur(12px);
     box-sizing: border-box;
 }
+.pwa-install-guide__disclaimer {
+    margin: 0 0 14px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 193, 7, 0.35);
+    background: rgba(255, 193, 7, 0.12);
+    color: rgba(255, 248, 230, 0.95);
+    font-size: 0.88rem;
+    line-height: 1.5;
+}
+.pwa-install-guide__disclaimer strong {
+    color: #ffd666;
+}
 .pwa-install-guide__x {
     position: absolute;
     top: 10px;

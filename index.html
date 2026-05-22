@@ -45,6 +45,7 @@
         }
       })();
     </script>
+    <!-- Cloudflare Web Analytics --><script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "9b05bbaaef434bbe831af6940a2835a8"}'></script><!-- End Cloudflare Web Analytics -->
 </head>
 <body data-theme="dark">
 <div id="app">
@@ -1356,6 +1357,43 @@
     </div>
   </div>
 </div>
+
+<script>
+(function () {
+    var HINT =
+        "💡 若页面显示异常，请按 Ctrl+Shift+R 强制刷新。";
+    var HINT_STYLE =
+        "margin:4px 0 0;padding:0;font-size:13px;color:rgba(255,255,255,0.55);line-height:1.6;text-align:center;font-weight:400;letter-spacing:0;background:none;border:none;";
+
+    function patchWelcomeToast(box) {
+        if (!box || box.getAttribute("data-welcome-hint-patched") === "1") return;
+        var mainText = box.querySelector(".welcome-toast-text");
+        var closeBtn = box.querySelector(".welcome-toast-close");
+        if (!mainText || !closeBtn) return;
+        var hint = document.createElement("p");
+        hint.className = "welcome-toast-refresh-hint";
+        hint.setAttribute("role", "note");
+        hint.textContent = HINT;
+        hint.style.cssText = HINT_STYLE;
+        box.insertBefore(hint, closeBtn);
+        box.setAttribute("data-welcome-hint-patched", "1");
+    }
+
+    function tryPatch() {
+        patchWelcomeToast(document.getElementById("welcome-toast"));
+    }
+
+    if (typeof MutationObserver !== "undefined") {
+        var obs = new MutationObserver(tryPatch);
+        obs.observe(document.documentElement, { childList: true, subtree: true });
+    }
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", tryPatch);
+    } else {
+        tryPatch();
+    }
+})();
+</script>
 
 </body>
 </html>

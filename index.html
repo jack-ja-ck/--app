@@ -424,6 +424,73 @@
                                 </div>
                             </div>
                         </section>
+                        <section class="adv-drawer-acc-item is-open" data-adv-acc data-adv-acc-id="margin">
+                            <button type="button" class="adv-drawer-acc-trigger" aria-expanded="true"><span>📐 布局边距</span><span class="adv-drawer-acc-chevron" aria-hidden="true"></span></button>
+                            <div class="adv-drawer-acc-panel">
+                                <div class="adv-drawer-acc-panel-inner adv-drawer-card-body">
+                                    <label class="adv-drawer-field-label" for="pos-slider">垂直位置 <span id="pos-val">45</span> %</label>
+                                    <div class="adv-range-tick-wrap">
+                                        <div class="adv-range-tick-bar" id="pos-slider-tick-bar" aria-hidden="true"></div>
+                                        <input type="range" id="pos-slider" class="adv-range" min="20" max="70" value="45">
+                                    </div>
+                                    <p class="adv-range-ticks-caption">金线示常见舒适区（约 40% / 45%，依幕布与机位微调）</p>
+                                    <label class="adv-drawer-field-label" for="adv-preview-line-height">行间距</label>
+                                    <input type="range" id="adv-preview-line-height" class="adv-range" min="1.2" max="2.4" value="1.65" step="0.05">
+                                    <label class="adv-drawer-field-label" for="default-lines-input">默认行数（分页）</label>
+                                    <div class="adv-drawer-inline-field">
+                                        <input type="number" id="default-lines-input" min="1" max="20" value="4" style="width:4rem;">
+                                        <span class="adv-drawer-suffix">行</span>
+                                    </div>
+                                    <div class="setting-tip adv-drawer-tip">💡 用空行或 [page] 可自定义每页行数</div>
+                                </div>
+                            </div>
+                        </section>
+                        <section class="adv-drawer-acc-item is-open" data-adv-acc data-adv-acc-id="bgfine">
+                            <button type="button" class="adv-drawer-acc-trigger" aria-expanded="true"><span class="adv-drawer-acc-trigger-label"><span class="ui-icon ui-icon--bg-fine" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="1.75"/><path d="M12 8v4l2.5 2.5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/></svg></span>背景微调</span><span class="adv-drawer-acc-chevron" aria-hidden="true"></span></button>
+                            <div class="adv-drawer-acc-panel">
+                                <div class="adv-drawer-acc-panel-inner adv-drawer-card-body" id="adv-bg-fine-body">
+                                    <p class="adv-bg-fine-scope-hint">以下设置主要影响投屏画面与歌词预览</p>
+                                    <div id="adv-projection-mask-slot"></div>
+                                    <label class="adv-drawer-field-label" for="adv-lyric-overlay-opacity">快速预览暗角浓度</label>
+                                    <input type="range" id="adv-lyric-overlay-opacity" class="adv-range" min="0" max="55" value="0" step="1" title="叠在预览上的半透明层">
+                                    <label class="adv-drawer-field-label" for="adv-lyric-layer-blur">快速预览毛玻璃模糊</label>
+                                    <input type="range" id="adv-lyric-layer-blur" class="adv-range" min="0" max="20" value="0" step="1" title="作用于预览区叠层">
+                                    <label class="adv-drawer-field-label" for="vignette-shape-select">局部亮度 · 渐变形状</label>
+                                    <select id="vignette-shape-select">
+                                        <option value="circle" selected>圆形</option>
+                                        <option value="ellipse">椭圆形</option>
+                                    </select>
+                                    <label class="adv-drawer-field-label" for="vignette-center-slider">中心亮度偏移 <span id="vignette-center-val">0</span> %</label>
+                                    <input type="range" id="vignette-center-slider" class="adv-range" min="-50" max="50" value="0" step="1" title="负值压暗中心，正值提亮中心">
+                                    <label class="adv-drawer-field-label" for="vignette-edge-slider">边缘暗度 <span id="vignette-edge-val">0</span> %</label>
+                                    <input type="range" id="vignette-edge-slider" class="adv-range" min="0" max="90" value="0" step="1" title="四周压暗强度">
+                                </div>
+                            </div>
+                        </section>
+                        <section class="adv-drawer-acc-item is-open" data-adv-acc data-adv-acc-id="transition">
+                            <button type="button" class="adv-drawer-acc-trigger" aria-expanded="true"><span>✨ 转场特效</span><span class="adv-drawer-acc-chevron" aria-hidden="true"></span></button>
+                            <div class="adv-drawer-acc-panel">
+                                <div class="adv-drawer-acc-panel-inner adv-drawer-card-body">
+                                    <label class="adv-drawer-field-label" for="page-transition-select">翻页动画</label>
+                                    <select id="page-transition-select">
+                                        <option value="none" selected>无过渡</option>
+                                        <option value="fade">淡入淡出</option>
+                                        <option value="slide-left">左滑入</option>
+                                        <option value="slide-right">右滑入</option>
+                                        <option value="slide-up">上滑入</option>
+                                        <option value="slide-down">下滑入</option>
+                                        <option value="zoom-in">放大进入</option>
+                                        <option value="zoom-out">缩小进入</option>
+                                        <option value="flip-x">水平翻转</option>
+                                        <option value="flip-y">垂直翻转</option>
+                                        <option value="rotate-left">左侧旋转</option>
+                                        <option value="rotate-right">右侧旋转</option>
+                                    </select>
+                                    <label class="adv-drawer-field-label" for="page-transition-speed-slider">动画速度 <span id="page-transition-speed-val">0.6</span> 秒</label>
+                                    <input type="range" id="page-transition-speed-slider" class="adv-range" min="0.3" max="1.5" value="0.6" step="0.1" title="翻页过渡时长">
+                                </div>
+                            </div>
+                        </section>
                         <section class="adv-drawer-acc-item is-open" data-adv-acc data-adv-acc-id="console-theme">
                             <button type="button" class="adv-drawer-acc-trigger" aria-expanded="true"><span>🖥️ 主题背景</span><span class="adv-drawer-acc-chevron" aria-hidden="true"></span></button>
                             <div class="adv-drawer-acc-panel">
@@ -452,73 +519,6 @@
                                         </div>
                                     </div>
                                     <button type="button" id="worship-console-wallpaper-reset" class="btn-outline adv-console-wallpaper-reset-btn">↩ 恢复深色默认</button>
-                                </div>
-                            </div>
-                        </section>
-                        <section class="adv-drawer-acc-item is-open" data-adv-acc data-adv-acc-id="bgfine">
-                            <button type="button" class="adv-drawer-acc-trigger" aria-expanded="true"><span class="adv-drawer-acc-trigger-label"><span class="ui-icon ui-icon--bg-fine" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="1.75"/><path d="M12 8v4l2.5 2.5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/></svg></span>背景微调</span><span class="adv-drawer-acc-chevron" aria-hidden="true"></span></button>
-                            <div class="adv-drawer-acc-panel">
-                                <div class="adv-drawer-acc-panel-inner adv-drawer-card-body" id="adv-bg-fine-body">
-                                    <p class="adv-bg-fine-scope-hint">以下设置主要影响投屏画面与歌词预览</p>
-                                    <div id="adv-projection-mask-slot"></div>
-                                    <label class="adv-drawer-field-label" for="adv-lyric-overlay-opacity">快速预览暗角浓度</label>
-                                    <input type="range" id="adv-lyric-overlay-opacity" class="adv-range" min="0" max="55" value="0" step="1" title="叠在预览上的半透明层">
-                                    <label class="adv-drawer-field-label" for="adv-lyric-layer-blur">快速预览毛玻璃模糊</label>
-                                    <input type="range" id="adv-lyric-layer-blur" class="adv-range" min="0" max="20" value="0" step="1" title="作用于预览区叠层">
-                                    <label class="adv-drawer-field-label" for="vignette-shape-select">局部亮度 · 渐变形状</label>
-                                    <select id="vignette-shape-select">
-                                        <option value="circle" selected>圆形</option>
-                                        <option value="ellipse">椭圆形</option>
-                                    </select>
-                                    <label class="adv-drawer-field-label" for="vignette-center-slider">中心亮度偏移 <span id="vignette-center-val">0</span> %</label>
-                                    <input type="range" id="vignette-center-slider" class="adv-range" min="-50" max="50" value="0" step="1" title="负值压暗中心，正值提亮中心">
-                                    <label class="adv-drawer-field-label" for="vignette-edge-slider">边缘暗度 <span id="vignette-edge-val">0</span> %</label>
-                                    <input type="range" id="vignette-edge-slider" class="adv-range" min="0" max="90" value="0" step="1" title="四周压暗强度">
-                                </div>
-                            </div>
-                        </section>
-                        <section class="adv-drawer-acc-item is-open" data-adv-acc data-adv-acc-id="margin">
-                            <button type="button" class="adv-drawer-acc-trigger" aria-expanded="true"><span>📐 布局边距</span><span class="adv-drawer-acc-chevron" aria-hidden="true"></span></button>
-                            <div class="adv-drawer-acc-panel">
-                                <div class="adv-drawer-acc-panel-inner adv-drawer-card-body">
-                                    <label class="adv-drawer-field-label" for="pos-slider">垂直位置 <span id="pos-val">45</span> %</label>
-                                    <div class="adv-range-tick-wrap">
-                                        <div class="adv-range-tick-bar" id="pos-slider-tick-bar" aria-hidden="true"></div>
-                                        <input type="range" id="pos-slider" class="adv-range" min="20" max="70" value="45">
-                                    </div>
-                                    <p class="adv-range-ticks-caption">金线示常见舒适区（约 40% / 45%，依幕布与机位微调）</p>
-                                    <label class="adv-drawer-field-label" for="adv-preview-line-height">行间距</label>
-                                    <input type="range" id="adv-preview-line-height" class="adv-range" min="1.2" max="2.4" value="1.65" step="0.05">
-                                    <label class="adv-drawer-field-label" for="default-lines-input">默认行数（分页）</label>
-                                    <div class="adv-drawer-inline-field">
-                                        <input type="number" id="default-lines-input" min="1" max="20" value="4" style="width:4rem;">
-                                        <span class="adv-drawer-suffix">行</span>
-                                    </div>
-                                    <div class="setting-tip adv-drawer-tip">💡 用空行或 [page] 可自定义每页行数</div>
-                                </div>
-                            </div>
-                        </section>
-                        <section class="adv-drawer-acc-item is-open" data-adv-acc data-adv-acc-id="transition">
-                            <button type="button" class="adv-drawer-acc-trigger" aria-expanded="true"><span>✨ 转场特效</span><span class="adv-drawer-acc-chevron" aria-hidden="true"></span></button>
-                            <div class="adv-drawer-acc-panel">
-                                <div class="adv-drawer-acc-panel-inner adv-drawer-card-body">
-                                    <label class="adv-drawer-field-label" for="page-transition-select">翻页动画</label>
-                                    <select id="page-transition-select">
-                                        <option value="none" selected>无过渡</option>
-                                        <option value="fade">淡入淡出</option>
-                                        <option value="slide-left">左滑入</option>
-                                        <option value="slide-right">右滑入</option>
-                                        <option value="slide-up">上滑入</option>
-                                        <option value="slide-down">下滑入</option>
-                                        <option value="zoom-in">放大进入</option>
-                                        <option value="zoom-out">缩小进入</option>
-                                        <option value="flip-x">水平翻转</option>
-                                        <option value="flip-y">垂直翻转</option>
-                                        <option value="rotate-left">左侧旋转</option>
-                                        <option value="rotate-right">右侧旋转</option>
-                                    </select>
-                                    <label class="adv-drawer-field-label" for="page-transition-speed-slider">动画速度 <span id="page-transition-speed-val">0.6</span> 秒</label>
-                                    <input type="range" id="page-transition-speed-slider" class="adv-range" min="0.3" max="1.5" value="0.6" step="0.1" title="翻页过渡时长">
                                 </div>
                             </div>
                         </section>
@@ -626,7 +626,7 @@
 
 <h3>三、投屏演示</h3>
 <ul>
-<li><b>打开投屏</b>：右侧「投屏控制」点「开启投屏」打开会众窗口（若被拦截请允许弹窗）；投屏中按钮显示「投屏中」，再点可聚焦会众窗</li>
+<li><b>打开投屏</b>：右侧「投屏控制」点「开启投屏」打开会众窗口（若被拦截请允许弹窗）；窗口打开后按钮变为「关闭投屏」，再点即可关闭会众窗</li>
 <li><b>结束投屏</b>：投屏区下方「结束投屏」，或金色状态栏中的结束按钮，或主控台按 <b>Ctrl+Shift+E</b>，无需切到投影仪窗口</li>
 <li><b>主领 / 扫码</b>：同区另两枚卡片打开主领视图或「主领诗歌 · 扫码同步」（弹窗默认简短，可展开说明）</li>
 <li><b>投屏帮助</b>：「开启投屏」卡片右上角 ? 可查看移窗、全屏与翻页提示</li>

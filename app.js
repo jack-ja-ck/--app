@@ -1030,6 +1030,10 @@
 
     /** 主窗口缓存的投屏窗口引用（?display=1），关闭或失效后置空 */
     let projectionDisplayWindowRef = null;
+    /** 主控台轮询投屏窗是否仍打开（500ms） */
+    let projectionDisplayWindowPollTimer = 0;
+    /** 投屏窗已通过 BroadcastChannel 上报在线（弥补 window.open 返回 null 时无法持有引用） */
+    let projectionDisplayAliveViaChannel = false;
     /** 主控台主动结束投屏时置 true，避免 unload 再弹出「窗口已关闭」提示 */
     let projectionCloseInitiatedByMain = false;
     /** 固定 window.name：同一时刻只保留一个投屏窗口，重复打开时聚焦并刷新状态 */
@@ -2802,7 +2806,7 @@
             selector: "#open-display-btn",
             title: "第 6 步：开启与结束投屏",
             text:
-                "右侧「投屏控制」有三枚卡片：「开启投屏」打开会众窗口（投屏中会显示「投屏中」，再点可聚焦会众窗）；下方会出现「结束投屏」按钮，或按 Ctrl+Shift+E 在主控台关闭，无需切到副屏。旁有「主领视图」「扫码」入口。会众窗按 F 全屏；绿色按钮右上角 ? 可看投屏帮助。投屏中中间金色状态栏另有「结束投屏」与「分享云端」等。"
+                "右侧「投屏控制」有三枚卡片：「开启投屏」打开会众窗口，打开后同一按钮变为「关闭投屏」，再点即可关闭会众窗；下方也会出现「结束投屏」按钮，或按 Ctrl+Shift+E 在主控台关闭，无需切到副屏。旁有「主领视图」「扫码」入口。会众窗按 F 全屏；绿色按钮右上角 ? 可看投屏帮助。投屏时中间金色状态栏另有「结束投屏」与「分享云端」等。"
         }
     ];
 
@@ -6442,28 +6446,40 @@
         return true;
     }
 
+    function noteProjectionDisplayAlive() {
+        projectionDisplayAliveViaChannel = true;
+        try {
+            globalThis.__displayWindowOpened = true;
+        } catch (_e) {
+            /* ignore */
+        }
+        try {
+            syncProjectionPanelControls();
+            updateGalleryStatusBar();
+        } catch (_e2) {
+            /* ignore */
+        }
+    }
+
+    function noteProjectionDisplayGone() {
+        projectionDisplayAliveViaChannel = false;
+        try {
+            globalThis.__displayWindowOpened = false;
+        } catch (_e) {
+            /* ignore */
+        }
+    }
+
     function isProjectionDisplayWindowOpen() {
         let w = projectionDisplayWindowRef;
         if (w) {
             if (w.closed) {
                 projectionDisplayWindowRef = null;
-                try {
-                    globalThis.__displayWindowOpened = false;
-                } catch (_e) {
-                    /* ignore */
-                }
-                return false;
-            }
-            return true;
-        }
-        if (globalThis.__displayWindowOpened) {
-            try {
-                globalThis.__displayWindowOpened = false;
-            } catch (_e2) {
-                /* ignore */
+            } else {
+                return true;
             }
         }
-        return false;
+        return projectionDisplayAliveViaChannel;
     }
 
     function syncProjectionPanelControls() {
@@ -6477,9 +6493,44 @@
             displayBtn.classList.toggle("projection-action-card--live", open);
             const titleEl = displayBtn.querySelector(".projection-action-card__title");
             const hintEl = displayBtn.querySelector(".projection-action-card__hint");
-            if (titleEl) titleEl.textContent = open ? "投屏中" : "开启投屏";
-            if (hintEl) hintEl.textContent = open ? "点击可聚焦会众窗" : "会众大屏";
+            if (titleEl) titleEl.textContent = open ? "关闭投屏" : "开启投屏";
+            if (hintEl) hintEl.textContent = "会众大屏";
         }
+    }
+
+    function onProjectionDisplayWindowClosed() {
+        projectionDisplayWindowRef = null;
+        noteProjectionDisplayGone();
+        try {
+            renderPageGallery();
+        } catch (_e2) {
+            /* ignore */
+        }
+        try {
+            syncProjectionPanelControls();
+            updateGalleryStatusBar();
+        } catch (_e3) {
+            /* ignore */
+        }
+        if (projectionCloseInitiatedByMain) {
+            projectionCloseInitiatedByMain = false;
+            hideRestoreProjectionBanner();
+            return;
+        }
+        showRestoreProjectionBanner();
+    }
+
+    function watchProjectionDisplayWindowRef() {
+        if (isDisplay || isLeader) return;
+        let w = projectionDisplayWindowRef;
+        if (!w) return;
+        if (!w.closed) return;
+        onProjectionDisplayWindowClosed();
+    }
+
+    function startProjectionDisplayWindowWatch() {
+        if (projectionDisplayWindowPollTimer) return;
+        projectionDisplayWindowPollTimer = window.setInterval(watchProjectionDisplayWindowRef, 500);
     }
 
     function updateGalleryStatusBar() {
@@ -8362,7 +8413,7 @@ ${deleteBtnHtml}
             if (fv) fv.textContent = String(pct);
             updateAdvSliderSwatches();
             scheduleMiniSliderDomPreview(() => applyMiniPreviewFontOpacityPct(pct));
-            refreshMonitorContent({ fontOpacityPct: pct });
+            scheduleLiveStyleProjectionPush({ fontOpacityPct: pct });
         });
         rng.addEventListener("change", () => {
             state.ui.fontOpacityPct = clamp(Number(rng.value || 100), 20, 100);
@@ -8481,7 +8532,10 @@ ${deleteBtnHtml}
             chip.addEventListener("click", () => {
                 state.ui.fontColor = c;
                 updateUIFromState();
-                updateAll();
+                saveSettings();
+                updateSpeakerCards();
+                renderMiniPreview();
+                scheduleLiveStyleProjectionPush({ fontColor: c });
             });
             chips.appendChild(chip);
         });
@@ -8490,7 +8544,10 @@ ${deleteBtnHtml}
             if (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(val)) {
                 state.ui.fontColor = val;
                 updateUIFromState();
-                updateAll();
+                saveSettings();
+                updateSpeakerCards();
+                renderMiniPreview();
+                scheduleLiveStyleProjectionPush({ fontColor: val });
             } else {
                 showToast("请输入有效颜色", $("font-color-custom"));
             }
@@ -8940,46 +8997,81 @@ ${deleteBtnHtml}
         else collapseProjectionMonitorFromUi();
     }
 
+    /** 拖动字号/位置/颜色时复用已有 LIVE 快照，避免每次 buildLiveState 重算分页导致投屏卡顿 */
+    function getProjectionSnapshotBase() {
+        if (liveState && Array.isArray(liveState.pages) && liveState.pages.length) {
+            return {
+                ...liveState,
+                text: { ...(liveState.text || {}) },
+                background: liveState.background ? { ...liveState.background } : liveState.background
+            };
+        }
+        return buildLiveState();
+    }
+
     function mergeMonitorProjectionSnapshot(overrides, baseSnap) {
         const snap =
             baseSnap && typeof baseSnap === "object"
                 ? { ...baseSnap, text: { ...(baseSnap.text || {}) } }
-                : buildLiveState();
+                : getProjectionSnapshotBase();
         if (!overrides || typeof overrides !== "object" || !Object.keys(overrides).length) return snap;
         const o = overrides;
         const text = { ...(snap.text || {}) };
         if (o.fontSize != null) text.fontSize = clampLyricFontSize(o.fontSize);
         if (o.posY != null) text.topPct = clamp(Number(o.posY), 20, 70);
         if (o.textStrokePx != null) text.strokePx = clamp(Number(o.textStrokePx), 0, 6);
+        if (o.fontColor != null) {
+            const c = String(o.fontColor).trim();
+            snap.fontColor = c;
+            const bgType = snap.background?.type || state.ui.bgType;
+            text.color = bgType === "solid-white" ? "#111" : c;
+        }
         let fontOpacityPct = snap.fontOpacityPct;
         if (o.fontOpacityPct != null) fontOpacityPct = clamp(Number(o.fontOpacityPct), 20, 100);
         return { ...snap, text, fontOpacityPct };
     }
 
+    let _liveStylePushRaf = 0;
+    let _liveStyleOverrides = null;
+
+    /** 合并同一帧内的多次滑块 input，轻量推送到真实投屏窗口 */
+    function scheduleLiveStyleProjectionPush(overrides) {
+        if (!overrides || typeof overrides !== "object") return;
+        _liveStyleOverrides = _liveStyleOverrides
+            ? { ..._liveStyleOverrides, ...overrides }
+            : { ...overrides };
+        if (_liveStylePushRaf) return;
+        _liveStylePushRaf = requestAnimationFrame(() => {
+            _liveStylePushRaf = 0;
+            const o = _liveStyleOverrides;
+            _liveStyleOverrides = null;
+            refreshMonitorContent(o, null, { persist: false, styleOnly: true });
+        });
+    }
+
     /** 与 refreshMonitorContent 使用同一套 merge 快照，保证监视窗 / 页面画廊 / 真实投屏窗口同源 */
-    function pushLiveStateToProjectionClients(snap) {
+    function pushLiveStateToProjectionClients(snap, pushOpts) {
         if (isDisplay || isLeader) return;
         if (!snap || typeof snap !== "object" || !snap.pages) return;
+        const persist = !(pushOpts && pushOpts.persist === false);
+        const styleOnly = !!(pushOpts && pushOpts.styleOnly);
         liveState = snap;
         if (typeof globalThis !== "undefined") globalThis.worshipLiveState = liveState;
-        try {
-            setStore(STORAGE.LIVE, liveState);
-        } catch (err) {
-            console.warn("pushLiveStateToProjectionClients setStore LIVE", err);
+        if (persist) {
+            try {
+                setStore(STORAGE.LIVE, liveState);
+            } catch (err) {
+                console.warn("pushLiveStateToProjectionClients setStore LIVE", err);
+            }
         }
         if (channel) {
             try {
-                const msg = { type: "update", payload: liveState, source: "main" };
-                channel.postMessage(msg);
-                if (typeof requestAnimationFrame === "function") {
-                    requestAnimationFrame(() => {
-                        try {
-                            channel.postMessage(msg);
-                        } catch (e2) {
-                            console.warn("pushLiveStateToProjectionClients channel rAF", e2);
-                        }
-                    });
-                }
+                channel.postMessage({
+                    type: "update",
+                    payload: liveState,
+                    source: "main",
+                    styleOnly
+                });
             } catch (err) {
                 console.warn("pushLiveStateToProjectionClients channel", err);
             }
@@ -9044,10 +9136,10 @@ ${deleteBtnHtml}
         );
     }
 
-    function refreshMonitorContent(overrides, snapshot) {
+    function refreshMonitorContent(overrides, snapshot, pushOpts) {
         if (isDisplay || isLeader) return;
         const snap = mergeMonitorProjectionSnapshot(overrides, snapshot);
-        pushLiveStateToProjectionClients(snap);
+        pushLiveStateToProjectionClients(snap, pushOpts);
         const host = $("projection-preview-monitor");
         const content = $("monitor-content");
         if (!host || !content) return;
@@ -10343,33 +10435,62 @@ ${deleteBtnHtml}
     function attachProjectionDisplayWindow(win) {
         if (!win) return;
         projectionDisplayWindowRef = win;
+        if (win.__worshipProjectionUnloadBound) return;
+        win.__worshipProjectionUnloadBound = true;
         try {
             win.addEventListener("unload", () => {
-                if (projectionDisplayWindowRef === win) projectionDisplayWindowRef = null;
-                try {
-                    globalThis.__displayWindowOpened = false;
-                } catch (_e) {
-                    /* ignore */
-                }
-                try {
-                    renderPageGallery();
-                } catch (_e2) {
-                    /* ignore */
-                }
-                if (projectionCloseInitiatedByMain) {
-                    projectionCloseInitiatedByMain = false;
-                    try {
-                        syncProjectionPanelControls();
-                    } catch (_e3) {
-                        /* ignore */
-                    }
-                    return;
-                }
-                showRestoreProjectionBanner();
+                if (projectionDisplayWindowRef === win) onProjectionDisplayWindowClosed();
             });
         } catch (_) {
             /* ignore */
         }
+    }
+
+    /** 主控台通知投屏窗自行关闭（window.postMessage） */
+    function requestCloseProjectionDisplayViaPostMessage() {
+        projectionCloseInitiatedByMain = true;
+        hideRestoreProjectionBanner();
+        let w = projectionDisplayWindowRef;
+        if (w && w.closed) {
+            onProjectionDisplayWindowClosed();
+            return;
+        }
+        if (!w) {
+            try {
+                if (channel) channel.postMessage({ type: "main_projection_end", source: "main" });
+            } catch (_e0) {
+                /* ignore */
+            }
+            noteProjectionDisplayGone();
+            purgeOrphanProjectionDisplayWindows();
+            syncProjectionPanelControls();
+            window.setTimeout(() => {
+                projectionCloseInitiatedByMain = false;
+            }, 400);
+            return;
+        }
+        try {
+            w.postMessage({ action: "close_display" }, "*");
+        } catch (_e) {
+            try {
+                w.close();
+            } catch (_e2) {
+                /* ignore */
+            }
+            onProjectionDisplayWindowClosed();
+            return;
+        }
+        window.setTimeout(() => {
+            const ref = projectionDisplayWindowRef;
+            if (ref && !ref.closed) {
+                try {
+                    ref.close();
+                } catch (_e3) {
+                    /* ignore */
+                }
+            }
+            watchProjectionDisplayWindowRef();
+        }, 800);
     }
 
     /**
@@ -10389,22 +10510,24 @@ ${deleteBtnHtml}
             /* ignore */
         }
         projectionDisplayWindowRef = null;
+        noteProjectionDisplayGone();
     }
 
     function closeProjectionDisplayWindow(opts) {
         const silent = !!(opts && opts.silent);
+        if (!silent) {
+            let w = projectionDisplayWindowRef;
+            if (w && w.closed) {
+                projectionDisplayWindowRef = null;
+                w = null;
+            }
+            if (w && !w.closed) {
+                requestCloseProjectionDisplayViaPostMessage();
+                return;
+            }
+        }
         if (!silent) projectionCloseInitiatedByMain = true;
         purgeOrphanProjectionDisplayWindows();
-        try {
-            globalThis.__displayWindowOpened = false;
-        } catch (_e) {
-            /* ignore */
-        }
-        try {
-            updateGalleryStatusBar();
-        } catch (_e2) {
-            /* ignore */
-        }
         hideRestoreProjectionBanner();
         try {
             syncProjectionPanelControls();
@@ -11244,6 +11367,13 @@ ${deleteBtnHtml}
             console.warn("window.open", err);
         }
         if (!win) {
+            try {
+                win = window.open(targetUrl, name);
+            } catch (err2) {
+                console.warn("window.open fallback", err2);
+            }
+        }
+        if (!win) {
             showPopupBlockedBanner();
             showToast(
                 "无法打开窗口，请允许弹窗",
@@ -11283,34 +11413,46 @@ ${deleteBtnHtml}
                 /* ignore */
             }
             safeBroadcastState("openDisplayWindow:focus-existing");
+            noteProjectionDisplayAlive();
             hideRestoreProjectionBanner();
-            try {
-                globalThis.__displayWindowOpened = true;
-            } catch (_e) {
-                /* ignore */
-            }
             syncProjectionPanelControls();
             return;
         }
         /** 新开前：通知所有会众投屏页自行关闭并释放主控引用，避免多窗口残留后台；仍须与 window.open 同一次点击栈内完成 */
         closeProjectionDisplayWindow({ silent: true });
         /** 先 window.open（须留在用户点击的同步栈内），再广播状态，避免 broadcastState 抛错或耗时导致弹窗被拦截 */
-        const newWin = openDisplayOnSecondScreen(
+        let newWin = openDisplayOnSecondScreen(
             projectionEntryUrl("display"),
             WORSHIP_PROJECTION_DISPLAY_WINDOW_NAME,
             anchor
         );
         safeBroadcastState("openDisplayWindow:after-open");
-        if (newWin) {
+        if (newWin && !newWin.closed) {
+            projectionDisplayWindowRef = newWin;
             attachProjectionDisplayWindow(newWin);
+            noteProjectionDisplayAlive();
+            hideRestoreProjectionBanner();
+            syncProjectionPanelControls();
+            return;
+        }
+        noteProjectionDisplayGone();
+        syncProjectionPanelControls();
+    }
+
+    function handleOpenDisplayBtnClick() {
+        if (projectionDisplayWindowRef && !projectionDisplayWindowRef.closed) {
+            requestCloseProjectionDisplayViaPostMessage();
+            return;
+        }
+        if (projectionDisplayAliveViaChannel) {
+            noteProjectionDisplayGone();
             try {
-                globalThis.__displayWindowOpened = true;
+                if (channel) channel.postMessage({ type: "main_projection_end", source: "main" });
             } catch (_e) {
                 /* ignore */
             }
-            syncProjectionPanelControls();
         }
-        hideRestoreProjectionBanner();
+        openDisplayWindow();
     }
 
     function openLeaderWindow() {
@@ -11917,7 +12059,7 @@ ${deleteBtnHtml}
             state.ui.fontSize = v;
             if ($("font-val")) $("font-val").textContent = String(v);
             scheduleMiniSliderDomPreview(() => applyMiniPreviewFontSizePx(v));
-            refreshMonitorContent({ fontSize: v });
+            scheduleLiveStyleProjectionPush({ fontSize: v });
             scheduleGalleryLyricPadRelayout();
         });
         on("font-slider", "change", () => {
@@ -11955,7 +12097,7 @@ ${deleteBtnHtml}
             if ($("pos-val")) $("pos-val").textContent = String(v);
             state.ui.posY = v;
             scheduleMiniSliderDomPreview(() => applyMiniPreviewPosDragTransform(v));
-            refreshMonitorContent({ posY: v });
+            scheduleLiveStyleProjectionPush({ posY: v });
             scheduleGalleryLyricPadRelayout();
         });
         on("pos-slider", "change", () => {
@@ -12127,7 +12269,7 @@ ${deleteBtnHtml}
             showToast("自动播放已停止", $("autoplay-stop"));
         });
 
-        on("open-display-btn", "click", openDisplayWindow);
+        on("open-display-btn", "click", handleOpenDisplayBtnClick);
         on("close-projection-display-btn", "click", () => closeProjectionDisplayWindow());
         on("close-projection-panel-btn", "click", () => closeProjectionDisplayWindow());
         if (!document.body.dataset.boundCloseProjectionHotkey) {
@@ -12254,7 +12396,7 @@ ${deleteBtnHtml}
                     applyStroke(row);
                     row.querySelectorAll(".lyric-seg").forEach(applyStroke);
                 });
-                refreshMonitorContent({ textStrokePx: sp });
+                scheduleLiveStyleProjectionPush({ textStrokePx: sp });
                 scheduleGalleryLyricPadRelayout();
             });
         });
@@ -12401,10 +12543,12 @@ ${deleteBtnHtml}
             displayVid.setAttribute("playsinline", "");
             displayVid.playsInline = true;
             displayVid.setAttribute("autoplay", "");
-            /** 始终占位，用 opacity 切换，避免 display:none 导致反复解码/重载 */
+            displayVid.setAttribute("preload", "auto");
+            /** 始终占位，用 opacity 切换；GPU 合成层减轻与歌词更新抢资源时的卡顿 */
             displayVid.style.cssText =
                 "position:fixed;top:0;left:0;width:100%;height:100%;object-fit:cover;z-index:0;" +
-                "pointer-events:none;opacity:0;display:block;";
+                "pointer-events:none;opacity:0;display:block;" +
+                "transform:translateZ(0);backface-visibility:hidden;-webkit-backface-visibility:hidden;will-change:opacity;";
             host.appendChild(displayVid);
         }
 
@@ -12421,7 +12565,8 @@ ${deleteBtnHtml}
         gifImg.id = "projection-bg-image";
         gifImg.alt = "";
         gifImg.style.cssText =
-            "position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;display:none;pointer-events:none;z-index:2;";
+            "position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;display:none;" +
+            "pointer-events:none;z-index:0;transform:translateZ(0);backface-visibility:hidden;-webkit-backface-visibility:hidden;";
         host.appendChild(gifImg);
 
         const mask = document.createElement("div");
@@ -12688,17 +12833,12 @@ ${deleteBtnHtml}
             ctx.fillRect(0, 0, w, h);
         }
         projectionLastTs = ts;
-        const gifAnimating =
-            type === "image" &&
-            mediaType !== "video" &&
-            typeof bgState.imageData === "string" &&
-            /^data:image\/gif/i.test(bgState.imageData);
         const imgRasterLoading =
             type === "image" &&
             !isVideoBg &&
             projectionBgImage &&
             !projectionBgImage.complete;
-        let loop = type === "particles" || gifAnimating || imgRasterLoading;
+        let loop = type === "particles" || imgRasterLoading;
         if (loop) projectionRaf = requestAnimationFrame(drawBg);
         else projectionRaf = 0;
     }
@@ -12847,9 +12987,9 @@ ${deleteBtnHtml}
         });
     }
 
-    function applyLive(mode, payload) {
+    function applyLive(mode, payload, opts) {
         if (typeof globalThis !== "undefined" && typeof globalThis.applyLive === "function") {
-            return globalThis.applyLive(mode, payload);
+            return globalThis.applyLive(mode, payload, opts);
         }
         /* ==========================================================
            以下为 applyLive 的旧实现，已被 js/ui.js 中的 globalThis.applyLive 接管。
@@ -12895,9 +13035,7 @@ ${deleteBtnHtml}
         const sigPrev = projectionLiveBackgroundSignature(prev?.background);
         const sigNew = projectionLiveBackgroundSignature(liveState.background);
         const skipRestart =
-            (mode || projectionMode) === "display" &&
-            projectionDisplayIsVideoBackground() &&
-            sigPrev === sigNew;
+            (mode || projectionMode) === "display" && !!prev && sigPrev === sigNew;
         if (!skipRestart) restartBg();
     }
 
@@ -12919,6 +13057,16 @@ ${deleteBtnHtml}
         projectionMode = "display";
         installProjectionUI("display");
         displayProjectionChromeHidden = true;
+
+        window.addEventListener("message", (ev) => {
+            const d = ev && ev.data;
+            if (!d || typeof d !== "object" || d.action !== "close_display") return;
+            try {
+                window.close();
+            } catch (_e) {
+                /* ignore */
+            }
+        });
 
         if (!document.getElementById("worship-display-pro-style")) {
             const st = document.createElement("style");
@@ -13414,6 +13562,7 @@ ${deleteBtnHtml}
                     applyDisplayLiveFromPayload(d.payload);
                 }
             };
+            channel.postMessage({ type: "projection_display_ready", source: "display" });
             channel.postMessage({ type: "request_state" });
         }
 
@@ -16453,11 +16602,7 @@ const linesHtml = rawLines
             } catch (_e) {
                 /* ignore */
             }
-            try {
-                globalThis.__displayWindowOpened = false;
-            } catch (_e) {
-                /* ignore */
-            }
+            noteProjectionDisplayGone();
             applyAdvPreviewCssVarsFromStorage();
             ensureDefaultThemeBackgroundAtBoot();
             normalizeLegacyBgImageReference();
@@ -16482,6 +16627,7 @@ const linesHtml = rawLines
             renderMiniPreview();
             renderPlaylist();
             bindEvents();
+            startProjectionDisplayWindowWatch();
             installLyricEditorDrawerResize();
             initProjectionPreviewMonitor();
             queueMicrotask(() => {
@@ -16514,15 +16660,28 @@ const linesHtml = rawLines
                     if (d.type === "main_projection_end" && d.source === "main") {
                         return;
                     }
+                    if (d.type === "projection_display_ready" && d.source === "display") {
+                        noteProjectionDisplayAlive();
+                        hideRestoreProjectionBanner();
+                        return;
+                    }
                     if (d.type === "projection_fs_active" && d.source === "display") {
+                        noteProjectionDisplayAlive();
                         hideRestoreProjectionBanner();
                         return;
                     }
                     if (d.type === "projection_attention" && d.source === "display") {
+                        const reason = String(d.reason || "");
+                        if (reason === "pagehide" || reason === "beforeunload") {
+                            onProjectionDisplayWindowClosed();
+                            return;
+                        }
                         showRestoreProjectionBanner();
                         return;
                     }
                     if (d.type === "request_state") {
+                        noteProjectionDisplayAlive();
+                        hideRestoreProjectionBanner();
                         respondCurrentState();
                         return;
                     }

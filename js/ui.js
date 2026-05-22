@@ -444,7 +444,19 @@ const UI = {
         } catch (_e) {
             url = `./index.html${String(pathWithQuery || "").startsWith("?") ? pathWithQuery : `?${pathWithQuery}`}`;
         }
-        const win = window.open(url, name, feats);
+        let win = null;
+        try {
+            win = window.open(url, name, feats);
+        } catch (_e) {
+            /* ignore */
+        }
+        if (!win) {
+            try {
+                win = window.open(url, name);
+            } catch (_e2) {
+                /* ignore */
+            }
+        }
         if (!win) {
             UI.showToast("无法打开窗口，请允许弹窗", anchorEl);
             return null;
@@ -816,6 +828,82 @@ globalThis.ensureProjectionCanvas = function () {
     }
 
 };
+function projectionAssignVideoBgSrc(videoEl, dataUrl) {
+    const want = String(dataUrl || "").trim();
+    if (!videoEl || !want) return;
+    const prev = String(videoEl.dataset.worshipBgUrl || "");
+    if (prev === want && videoEl.src && !videoEl.paused && !videoEl.ended) {
+        videoEl.style.opacity = "1";
+        return;
+    }
+    videoEl.dataset.worshipBgUrl = want;
+    const kickPlay = () => {
+        videoEl.style.opacity = "1";
+        if (videoEl.paused || videoEl.ended) void videoEl.play().catch(() => {});
+    };
+    const applySrc = (url) => {
+        if (String(videoEl.dataset.worshipBgUrl || "") !== want) return;
+        if (videoEl.src !== url) videoEl.src = url;
+        if (videoEl.readyState >= 2) kickPlay();
+        else videoEl.addEventListener("loadeddata", kickPlay, { once: true });
+    };
+    if (/^data:video\//i.test(want)) {
+        if (videoEl._worshipVideoBlobKey === want && videoEl._worshipVideoBlobUrl) {
+            applySrc(videoEl._worshipVideoBlobUrl);
+            return;
+        }
+        fetch(want)
+            .then((r) => r.blob())
+            .then((blob) => {
+                if (String(videoEl.dataset.worshipBgUrl || "") !== want) return;
+                if (videoEl._worshipVideoBlobUrl) {
+                    try {
+                        URL.revokeObjectURL(videoEl._worshipVideoBlobUrl);
+                    } catch (_e) {
+                        /* ignore */
+                    }
+                }
+                videoEl._worshipVideoBlobUrl = URL.createObjectURL(blob);
+                videoEl._worshipVideoBlobKey = want;
+                applySrc(videoEl._worshipVideoBlobUrl);
+            })
+            .catch(() => applySrc(want));
+        return;
+    }
+    if (videoEl._worshipVideoBlobUrl) {
+        try {
+            URL.revokeObjectURL(videoEl._worshipVideoBlobUrl);
+        } catch (_e) {
+            /* ignore */
+        }
+        delete videoEl._worshipVideoBlobUrl;
+        delete videoEl._worshipVideoBlobKey;
+    }
+    applySrc(want);
+}
+
+function projectionHideDisplayVideoBg(videoEl) {
+    if (!videoEl) return;
+    videoEl.pause();
+    videoEl.removeAttribute("src");
+    delete videoEl.dataset.worshipBgUrl;
+    if (videoEl._worshipVideoBlobUrl) {
+        try {
+            URL.revokeObjectURL(videoEl._worshipVideoBlobUrl);
+        } catch (_e) {
+            /* ignore */
+        }
+        delete videoEl._worshipVideoBlobUrl;
+        delete videoEl._worshipVideoBlobKey;
+    }
+    try {
+        videoEl.load();
+    } catch (_e) {
+        /* ignore */
+    }
+    videoEl.style.opacity = "0";
+}
+
 globalThis.drawBg = function (ts) {
     if (!globalThis.projectionCtx || !globalThis.liveState) return;
     const bgState = globalThis.liveState.background || {};
@@ -850,33 +938,16 @@ globalThis.drawBg = function (ts) {
         globalThis.removeProjectionCssBg();
         if (gifLayer) gifLayer.style.display = "none";
         if (globalThis.projectionCanvas) globalThis.projectionCanvas.style.display = "none";
-        const want = String(bgState.imageData || "");
-        const srcChanged = dispV.dataset.worshipBgUrl !== want;
-        if (srcChanged) {
-            dispV.dataset.worshipBgUrl = want;
-            dispV.src = want;
+        if (globalThis.projectionRaf) {
+            cancelAnimationFrame(globalThis.projectionRaf);
+            globalThis.projectionRaf = 0;
         }
-        dispV.style.opacity = "1";
-        if (srcChanged || dispV.paused || dispV.ended) {
-            void dispV.play().catch(() => {});
-        }
+        projectionAssignVideoBgSrc(dispV, bgState.imageData);
         globalThis.projectionLastTs = ts;
-        globalThis.projectionRaf = 0;
         return;
     }
 
-    // 当不是视频背景时，暂停并清空视频元素
-    if (dispV && !isVideoBg) {
-        dispV.pause();
-        dispV.removeAttribute("src");
-        delete dispV.dataset.worshipBgUrl;
-        try {
-            dispV.load();
-        } catch (_e) {
-            /* ignore */
-        }
-        dispV.style.opacity = "0";
-    }
+    if (dispV && !isVideoBg) projectionHideDisplayVideoBg(dispV);
 
     globalThis.removeProjectionCssBg();
     if (globalThis.projectionCanvas) globalThis.projectionCanvas.style.display = "block";
@@ -900,11 +971,22 @@ globalThis.drawBg = function (ts) {
         ctx.fillStyle = g;
         ctx.fillRect(0, 0, w, h);
     } else if (type === "image" && bgState.imageData) {
-        const isGif = /^data:image\/gif/i.test(bgState.imageData);
-        if (isGif && gifLayer) {
-            if (gifLayer.src !== bgState.imageData) gifLayer.src = bgState.imageData;
-            gifLayer.style.display = "block";
+        const isNativeAnimImg =
+            /^data:image\/gif/i.test(bgState.imageData) || /^data:image\/webp/i.test(bgState.imageData);
+        if (isNativeAnimImg && gifLayer) {
+            globalThis.removeProjectionCssBg();
             if (globalThis.projectionCanvas) globalThis.projectionCanvas.style.display = "none";
+            if (dispV) projectionHideDisplayVideoBg(dispV);
+            const want = String(bgState.imageData);
+            if (gifLayer.src !== want) {
+                gifLayer.src = want;
+                if (typeof gifLayer.decode === "function") gifLayer.decode().catch(() => {});
+            }
+            gifLayer.style.display = "block";
+            gifLayer.style.transform = "translateZ(0)";
+            globalThis.projectionLastTs = ts;
+            globalThis.projectionRaf = 0;
+            return;
         } else {
             ctx.fillStyle = "#000";
             ctx.fillRect(0, 0, w, h);
@@ -931,8 +1013,9 @@ globalThis.drawBg = function (ts) {
         ctx.fillRect(0, 0, w, h);
     }
     globalThis.projectionLastTs = ts;
-    const gifAnimating = type === "image" && typeof bgState.imageData === "string" && /^data:image\/gif/i.test(bgState.imageData);
-    const loop = type === "particles" || gifAnimating || (type === "image" && globalThis.projectionBgImage && !globalThis.projectionBgImage.complete);
+    const loop =
+        type === "particles" ||
+        (type === "image" && globalThis.projectionBgImage && !globalThis.projectionBgImage.complete);
     if (loop) globalThis.projectionRaf = requestAnimationFrame(globalThis.drawBg);
     else globalThis.projectionRaf = 0;
 
@@ -940,16 +1023,30 @@ globalThis.drawBg = function (ts) {
 globalThis.restartBg = function () {
     try {
         const ls = globalThis.liveState;
+        const bg = ls?.background || {};
+        const bgData = String(bg.imageData || "");
         if (projectionDisplayIsVideoBackground(ls)) {
             const dispV = document.getElementById("display-video-bg");
-            const want = String(ls.background?.imageData || "").trim();
-            if (dispV && want && dispV.dataset.worshipBgUrl === want) {
+            const want = bgData.trim();
+            if (dispV && want && dispV.dataset.worshipBgUrl === want && dispV.src) {
                 if (globalThis.projectionRaf) cancelAnimationFrame(globalThis.projectionRaf);
                 globalThis.projectionRaf = 0;
                 dispV.style.opacity = "1";
-                void dispV.play().catch(() => {});
+                if (dispV.paused || dispV.ended) void dispV.play().catch(() => {});
                 return;
             }
+        }
+        const gifLayer = document.getElementById("projection-bg-image");
+        if (
+            gifLayer &&
+            bg.type === "image" &&
+            (/^data:image\/gif/i.test(bgData) || /^data:image\/webp/i.test(bgData)) &&
+            gifLayer.src === bgData &&
+            gifLayer.style.display !== "none"
+        ) {
+            if (globalThis.projectionRaf) cancelAnimationFrame(globalThis.projectionRaf);
+            globalThis.projectionRaf = 0;
+            return;
         }
     } catch (_e) {
         /* ignore */
@@ -985,10 +1082,18 @@ function projectionDisplayIsVideoBackground(live) {
     if (!mediaType) mediaType = "image";
     return type === "image" && mediaType === "video" && !!bg.imageData;
 }
-globalThis.applyLive = function (mode, payload) {
+function projectionLyricLinesSig(st) {
+    if (!st || !Array.isArray(st.pages)) return "";
+    const idx = globalThis.clamp(Number(st.pageIndex) || 0, 0, Math.max(0, st.pages.length - 1));
+    const lines = st.pages[idx] || [];
+    return `${String(st.songId || "")}\x1d${idx}\x1d${lines.map((x) => String(x ?? "")).join("\x1e")}`;
+}
+
+globalThis.applyLive = function (mode, payload, opts) {
     if (payload === undefined && mode && typeof mode === "object") {
         payload = mode;
         mode = globalThis.projectionMode || "display";
+        opts = undefined;
     }
     if (!payload || !payload.pages) return;
     const prev = globalThis.liveState;
@@ -1010,6 +1115,9 @@ globalThis.applyLive = function (mode, payload) {
         const newIdx = Number(next.pageIndex) || 0;
         const sameSong = !!prev && String(prev.songId || "") === String(next.songId || "");
         const navChanged = !!prev && (!sameSong || prevIdx !== newIdx);
+        const lyricSame =
+            !!prev && projectionLyricLinesSig(prev) === projectionLyricLinesSig(next);
+        const styleOnly = !!(opts && opts.styleOnly) || (lyricSame && !navChanged);
         const trans =
             typeof globalThis.__worshipCanonicalPageTransition === "function"
                 ? globalThis.__worshipCanonicalPageTransition(next.pageTransition || "none")
@@ -1026,6 +1134,8 @@ globalThis.applyLive = function (mode, payload) {
         const fontOpForAnim = globalThis.clamp(Number(next.fontOpacityPct ?? 100), 20, 100);
         if (doAnim) {
             globalThis.__worshipRunDisplayPageTransitionThenRender(trans, dur, (o) => globalThis.renderDisplayLyric(o), fontOpForAnim);
+        } else if (styleOnly && typeof globalThis.renderDisplayLyricStyleOnly === "function") {
+            globalThis.renderDisplayLyricStyleOnly();
         } else {
             globalThis.renderDisplayLyric();
         }
@@ -1038,8 +1148,8 @@ globalThis.applyLive = function (mode, payload) {
     } else globalThis.renderLeaderLyric();
     const skipRestart =
         m === "display" &&
-        projectionDisplayIsVideoBackground(globalThis.liveState) &&
-        projectionLiveBackgroundSignature(prev?.background) ===
+        prev &&
+        projectionLiveBackgroundSignature(prev.background) ===
             projectionLiveBackgroundSignature(globalThis.liveState.background);
     if (!skipRestart) globalThis.restartBg();
 
@@ -1109,6 +1219,69 @@ globalThis.renderDisplayLyric = function (opts) {
     }
     globalThis.updateDisplayCardPreview();
 
+};
+/** 仅更新投屏歌词排版样式（字号/颜色/位置/透明度），不重绘 innerHTML，拖动滑块时更顺滑 */
+globalThis.renderDisplayLyricStyleOnly = function () {
+    const layer = document.getElementById("projection-lyric");
+    if (!layer || !globalThis.liveState) return;
+    const inner = document.getElementById("projection-lyric-anim");
+    const target = inner || layer;
+    const pages = globalThis.liveState.pages || [];
+    const idx = globalThis.clamp(globalThis.liveState.pageIndex || 0, 0, Math.max(0, pages.length - 1));
+    const lines = pages[idx] || [];
+    if (!lines.length && !target.querySelector(".lyric-seg, div")) {
+        globalThis.renderDisplayLyric();
+        return;
+    }
+    const t = globalThis.liveState.text || {};
+    const fontColor = globalThis.liveState.fontColor || t.color || "#ffffff";
+    const fontOp = globalThis.clamp(Number(globalThis.liveState.fontOpacityPct ?? 100), 20, 100) / 100;
+    const lightBg = fontColor === "#111" || (t.color || "") === "#111";
+    const strokePx = globalThis.clamp(Number(t.strokePx), 0, 6);
+    const strokeSig = `${strokePx}\x1d${lightBg ? 1 : 0}`;
+    if (layer.dataset.projStrokeSig !== strokeSig) {
+        layer.dataset.projStrokeSig = strokeSig;
+        globalThis.renderDisplayLyric();
+        return;
+    }
+    layer.style.textAlign = "center";
+    let topPct = 45;
+    if (typeof globalThis.projectionTextTopPctFromLive === "function") {
+        try {
+            topPct = globalThis.projectionTextTopPctFromLive(t);
+        } catch (_e) {
+            const raw = t.topPct != null ? Number(t.topPct) : 45;
+            topPct = globalThis.clamp(Number.isFinite(raw) ? raw : 45, 20, 70);
+        }
+    } else {
+        const raw = t.topPct != null ? Number(t.topPct) : 45;
+        topPct = globalThis.clamp(Number.isFinite(raw) ? raw : 45, 20, 70);
+    }
+    layer.style.top = `${topPct}%`;
+    layer.style.fontFamily = t.fontFamily || globalThis.__projectionUi.fontFamily;
+    const fsPx =
+        typeof globalThis.clampLyricFontSize === "function"
+            ? globalThis.clampLyricFontSize(Number(t.fontSize) || 60)
+            : globalThis.clamp(t.fontSize || 56, 8, 500);
+    layer.style.fontSize = `${fsPx}px`;
+    const lh =
+        typeof globalThis.getAdvPreviewLineHeightNumber === "function"
+            ? globalThis.getAdvPreviewLineHeightNumber()
+            : 1.45;
+    layer.style.lineHeight = String(lh);
+    layer.style.fontWeight =
+        t.fontWeight != null && t.fontWeight !== "" ? String(t.fontWeight) : "700";
+    layer.style.color = fontColor;
+    layer.style.transform = "translateY(-50%)";
+    layer.style.transition = "none";
+    if (inner) {
+        layer.style.opacity = "1";
+        inner.style.transition = "none";
+        inner.style.transform = "";
+    }
+    target.style.transition = "none";
+    target.style.opacity = String(fontOp);
+    globalThis.updateDisplayCardPreview();
 };
 globalThis.renderLeaderLyric = function () {
     const layer = document.getElementById("projection-lyric");
@@ -1204,7 +1377,9 @@ globalThis.installProjectionUI = function (mode) {
         displayVid.style.cssText =
             "position:fixed;top:0;left:0;width:100%;height:100%;object-fit:cover;z-index:0;" +
             "pointer-events:none;opacity:0;display:block;" +
-            "transform:translateZ(0);backface-visibility:hidden;-webkit-backface-visibility:hidden;";
+            "transform:translateZ(0);backface-visibility:hidden;-webkit-backface-visibility:hidden;" +
+            "will-change:opacity;";
+        displayVid.setAttribute("preload", "auto");
         host.appendChild(displayVid);
     }
 
@@ -1218,7 +1393,9 @@ globalThis.installProjectionUI = function (mode) {
     const gifImg = document.createElement("img");
     gifImg.id = "projection-bg-image";
     gifImg.alt = "";
-    gifImg.style.cssText = "position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;display:none;pointer-events:none;";
+    gifImg.style.cssText =
+        "position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;display:none;" +
+        "pointer-events:none;transform:translateZ(0);backface-visibility:hidden;-webkit-backface-visibility:hidden;";
     host.appendChild(gifImg);
 
     const lyric = document.createElement("div");
@@ -1588,7 +1765,7 @@ function initDisplayMode() {
                 return;
             }
             if (d && d.type === "update" && d.payload && d.payload.pages) {
-                globalThis.applyLive("display", d.payload);
+                globalThis.applyLive("display", d.payload, { styleOnly: !!d.styleOnly });
             }
         };
         globalThis.__projectionChannel.postMessage({ type: "request_state" });

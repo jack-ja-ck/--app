@@ -2806,7 +2806,7 @@
             selector: "#open-display-btn",
             title: "第 6 步：开启与结束投屏",
             text:
-                "右侧「投屏控制」有三枚卡片：「开启投屏」打开会众窗口，打开后同一按钮变为「关闭投屏」，再点即可关闭会众窗；下方也会出现「结束投屏」按钮，或按 Ctrl+Shift+E 在主控台关闭，无需切到副屏。旁有「主领视图」「扫码」入口。会众窗按 F 全屏；绿色按钮右上角 ? 可看投屏帮助。投屏时中间金色状态栏另有「结束投屏」与「分享云端」等。"
+                "右侧「投屏控制」有「开启投屏」「主领视角」等入口；开启投屏后会众窗打开，同一按钮变为「关闭投屏」，或按 Ctrl+Shift+E 关闭。「主领视角」可选平板/手机传数据（二维码）或在电脑打开。会众窗按 F 全屏；绿色按钮右上角 ? 可看投屏帮助。投屏时中间金色状态栏另有「结束投屏」与「分享云端」等。"
         }
     ];
 
@@ -3496,17 +3496,17 @@
         {
             title: "第 1 步：歌词与页面从哪来",
             text:
-                "本页通过频道与本机 LIVE 数据接收主控台同步。主控台改词或样式后须点「应用到演示屏」。也可用主窗口「主领诗歌 · 扫码同步」：手机扫二维码打开主领页，一次载入歌词并尽量带上主领偏好（默认多为「滚动」模式；详见帮助）。右侧 ⚙ 设置里可「改词」「歌单」「诗歌」导入；若空白请先同步或导入包。"
+                "主领页用于<b>编辑与排版歌词</b>（改词、备注、编排等），不是会众投屏。电脑：主控台「主领视角 → 在电脑上打开」，或扫二维码后在浏览器编辑；编辑完点右下角「传数据」生成码，供手机/平板扫入。手机：扫主控台或电脑生成的码即可载入歌单与已编辑内容。也可与主控台频道同步；主控台改词后须点「应用到演示屏」才会更新会众屏。⚙ 内可「改词」「歌单」「诗歌」导入。"
         },
         {
             title: "第 2 步：界面布局",
             text:
-                "默认「滚动」模式：整份歌单可上下滑动阅读，顶栏显示当前歌名，底部有歌名芯片可点切歌。右侧 ⚙ 打开设置菜单（帮助、引导、编排、背景、画笔、备注、字色、字号、改词、歌单、单页/滚动切换）。底部工具栏可展开（点 ∨ 或从下缘上滑）；收起后约 3 秒无操作自动隐藏。手机窄屏时以 ⚙ 与底栏为主，图标更紧凑。"
+                "默认「滚动」模式：整份歌单可上下滑动，顶栏为歌名，底栏歌名芯片可切歌。右下角「传数据」（金色按钮，在 ⚙ 左侧）用于生成二维码；点 ⚙ 打开设置菜单（帮助、引导、编排、背景、画笔、备注、字色、字号、改词、歌单、单页/滚动）。底部工具栏可展开（∨ 或下缘上滑），约 3 秒无操作自动收起。"
         },
         {
             title: "第 3 步：翻页与滚动",
             text:
-                "「单页」模式：点左右 ◀ ▶ 或键盘 ← → 翻页（画笔开启时除外）。「滚动」模式：不翻页，上下滑动阅读多首诗歌；点底栏歌名可跳转。 「流程」模式：按编排卡片顺序前进。扫码同步的偏好里若未改过，首次进入多为滚动模式。"
+                "「单页」：点左右 ◀ ▶ 或 ← → 翻页（画笔开启时除外）。「滚动」：上下滑动读多首；点底栏歌名跳转。「流程」：按编排卡片前进。经二维码传入的偏好若未改过，首次进入多为滚动模式。"
         },
         {
             title: "第 4 步：字号、字色与背景",
@@ -3521,7 +3521,7 @@
         {
             title: "第 6 步：与会众投屏",
             text:
-                "主领页仅供同工预览与标注；会众画面以主控台「开启投屏」为准。主控台投屏中可用「结束投屏」或 Ctrl+Shift+E 关闭会众窗，无需切到投影仪。流程中的经文卡等须主控台与会众窗均已打开并保持同步。"
+                "主领页侧重个人编辑（改词、备注、编排），会众观看请用主控台「开启投屏」。若主控台也在改同一首歌，改完后点「应用到演示屏」会众屏才更新。流程模式中的经文卡等仍须主控台与会众窗保持同步。"
         }
     ];
 
@@ -3628,20 +3628,20 @@
     function getLeaderHelpModalInnerHtml() {
         return [
             "<h2>📖 主领视角 · 使用帮助</h2>",
-            "<p style=\"opacity:.88;font-size:0.9rem;line-height:1.55;margin:0 0 14px;\">本页与主控台、会众投屏配合使用。适用于<b>主领窗口</b>（<code>?leader=1</code>、「主领视图」或扫码打开）。手机/平板常用右侧 <b>⚙ 设置</b>；底部工具栏可展开，内含帮助与引导。主控台完整说明请点「使用帮助」。</p>",
+            "<p style=\"opacity:.88;font-size:0.9rem;line-height:1.55;margin:0 0 14px;\">本页用于<b>编辑、排版歌词与备注</b>，可在电脑或手机/平板上使用（<code>?leader=1</code>、「主领视图」或扫描二维码打开）。<b>不是</b>会众投屏窗口。电脑编辑后可用右下角 <b>⇄ 传数据</b>（⚙ 左侧）生成二维码，在另一台设备扫描获取；歌单很大时可能拆成多个码，须按顺序逐个扫描。右侧 <b>⚙</b> 与底部工具栏含帮助、引导。</p>",
             "<h3>一、数据如何同步</h3>",
             "<ul>",
             "<li>主控台改词、分页或样式后须点<b>「应用到演示屏」</b>，主领页与会众投屏才会更新。</li>",
             "<li>本页通过频道与 <code>localStorage</code> LIVE 数据监听变更；请保持主控台与本页同时打开。</li>",
-            "<li>「主领诗歌 · 扫码同步」：二维码弹窗默认简短说明，可展开查看详情；链接除歌词外尽量附带<b>主领偏好</b>（默认多为滚动模式、背景、字号、字色、备注与编排等），写入打开手机的本机。不含自定义背景大图与画笔图层；包过大时会精简部分数据。</li>",
+            "<li><b>⇄ 传数据</b>：把当前歌单、歌词、备注、编排等打成二维码，供另一台设备扫描后在本机继续编辑。歌单很大时会拆成<b>多个二维码</b>：在电脑上点 ‹ › 切换，手机按 1→2→3… 顺序各扫一次，扫齐后内容才完整（手机底部会有提示）。不含自定义背景大图与画笔图层。</li>",
             "<li>主领「改词」仅更新本机曲库与当前主领画面，<b>不会</b>自动改会众投屏或主控台 LIVE。</li>",
             "</ul>",
             "<h3>二、界面与显示模式</h3>",
             "<ul>",
             "<li><b>默认滚动</b>：整份歌单可上下滑动；顶栏显示当前歌名；底栏有歌名芯片可点切歌。</li>",
-            "<li><b>右侧 ⚙</b>：帮助、引导、编排、背景、画笔、备注、字色、字号、改词、歌单；<b>单页 / 滚动</b>切换显示模式。「流程」在编排完成后点「使用」进入。</li>",
+            "<li><b>右下角</b>：金色 <b>⇄ 传数据</b>（⚙ 左侧）生成二维码；<b>⚙</b> 内有帮助、引导、编排、背景、画笔、备注、字色、字号、改词、歌单及<b>单页 / 滚动</b>。「流程」在编排完成后点「使用」进入。</li>",
             "<li><b>底部工具栏</b>：点 <b>∨</b> 或从下缘上滑展开；约 3 秒无操作自动收起。窄屏时以 ⚙ 为主。</li>",
-            "<li><b>诗歌 / 歌单</b>：⚙ 或工具栏可粘贴扫码链接（含 <code>#wp1=</code>）或诗歌包文本载入。</li>",
+            "<li><b>诗歌 / 歌单</b>：⚙ 或工具栏可粘贴传数据后的完整链接（含 <code>#wp1=</code> 或 <code>?data=</code>）或诗歌包文本载入。</li>",
             "</ul>",
             "<h3>三、翻页与快捷键</h3>",
             "<ul>",
@@ -10457,7 +10457,7 @@ ${deleteBtnHtml}
         }
         if (!w) {
             try {
-                if (channel) channel.postMessage({ type: "main_projection_end", source: "main" });
+                if (channel) channel.postMessage({ type: "main_projection_end", source: "main", target: "display" });
             } catch (_e0) {
                 /* ignore */
             }
@@ -10499,7 +10499,7 @@ ${deleteBtnHtml}
      */
     function purgeOrphanProjectionDisplayWindows() {
         try {
-            if (channel) channel.postMessage({ type: "main_projection_end", source: "main" });
+            if (channel) channel.postMessage({ type: "main_projection_end", source: "main", target: "display" });
         } catch (_e) {
             /* ignore */
         }
@@ -10553,6 +10553,619 @@ ${deleteBtnHtml}
     const WORSHIP_QR_PACK_MAX_CHARS = 2400;
     /** 扫码打开链接总长度上限（含 #wp1=），兼顾常见二维码生成接口 */
     const LEADER_QR_OPEN_URL_MAX = 3000;
+    /** ?data= 参数压缩后最大字节（encodeURIComponent 之后） */
+    const LEADER_DATA_QR_MAX_BYTES = 2500;
+    const LEADER_DATA_QR_SONGS_PER_PAGE = 3;
+    const LEADER_QR_PUBLIC_BASE = "https://jack-ja-ck.github.io/--app/";
+    const LEADER_SCAN_ACC_KEY = "worship.leaderScanAcc.v2";
+
+    function leaderSongToCollapsed(s) {
+        const o = {
+            i: String(s.id),
+            t: String(s.title || ""),
+            l: String(s.lyrics || ""),
+            n: String(s.notes || ""),
+            g: String(s.tags || "")
+        };
+        if (s.leaderWorshipFlow) o.f = s.leaderWorshipFlow;
+        return o;
+    }
+
+    function leaderSongFromCollapsed(entry) {
+        const id = String(entry.i ?? entry.id ?? uid());
+        const prev = state.songs.find((x) => String(x.id) === id);
+        return {
+            ...(prev || { ...DEFAULT_SONG, id }),
+            id,
+            title: String(entry.t ?? entry.title ?? prev?.title ?? ""),
+            lyrics: String(entry.l ?? entry.lyrics ?? prev?.lyrics ?? ""),
+            notes: String(entry.n ?? entry.notes ?? prev?.notes ?? ""),
+            tags: String(entry.g ?? entry.tags ?? prev?.tags ?? ""),
+            leaderWorshipFlow: entry.f || entry.leaderWorshipFlow || prev?.leaderWorshipFlow || null
+        };
+    }
+
+    function expandLeaderSharePayload(raw) {
+        if (!raw || typeof raw !== "object") return null;
+        const songsIn = Array.isArray(raw.s) ? raw.s : Array.isArray(raw.songs) ? raw.songs : [];
+        return {
+            playlist: Array.isArray(raw.p) ? raw.p.map(String) : Array.isArray(raw.playlist) ? raw.playlist.map(String) : [],
+            songs: songsIn.map(leaderSongFromCollapsed),
+            page: Number(raw.page) || 1,
+            total: Number(raw.total) || 1,
+            backup: !!(raw.b || raw.backup),
+            displayMode: raw.dm != null ? String(raw.dm) : raw.displayMode,
+            bgMode: raw.bm != null ? String(raw.bm) : raw.bgMode,
+            leaderFontSize: raw.fs != null ? String(raw.fs) : raw.leaderFontSize,
+            toolbarCollapsed: raw.tc,
+            leader_notes: raw.nt || raw.leader_notes
+        };
+    }
+
+    function parseLeaderSharePayloadFromParam(rawParam) {
+        const raw = String(rawParam || "").trim();
+        if (!raw) return null;
+        try {
+            const json = decodeURIComponent(raw);
+            return expandLeaderSharePayload(parseJSON(json, null));
+        } catch (_e) {
+            return null;
+        }
+    }
+
+    function leaderEncodedDataLength(collapsed) {
+        return encodeURIComponent(JSON.stringify(collapsed)).length;
+    }
+
+    function getLeaderQrPageBaseUrl() {
+        const pub = derivePublicHttpsLeaderJoinBaseFromLocation();
+        if (pub) return pub.endsWith("/") ? pub : pub + "/";
+        try {
+            const custom = String(localStorage.getItem(LEADER_QR_BASE_LS_KEY) || "").trim();
+            if (custom) {
+                let base = custom;
+                if (!/^https?:\/\//i.test(base)) base = "http://" + base;
+                return base.replace(/\/?$/, "/");
+            }
+        } catch (_e) {
+            /* ignore */
+        }
+        return LEADER_QR_PUBLIC_BASE;
+    }
+
+    function buildLeaderOpenUrlFromCollapsed(collapsed) {
+        const root = getLeaderQrPageBaseUrl();
+        const enc = encodeURIComponent(JSON.stringify(collapsed));
+        return `${root}?leader=1&data=${enc}`;
+    }
+
+    function buildLeaderShareCollapsedBase(opts) {
+        const isBackup = !!(opts && opts.backup);
+        const { songs: ordered } = collectLeaderShareSongsOrdered();
+        const base = {
+            p: ordered.map((s) => String(s.id)),
+            s: ordered.map(leaderSongToCollapsed)
+        };
+        if (isBackup) {
+            base.b = 1;
+            const prefs = readLeaderQrPackPrefsForExport();
+            base.dm = prefs.dm;
+            base.bm = prefs.bm;
+            base.tc = prefs.tc;
+            if (prefs.fs) base.fs = prefs.fs;
+            const nt = readLeaderQrPackNotesForExport(500000);
+            if (nt) base.nt = nt;
+        }
+        return base;
+    }
+
+    function paginateLeaderCollapsedPayload(collapsed, maxBytes) {
+        const songs = Array.isArray(collapsed.s) ? collapsed.s : [];
+        const tryPages = (per) => {
+            const chunks = [];
+            for (let i = 0; i < songs.length; i += per) chunks.push(songs.slice(i, i + per));
+            if (!chunks.length) chunks.push([]);
+            const total = chunks.length;
+            return chunks.map((chunk, idx) => {
+                const pg = { ...collapsed, s: chunk, p: chunk.map((x) => x.i), page: idx + 1, total };
+                return pg;
+            });
+        };
+        let per = LEADER_DATA_QR_SONGS_PER_PAGE;
+        while (per >= 1) {
+            const pages = tryPages(per);
+            const ok = pages.every((pg) => leaderEncodedDataLength(pg) <= maxBytes);
+            if (ok) return pages;
+            per -= 1;
+        }
+        const singlePages = tryPages(1);
+        const fits = singlePages.filter((pg) => leaderEncodedDataLength(pg) <= maxBytes);
+        return fits.length ? fits : singlePages.slice(0, 1);
+    }
+
+    /** 引导面板 / 电脑主领扫码 / 手机备份：统一完整数据包（歌单、歌词、备注、编排、显示设置） */
+    function buildLeaderUnifiedQrPages() {
+        return buildLeaderDataQrPages({ backup: true });
+    }
+
+    function buildLeaderDataQrPages(opts) {
+        const collapsed = buildLeaderShareCollapsedBase(opts);
+        if (leaderEncodedDataLength(collapsed) <= LEADER_DATA_QR_MAX_BYTES) {
+            return [{ page: 1, total: 1, url: buildLeaderOpenUrlFromCollapsed(collapsed) }];
+        }
+        const pages = paginateLeaderCollapsedPayload(collapsed, LEADER_DATA_QR_MAX_BYTES);
+        return pages.map((pg) => ({
+            page: pg.page,
+            total: pg.total,
+            url: buildLeaderOpenUrlFromCollapsed(pg)
+        }));
+    }
+
+    function setLeaderQrImageSrc(img, openUrl) {
+        if (!img || !openUrl) return;
+        const enc = encodeURIComponent(openUrl);
+        const primary = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=8&data=${enc}`;
+        const fallback = `https://quickchart.io/qr?size=200&margin=1&text=${enc}`;
+        img.onerror = function () {
+            img.onerror = null;
+            img.src = fallback;
+        };
+        img.src = primary;
+    }
+
+    function leaderLocalNotesHasContent() {
+        try {
+            const raw = localStorage.getItem("leader_notes");
+            if (!raw) return false;
+            const o = parseJSON(raw, null);
+            if (!o || typeof o !== "object") return false;
+            return Object.keys(o).some((k) => {
+                const v = o[k];
+                if (typeof v === "string") return !!v.trim();
+                return !!(v && String(v.note || "").trim());
+            });
+        } catch (_e) {
+            return false;
+        }
+    }
+
+    function applyLeaderSharePayloadToState(expanded, opts) {
+        const anchor = (opts && opts.anchor) || null;
+        if (!expanded || !Array.isArray(expanded.songs)) return false;
+        const isBackup = !!expanded.backup;
+        const isPaged = (expanded.total || 1) > 1;
+        let mergedSongs = expanded.songs;
+        let mergedPlaylist = expanded.playlist;
+
+        if (isPaged) {
+            let acc = getStore(LEADER_SCAN_ACC_KEY, null);
+            if (!acc || typeof acc !== "object") acc = { songs: {}, playlist: [], pages: [], total: expanded.total };
+            expanded.songs.forEach((s) => {
+                acc.songs[String(s.id)] = s;
+            });
+            expanded.playlist.forEach((id) => {
+                const sid = String(id);
+                if (!acc.playlist.includes(sid)) acc.playlist.push(sid);
+            });
+            if (!acc.pages.includes(expanded.page)) acc.pages.push(expanded.page);
+            acc.total = expanded.total;
+            setStore(LEADER_SCAN_ACC_KEY, acc);
+            mergedPlaylist = acc.playlist.slice();
+            mergedSongs = mergedPlaylist.map((id) => acc.songs[id]).filter(Boolean);
+            if (acc.pages.length >= expanded.total) {
+                try {
+                    localStorage.removeItem(LEADER_SCAN_ACC_KEY);
+                } catch (_e) {
+                    /* ignore */
+                }
+            }
+        } else {
+            try {
+                localStorage.removeItem(LEADER_SCAN_ACC_KEY);
+            } catch (_e2) {
+                /* ignore */
+            }
+        }
+
+        const byId = new Map(state.songs.map((s) => [String(s.id), s]));
+        mergedSongs.forEach((s) => byId.set(String(s.id), s));
+        state.songs = mergedPlaylist.length
+            ? mergedPlaylist.map((id) => byId.get(String(id))).filter(Boolean)
+            : Array.from(byId.values());
+
+        state.playlist.items = mergedPlaylist.length ? mergedPlaylist.slice() : state.songs.map((x) => x.id);
+        state.playlist.running = state.playlist.items.length > 0;
+        state.playlist.activeIndex = 0;
+        if (state.playlist.items.length) {
+            state.currentSongId = state.playlist.items[0];
+            state.currentPage = 0;
+        }
+
+        if (isBackup && expanded.leader_notes) {
+            try {
+                setStore("leader_notes", expanded.leader_notes);
+            } catch (_e3) {
+                /* ignore */
+            }
+        } else if (!leaderLocalNotesHasContent() && expanded.leader_notes) {
+            try {
+                setStore("leader_notes", expanded.leader_notes);
+            } catch (_e4) {
+                /* ignore */
+            }
+        }
+
+        const applyPref = (key, val, force) => {
+            if (val == null || val === "") return;
+            try {
+                if (!force && localStorage.getItem(key) != null) return;
+                localStorage.setItem(key, String(val));
+            } catch (_e5) {
+                /* ignore */
+            }
+        };
+        if (isBackup) {
+            if (expanded.displayMode && ["multi", "scroll", "flow"].includes(expanded.displayMode)) {
+                applyPref("leader_display_mode", expanded.displayMode, true);
+            }
+            if (expanded.bgMode) applyPref("leader_bg_mode", expanded.bgMode, true);
+            if (expanded.leaderFontSize) applyPref("leader_font_size", expanded.leaderFontSize, true);
+            if (expanded.toolbarCollapsed === 0 || expanded.toolbarCollapsed === 1 || expanded.toolbarCollapsed === "0" || expanded.toolbarCollapsed === "1") {
+                applyPref("leader_toolbar_collapsed", expanded.toolbarCollapsed === 1 || expanded.toolbarCollapsed === "1" ? "1" : "0", true);
+            }
+        } else {
+            applyPref("leader_display_mode", "multi", false);
+        }
+
+        try {
+            setStore(STORAGE.SONGS, state.songs);
+            savePlaylist();
+            saveSettings();
+        } catch (_e6) {
+            /* ignore */
+        }
+        try {
+            hydrateAppStateFromStorage();
+        } catch (_e7) {
+            /* ignore */
+        }
+        if (!isDisplay && !isLeader) {
+            syncSongToEditor();
+            updateAll();
+        }
+        if (isLeader) {
+            try {
+                liveState = buildLiveState();
+                setStore(STORAGE.LIVE, liveState);
+                globalThis.liveState = liveState;
+            } catch (_eLs) {
+                /* ignore */
+            }
+            if (typeof globalThis.__leaderReloadAfterPackImport === "function") {
+                globalThis.__leaderReloadAfterPackImport({
+                    page: expanded.page,
+                    total: expanded.total,
+                    pagedIncomplete: isPaged && expanded.page < expanded.total
+                });
+            }
+        }
+        if (!isLeader) showCornerSuccessToast(`已同步 ${mergedSongs.length} 首诗歌`, anchor);
+        return true;
+    }
+
+    let leaderQrPopupPages = [];
+    let leaderQrPopupIndex = 0;
+    let leaderPanelQrPages = [];
+    let leaderPanelQrIndex = 0;
+
+    function ensureLeaderPanelModal() {
+        let modal = $("leader-panel-modal");
+        if (modal && !modal.querySelector('.leader-panel-tip-box[data-v="2"]')) {
+            modal.remove();
+            modal = null;
+        }
+        if (modal) return modal;
+        modal = document.createElement("div");
+        modal.id = "leader-panel-modal";
+        modal.innerHTML =
+            '<div class="leader-panel-dialog" role="dialog" aria-modal="true">' +
+            '<button type="button" class="leader-panel-close-x" data-leader-panel-x aria-label="关闭">✕</button>' +
+            '<div id="leader-panel-chooser">' +
+            '<h2 class="leader-panel-title">📱 主领视角</h2>' +
+            '<p class="leader-panel-desc">在不同设备上编辑、排版歌词与备注；会众投屏请用主控台「开启投屏」</p>' +
+            '<div class="leader-panel-choice-row">' +
+            '<button type="button" class="leader-panel-choice-btn" data-leader-panel-mode="qr"><span class="leader-panel-choice-icon leader-panel-choice-icon--sync" aria-hidden="true">⇄</span><span>平板/手机传数据</span></button>' +
+            '<button type="button" class="leader-panel-choice-btn" data-leader-panel-mode="desktop"><span class="leader-panel-choice-icon leader-panel-choice-icon--device" aria-hidden="true">💻</span><span>在电脑上打开</span></button>' +
+            "</div>" +
+            '<div class="leader-panel-tip-box" data-v="2">' +
+            "<p><b>平板/手机传数据</b>：把当前歌单、歌词、备注与编排打成二维码；用手机或平板扫描后，在移动设备上继续编辑。可截图保存二维码，换机后也能恢复。</p>" +
+            "<p><b>在电脑上打开</b>：在本机浏览器打开主领页，用键盘编辑歌词、改词、备注与编排；编辑完成后，点右下角金色「传数据」（⚙ 左侧）生成二维码，再在手机/平板上扫描获取。</p>" +
+            "</div>" +
+            "</div>" +
+            '<div id="leader-panel-qr-view" hidden>' +
+            '<h2 class="leader-panel-title">⇄ 传数据到平板/手机</h2>' +
+            '<div class="leader-panel-qr-wrap">' +
+            '<img id="leader-panel-qr-img" class="leader-panel-qr-img" width="200" height="200" alt="传数据二维码">' +
+            '<div class="leader-panel-pager" id="leader-panel-pager" hidden>' +
+            '<button type="button" data-leader-panel-prev aria-label="上一页">‹</button>' +
+            '<span id="leader-panel-pager-label">第1/1页</span>' +
+            '<button type="button" data-leader-panel-next aria-label="下一页">›</button>' +
+            "</div>" +
+            '<div class="leader-panel-tip" id="leader-panel-qr-tip">💡 用手机或平板扫描下方二维码即可打开主领页并载入数据。</div>' +
+            "</div>" +
+            '<button type="button" class="leader-panel-close-btn" data-leader-panel-close>返回</button>' +
+            "</div></div>";
+        document.body.appendChild(modal);
+        modal.addEventListener("click", (e) => {
+            if (e.target === modal) setLeaderPanelModalOpen(false);
+        });
+        modal.querySelector(".leader-panel-dialog")?.addEventListener("click", (e) => e.stopPropagation());
+        modal.querySelectorAll("[data-leader-panel-x],[data-leader-panel-close]").forEach((btn) => {
+            btn.addEventListener("click", () => {
+                const qrView = modal.querySelector("#leader-panel-qr-view");
+                const chooser = modal.querySelector("#leader-panel-chooser");
+                if (qrView && !qrView.hidden) {
+                    qrView.hidden = true;
+                    if (chooser) chooser.hidden = false;
+                    return;
+                }
+                setLeaderPanelModalOpen(false);
+            });
+        });
+        modal.querySelector('[data-leader-panel-mode="qr"]')?.addEventListener("click", () => showLeaderPanelQrView(modal));
+        modal.querySelector('[data-leader-panel-mode="desktop"]')?.addEventListener("click", () => {
+            setLeaderPanelModalOpen(false);
+            openLeaderWindow();
+        });
+        modal.querySelector("[data-leader-panel-prev]")?.addEventListener("click", () => {
+            if (leaderPanelQrIndex > 0) {
+                leaderPanelQrIndex--;
+                renderLeaderPanelQrPage(modal);
+            }
+        });
+        modal.querySelector("[data-leader-panel-next]")?.addEventListener("click", () => {
+            if (leaderPanelQrIndex < leaderPanelQrPages.length - 1) {
+                leaderPanelQrIndex++;
+                renderLeaderPanelQrPage(modal);
+            }
+        });
+        return modal;
+    }
+
+    function renderLeaderPanelQrPage(modal) {
+        const img = modal.querySelector("#leader-panel-qr-img");
+        const pager = modal.querySelector("#leader-panel-pager");
+        const label = modal.querySelector("#leader-panel-pager-label");
+        const prev = modal.querySelector("[data-leader-panel-prev]");
+        const next = modal.querySelector("[data-leader-panel-next]");
+        const page = leaderPanelQrPages[leaderPanelQrIndex];
+        if (!page) return;
+        setLeaderQrImageSrc(img, page.url);
+        if (pager) pager.hidden = leaderPanelQrPages.length <= 1;
+        if (label) label.textContent = `第 ${page.page} / ${page.total} 个码`;
+        if (prev) prev.disabled = leaderPanelQrIndex <= 0;
+        if (next) next.disabled = leaderPanelQrIndex >= leaderPanelQrPages.length - 1;
+        const tipEl = modal.querySelector("#leader-panel-qr-tip");
+        if (tipEl) {
+            if (leaderPanelQrPages.length > 1) {
+                tipEl.innerHTML =
+                    "💡 <b>为何有多个码？</b>歌单与歌词较多时，一个二维码装不下，会拆成 " +
+                    page.total +
+                    " 个。<br><b>如何依次扫描：</b>① 先扫当前这个码（第 " +
+                    page.page +
+                    " 个）→ 手机会打开主领页并暂存；② 在本窗口点 <b>›</b> 切到下一个码；③ 再扫下一个，重复直到扫完第 " +
+                    page.total +
+                    " 个。全部扫完后歌单与编辑内容才会完整载入。";
+            } else {
+                tipEl.textContent = "💡 用手机或平板扫描下方二维码，即可打开主领页并载入歌单、歌词、备注与编排。";
+            }
+        }
+    }
+
+    function showLeaderPanelQrView(modal) {
+        leaderPanelQrPages = buildLeaderUnifiedQrPages();
+        leaderPanelQrIndex = 0;
+        if (!leaderPanelQrPages.length || !leaderPanelQrPages[0].url) {
+            showToast("无法生成二维码，请减少歌词或诗歌数量", $("open-leader-btn"));
+            return;
+        }
+        const chooser = modal.querySelector("#leader-panel-chooser");
+        const qrView = modal.querySelector("#leader-panel-qr-view");
+        if (chooser) chooser.hidden = true;
+        if (qrView) qrView.hidden = false;
+        renderLeaderPanelQrPage(modal);
+    }
+
+    function setLeaderPanelModalOpen(open) {
+        const modal = $("leader-panel-modal");
+        if (!modal) return;
+        modal.classList.toggle("is-open", !!open);
+        modal.style.display = open ? "flex" : "none";
+        if (!open) {
+            const chooser = modal.querySelector("#leader-panel-chooser");
+            const qrView = modal.querySelector("#leader-panel-qr-view");
+            if (chooser) chooser.hidden = false;
+            if (qrView) qrView.hidden = true;
+        }
+    }
+
+    function openLeaderPanelModal() {
+        if (isDisplay || isLeader) return;
+        const modal = ensureLeaderPanelModal();
+        setLeaderPanelModalOpen(true);
+    }
+
+    function ensureLeaderQrPopup() {
+        let popup = $("leader-qr-popup");
+        if (popup) return popup;
+        popup = document.createElement("div");
+        popup.id = "leader-qr-popup";
+        popup.innerHTML =
+            '<div class="leader-qr-popup-dialog" role="dialog" aria-modal="true">' +
+            '<button type="button" class="leader-panel-close-x" data-leader-qr-popup-x aria-label="关闭">✕</button>' +
+            '<h2 class="leader-panel-title">⇄ 传数据到平板/手机</h2>' +
+            '<div class="leader-panel-qr-wrap">' +
+            '<img id="leader-qr-popup-img" class="leader-panel-qr-img" width="200" height="200" alt="传数据二维码">' +
+            '<div class="leader-panel-pager" id="leader-qr-popup-pager" hidden>' +
+            '<button type="button" data-leader-qr-popup-prev aria-label="上一页">‹</button>' +
+            '<span id="leader-qr-popup-pager-label">第1/1页</span>' +
+            '<button type="button" data-leader-qr-popup-next aria-label="下一页">›</button>' +
+            "</div>" +
+            '<div class="leader-panel-tip" id="leader-qr-popup-tip">💡 用手机或平板扫描，可载入歌单、歌词、备注与编排。</div>' +
+            '<p class="leader-qr-popup-foot">建议截图保存此二维码，换设备或清缓存后仍可恢复</p>' +
+            "</div>" +
+            '<button type="button" class="leader-panel-close-btn" data-leader-qr-popup-close>关闭</button>' +
+            "</div>";
+        document.body.appendChild(popup);
+        popup.addEventListener("click", (e) => {
+            if (e.target === popup) setLeaderQrPopupOpen(false);
+        });
+        popup.querySelector(".leader-qr-popup-dialog")?.addEventListener("click", (e) => e.stopPropagation());
+        popup.querySelectorAll("[data-leader-qr-popup-x],[data-leader-qr-popup-close]").forEach((btn) => {
+            btn.addEventListener("click", () => setLeaderQrPopupOpen(false));
+        });
+        popup.querySelector("[data-leader-qr-popup-prev]")?.addEventListener("click", () => {
+            if (leaderQrPopupIndex > 0) {
+                leaderQrPopupIndex--;
+                renderLeaderQrPopupPage(popup);
+            }
+        });
+        popup.querySelector("[data-leader-qr-popup-next]")?.addEventListener("click", () => {
+            if (leaderQrPopupIndex < leaderQrPopupPages.length - 1) {
+                leaderQrPopupIndex++;
+                renderLeaderQrPopupPage(popup);
+            }
+        });
+        return popup;
+    }
+
+    function setLeaderQrPopupOpen(open) {
+        const popup = $("leader-qr-popup");
+        if (!popup) return;
+        popup.classList.toggle("is-open", !!open);
+        popup.style.display = open ? "flex" : "none";
+    }
+
+    function renderLeaderQrPopupPage(popup) {
+        const img = popup.querySelector("#leader-qr-popup-img");
+        const pager = popup.querySelector("#leader-qr-popup-pager");
+        const label = popup.querySelector("#leader-qr-popup-pager-label");
+        const prev = popup.querySelector("[data-leader-qr-popup-prev]");
+        const next = popup.querySelector("[data-leader-qr-popup-next]");
+        const page = leaderQrPopupPages[leaderQrPopupIndex];
+        if (!page) return;
+        setLeaderQrImageSrc(img, page.url);
+        if (pager) pager.hidden = leaderQrPopupPages.length <= 1;
+        if (label) label.textContent = `第 ${page.page} / ${page.total} 个码`;
+        if (prev) prev.disabled = leaderQrPopupIndex <= 0;
+        if (next) next.disabled = leaderQrPopupIndex >= leaderQrPopupPages.length - 1;
+        const tipEl = popup.querySelector("#leader-qr-popup-tip");
+        if (tipEl) {
+            if (leaderQrPopupPages.length > 1) {
+                tipEl.innerHTML =
+                    "💡 <b>多个码时：</b>先扫当前码（第 " +
+                    page.page +
+                    " / " +
+                    page.total +
+                    " 个）→ 再点 <b>›</b> 显示下一码 → 继续扫，直到扫完。手机底部会提示是否还需扫其余码。";
+            } else {
+                tipEl.textContent = "💡 用手机或平板扫描，可载入歌单、歌词、备注与编排。";
+            }
+        }
+    }
+
+    function openLeaderQrPopup() {
+        leaderQrPopupPages = buildLeaderUnifiedQrPages();
+        leaderQrPopupIndex = 0;
+        if (!leaderQrPopupPages.length || !leaderQrPopupPages[0].url) {
+            showToast("无法生成二维码，请减少歌词或诗歌数量", null);
+            return;
+        }
+        const popup = ensureLeaderQrPopup();
+        renderLeaderQrPopupPage(popup);
+        setLeaderQrPopupOpen(true);
+    }
+
+    function ensureLeaderBackupModal() {
+        let modal = $("leader-backup-modal");
+        if (modal) return modal;
+        modal = document.createElement("div");
+        modal.id = "leader-backup-modal";
+        modal.innerHTML =
+            '<div class="leader-backup-dialog" role="dialog" aria-modal="true" style="width:min(450px,92vw);">' +
+            '<button type="button" class="leader-panel-close-x" data-leader-backup-x aria-label="关闭">✕</button>' +
+            '<h2 class="leader-panel-title">📸 生成备份二维码</h2>' +
+            '<p class="leader-panel-desc">将当前所有设置打包生成专属二维码，扫描可恢复全部设置</p>' +
+            '<div class="leader-panel-qr-wrap">' +
+            '<img id="leader-backup-qr-img" class="leader-panel-qr-img" width="200" height="200" alt="备份二维码">' +
+            '<div class="leader-panel-pager" id="leader-backup-pager" hidden>' +
+            '<button type="button" data-leader-backup-prev aria-label="上一页">‹</button>' +
+            '<span id="leader-backup-pager-label">第1/1页</span>' +
+            '<button type="button" data-leader-backup-next aria-label="下一页">›</button>' +
+            "</div>" +
+            '<div class="leader-backup-warn">⚠️ 请立即截图保存此二维码！更换设备或清除浏览器数据后，可用此二维码恢复所有设置。</div>' +
+            "</div>" +
+            '<button type="button" class="leader-panel-close-btn" data-leader-backup-close>关闭</button>' +
+            "</div>";
+        document.body.appendChild(modal);
+        modal.addEventListener("click", (e) => {
+            if (e.target === modal) setLeaderBackupModalOpen(false);
+        });
+        modal.querySelector(".leader-backup-dialog")?.addEventListener("click", (e) => e.stopPropagation());
+        modal.querySelectorAll("[data-leader-backup-x],[data-leader-backup-close]").forEach((btn) => {
+            btn.addEventListener("click", () => setLeaderBackupModalOpen(false));
+        });
+        modal.querySelector("[data-leader-backup-prev]")?.addEventListener("click", () => {
+            if (leaderBackupQrIndex > 0) {
+                leaderBackupQrIndex--;
+                renderLeaderBackupQrPage(modal);
+            }
+        });
+        modal.querySelector("[data-leader-backup-next]")?.addEventListener("click", () => {
+            if (leaderBackupQrIndex < leaderBackupQrPages.length - 1) {
+                leaderBackupQrIndex++;
+                renderLeaderBackupQrPage(modal);
+            }
+        });
+        return modal;
+    }
+
+    let leaderBackupQrPages = [];
+    let leaderBackupQrIndex = 0;
+
+    function setLeaderBackupModalOpen(open) {
+        const modal = $("leader-backup-modal");
+        if (!modal) return;
+        modal.classList.toggle("is-open", !!open);
+        modal.style.display = open ? "flex" : "none";
+    }
+
+    function renderLeaderBackupQrPage(modal) {
+        const img = modal.querySelector("#leader-backup-qr-img");
+        const pager = modal.querySelector("#leader-backup-pager");
+        const label = modal.querySelector("#leader-backup-pager-label");
+        const prev = modal.querySelector("[data-leader-backup-prev]");
+        const next = modal.querySelector("[data-leader-backup-next]");
+        const page = leaderBackupQrPages[leaderBackupQrIndex];
+        if (!page) return;
+        setLeaderQrImageSrc(img, page.url);
+        if (pager) pager.hidden = leaderBackupQrPages.length <= 1;
+        if (label) label.textContent = `第${page.page}/${page.total}页`;
+        if (prev) prev.disabled = leaderBackupQrIndex <= 0;
+        if (next) next.disabled = leaderBackupQrIndex >= leaderBackupQrPages.length - 1;
+    }
+
+    function openLeaderBackupModal() {
+        const modal = ensureLeaderBackupModal();
+        leaderBackupQrPages = buildLeaderUnifiedQrPages();
+        leaderBackupQrIndex = 0;
+        if (!leaderBackupQrPages.length) {
+            showToast("无法生成备份码", null);
+            return;
+        }
+        renderLeaderBackupQrPage(modal);
+        setLeaderBackupModalOpen(true);
+    }
 
     function collectLeaderShareSongsOrdered() {
         const pl = Array.isArray(state.playlist?.items) ? state.playlist.items : [];
@@ -10869,7 +11482,7 @@ ${deleteBtnHtml}
             openUrl: "",
             scanKind: built.qrText ? "too-long" : "empty",
             scanHint: built.qrText
-                ? "诗歌内容过多，链接超出扫码限制。请删减诗歌或使用「导出」分享。"
+                ? "诗歌内容过多，链接超出传数据限制。请删减诗歌或使用「导出」分享。"
                 : built.note || "无法生成"
         };
     }
@@ -11068,10 +11681,10 @@ ${deleteBtnHtml}
             modal.innerHTML = `
                 <div class="leader-qr-panel" role="dialog" aria-modal="true" aria-labelledby="leader-qr-title">
                     <button type="button" id="leader-qr-close" class="leader-qr-close" aria-label="关闭">✕</button>
-                    <h2 id="leader-qr-title" class="leader-qr-title">主领诗歌 · 扫码同步</h2>
+                    <h2 id="leader-qr-title" class="leader-qr-title">⇄ 传数据到平板/手机</h2>
                     <p id="leader-qr-pack-status" class="leader-qr-status">正在生成…</p>
                     <div id="leader-qr-img-wrap" class="leader-qr-img-wrap">
-                        <img id="leader-qr-image" width="220" height="220" alt="主领页扫码链接">
+                        <img id="leader-qr-image" width="220" height="220" alt="传数据二维码">
                     </div>
                     <div id="leader-qr-placeholder" class="leader-qr-placeholder" hidden>
                         暂无法显示链接二维码。请展开下方「配置访问地址」填写站点根路径后点「保存地址」。
@@ -11080,12 +11693,12 @@ ${deleteBtnHtml}
                     <details id="leader-qr-help" class="leader-qr-details">
                         <summary>使用说明</summary>
                         <div class="leader-qr-details-body">
-                            <p>用手机相机或微信扫上方码，在浏览器打开<b>主领视角</b>，载入歌词与主领偏好（过大时可能自动精简）。</p>
+                            <p>用手机或平板扫上方码，打开<b>主领视角</b>并载入歌单、歌词、备注与编排，便于在移动设备上继续编辑。</p>
                             <ul>
-                                <li><b>公网 https</b>：手机可与电脑不同 Wi‑Fi（如 GitHub Pages、自有域名、ngrok 等）。</li>
-                                <li><b>局域网地址</b>：手机须与电脑同一 Wi‑Fi。</li>
-                                <li>同一码可多部手机使用；数据保存在各设备本机。</li>
-                                <li>无法扫码：配置下方地址，或在主领页「诗歌」粘贴导入。</li>
+                                <li><b>多个二维码</b>：内容过多时会拆成多页（显示「第 1/3 个码」等）。请先扫第 1 个，再在本窗点 › 显示第 2 个并扫描，依此类推，直到扫完；手机会提示是否还需继续扫。</li>
+                                <li><b>公网 https</b>：平板/手机可与电脑不同 Wi‑Fi（如 GitHub Pages、自有域名、ngrok 等）。</li>
+                                <li><b>局域网地址</b>：须与电脑同一 Wi‑Fi。</li>
+                                <li>无法扫描：配置下方地址，或在主领页「诗歌」粘贴完整链接导入。</li>
                             </ul>
                         </div>
                     </details>
@@ -11158,12 +11771,12 @@ ${deleteBtnHtml}
             modal.querySelector("#leader-qr-copy-url")?.addEventListener("click", async (e) => {
                 const text = String(modal.dataset.lastOpenUrl || "").trim();
                 if (!text) {
-                    showToast("请先生成可扫码链接（填写地址并保存）", e.currentTarget);
+                    showToast("请先生成可扫描的传数据链接（填写地址并保存）", e.currentTarget);
                     return;
                 }
                 try {
                     await navigator.clipboard.writeText(text);
-                    showCornerSuccessToast("已复制扫码链接", e.currentTarget);
+                    showCornerSuccessToast("已复制传数据链接", e.currentTarget);
                 } catch (_e) {
                     showToast("复制失败", e.currentTarget);
                 }
@@ -12299,8 +12912,7 @@ ${deleteBtnHtml}
             const el = $("restore-projection-overlay");
             if (el && e.target === el) hideRestoreProjectionBanner();
         });
-        on("open-leader-btn", "click", openLeaderWindow);
-        on("leader-qr-btn", "click", openLeaderQrModal);
+        on("open-leader-btn", "click", openLeaderPanelModal);
 
         on("lyric-editor-large", "input", () => {
             if (_lyricEditorProgrammaticWrite) return;
@@ -13547,10 +14159,12 @@ ${deleteBtnHtml}
             channel.onmessage = (e) => {
                 const d = e.data;
                 if (d && d.type === "main_projection_end" && d.source === "main") {
-                    try {
-                        window.close();
-                    } catch (_e) {
-                        /* ignore */
+                    if (!d.target || d.target === "display") {
+                        try {
+                            window.close();
+                        } catch (_e) {
+                            /* ignore */
+                        }
                     }
                     return;
                 }
@@ -13563,7 +14177,7 @@ ${deleteBtnHtml}
                 }
             };
             channel.postMessage({ type: "projection_display_ready", source: "display" });
-            channel.postMessage({ type: "request_state" });
+            channel.postMessage({ type: "request_state", source: "display" });
         }
 
         window.addEventListener("storage", (e) => {
@@ -13637,6 +14251,26 @@ ${deleteBtnHtml}
         } catch (_e) {
             /* ignore */
         }
+        let leaderScanPageMeta = { page: 0, total: 0, show: false };
+        const leaderUrlDataParam = new URLSearchParams(location.search).get("data");
+        if (leaderUrlDataParam) {
+            const expandedFromUrl = parseLeaderSharePayloadFromParam(leaderUrlDataParam);
+            if (expandedFromUrl) {
+                applyLeaderSharePayloadToState(expandedFromUrl);
+                if ((expandedFromUrl.total || 1) > 1) {
+                    leaderScanPageMeta = {
+                        page: expandedFromUrl.page,
+                        total: expandedFromUrl.total,
+                        show: expandedFromUrl.page < expandedFromUrl.total
+                    };
+                }
+                try {
+                    history.replaceState(null, "", location.pathname + "?leader=1");
+                } catch (_eUrl) {
+                    /* ignore */
+                }
+            }
+        }
         {
             const pmHostLeader = $("projection-preview-monitor");
             if (pmHostLeader) pmHostLeader.style.display = "none";
@@ -13662,6 +14296,18 @@ ${deleteBtnHtml}
                 cancelAnimationFrame(projectionRaf);
                 projectionRaf = 0;
             }
+
+            /** 主领窗不响应投屏关闭指令，避免与「结束投屏」共用逻辑时被误关 */
+            window.addEventListener(
+                "message",
+                (ev) => {
+                    const d = ev && ev.data;
+                    if (d && typeof d === "object" && d.action === "close_display") {
+                        ev.stopImmediatePropagation();
+                    }
+                },
+                true
+            );
 
             let displayMode = localStorage.getItem(DISPLAY_MODE_KEY) || "scroll";
             if (displayMode === "single") displayMode = "scroll";
@@ -13876,9 +14522,26 @@ ${deleteBtnHtml}
                 '<button class="leader-mini-btn leader-mini-btn--compact-icon" data-action="leader-help" title="主领视角使用说明（与控制台使用帮助类似）"><span class="leader-btn-icon">❓</span><span class="leader-btn-label">帮助</span></button>' +
                 '<button class="leader-mini-btn leader-mini-btn--compact-icon" data-action="leader-guide" title="分步引导：同步、工具栏、翻页等"><span class="leader-btn-icon">🎯</span><span class="leader-btn-label">引导</span></button>' +
                 '</div><div class="leader-toolbar-cluster leader-toolbar-cluster--main">' +
-                '<button class="leader-mini-btn" data-mode="multi" title="分页翻页（当前页多行）"><span class="leader-btn-icon">📄</span><span class="leader-btn-label">翻页</span></button><button class="leader-mini-btn" data-mode="scroll" title="滚动"><span class="leader-btn-icon">📜</span><span class="leader-btn-label">滚动</span></button><button class="leader-mini-btn" data-mode="flow" title="流程视图"><span class="leader-btn-icon">🗂️</span><span class="leader-btn-label">流程</span></button><button class="leader-mini-btn" data-action="flow-arrange" title="编排 / 生成流程"><span class="leader-btn-icon">📐</span><span class="leader-btn-label">编排</span></button><button class="leader-mini-btn" data-action="import-pack" title="导入诗歌包（文本或完整链接）"><span class="leader-btn-icon">📥</span><span class="leader-btn-label">诗歌</span></button><button class="leader-mini-btn" data-action="leader-playlist" title="切换播放列表中的诗歌"><span class="leader-btn-icon">📋</span><span class="leader-btn-label">歌单</span></button><button class="leader-mini-btn" data-action="leader-edit-lyrics" title="编辑当前诗歌歌词（仅本机曲库与主领，不自动改投屏）"><span class="leader-btn-icon">✎</span><span class="leader-btn-label">改词</span></button><button class="leader-mini-btn" data-action="font-panel" title="字号"><span class="leader-btn-icon leader-font-aa">Aa</span><span class="leader-btn-label">字号</span></button><button class="leader-mini-btn" data-action="color-panel" title="歌词颜色（仅主领本机）"><span class="leader-btn-icon leader-color-icon" aria-hidden="true"><span class="leader-color-dot"></span></span><span class="leader-btn-label">字色</span></button><button class="leader-mini-btn" data-action="note" title="备注"><span class="leader-btn-icon">✏️</span><span class="leader-btn-label">备注</span></button><button class="leader-mini-btn leader-brush-btn" data-action="brush" title="标注"><span class="leader-btn-icon">✍️</span><span class="leader-btn-label">画笔</span><span class="leader-brush-indicator"></span></button><button class="leader-mini-btn" data-action="bg-panel" title="背景"><span class="leader-btn-icon">🎨</span><span class="leader-btn-label">背景</span></button>' +
+                '<button class="leader-mini-btn" data-mode="multi" title="分页翻页（当前页多行）"><span class="leader-btn-icon">📄</span><span class="leader-btn-label">翻页</span></button><button class="leader-mini-btn" data-mode="scroll" title="滚动"><span class="leader-btn-icon">📜</span><span class="leader-btn-label">滚动</span></button><button class="leader-mini-btn" data-mode="flow" title="流程视图"><span class="leader-btn-icon">🗂️</span><span class="leader-btn-label">流程</span></button><button class="leader-mini-btn" data-action="flow-arrange" title="编排 / 生成流程"><span class="leader-btn-icon">📐</span><span class="leader-btn-label">编排</span></button><button class="leader-mini-btn" data-action="import-pack" title="导入诗歌包（文本或完整链接）"><span class="leader-btn-icon">📥</span><span class="leader-btn-label">诗歌</span></button><button class="leader-mini-btn" data-action="leader-playlist" title="切换播放列表中的诗歌"><span class="leader-btn-icon">📋</span><span class="leader-btn-label">歌单</span></button><button class="leader-mini-btn" data-action="leader-edit-lyrics" title="编辑当前诗歌歌词（仅本机曲库与主领，不自动改投屏）"><span class="leader-btn-icon">✎</span><span class="leader-btn-label">改词</span></button><button class="leader-mini-btn" data-action="font-panel" title="字号"><span class="leader-btn-icon leader-font-aa">Aa</span><span class="leader-btn-label">字号</span></button><button class="leader-mini-btn" data-action="color-panel" title="歌词颜色（仅主领本机）"><span class="leader-btn-icon leader-color-icon" aria-hidden="true"><span class="leader-color-dot"></span></span><span class="leader-btn-label">字色</span></button><button class="leader-mini-btn" data-action="note" title="备注"><span class="leader-btn-icon">✏️</span><span class="leader-btn-label">备注</span></button><button class="leader-mini-btn leader-brush-btn" data-action="brush" title="标注"><span class="leader-btn-icon">✍️</span><span class="leader-btn-label">画笔</span><span class="leader-brush-indicator"></span></button><button class="leader-mini-btn" data-action="bg-panel" title="背景"><span class="leader-btn-icon">🎨</span><span class="leader-btn-label">背景</span></button><button type="button" class="leader-mini-btn" id="leader-save-qr-btn" data-action="leader-save-qr" title="生成备份二维码"><span class="leader-btn-icon">📸</span><span class="leader-btn-label">备份</span></button>' +
                 "</div>";
             host.appendChild(toolbar);
+            let leaderScanPageHintEl = null;
+            const updateLeaderScanPageHint = (meta) => {
+                if (!meta || !meta.total || meta.total <= 1) {
+                    if (leaderScanPageHintEl) leaderScanPageHintEl.style.display = "none";
+                    return;
+                }
+                if (!leaderScanPageHintEl) {
+                    leaderScanPageHintEl = document.createElement("div");
+                    leaderScanPageHintEl.id = "leader-scan-page-hint";
+                    document.body.appendChild(leaderScanPageHintEl);
+                }
+                leaderScanPageHintEl.textContent = meta.show
+                    ? `已扫第 ${meta.page}/${meta.total} 个码 · 请回电脑点 › 显示下一码并继续扫，扫齐 ${meta.total} 个后歌单才完整`
+                    : `已扫齐 ${meta.total} 个码 · 歌单与编辑内容已完整载入`;
+                leaderScanPageHintEl.style.display = "block";
+            };
+            if (leaderScanPageMeta.total > 1) updateLeaderScanPageHint(leaderScanPageMeta);
             const toolbarRail = document.createElement("div");
             toolbarRail.className = "leader-toolbar-rail";
             toolbarRail.innerHTML = '<button type="button" class="leader-expand-fab" aria-label="展开工具栏"><span class="leader-expand-fab-icon">∨</span></button>';
@@ -15424,6 +16087,10 @@ ${deleteBtnHtml}
                     openLeaderPlaylistSheet();
                 } else if (btn.dataset.action === "leader-edit-lyrics") {
                     openLeaderLyricEditor();
+                } else if (btn.dataset.action === "leader-show-qr") {
+                    openLeaderQrPopup();
+                } else if (btn.dataset.action === "leader-save-qr") {
+                    openLeaderBackupModal();
                 } else if (btn.dataset.bg) {
                     bgMode = btn.dataset.bg;
                     localStorage.setItem(BG_MODE_KEY, bgMode);
@@ -15525,6 +16192,7 @@ ${deleteBtnHtml}
                 '<button type="button" class="leader-gear-item" data-action="leader-guide" role="menuitem"><span class="leader-gear-icon">\u25CE</span><span class="leader-gear-label">引导</span></button>' +
                 '<button type="button" class="leader-gear-item" data-action="flow-arrange" role="menuitem"><span class="leader-gear-icon">\u2692</span><span class="leader-gear-label">编排</span></button>' +
                 '<button type="button" class="leader-gear-item" data-action="bg-panel" role="menuitem"><span class="leader-gear-icon">\u25A0</span><span class="leader-gear-label">背景</span></button>' +
+                '<button type="button" class="leader-gear-item leader-gear-item--backup" data-action="leader-save-qr" role="menuitem"><span class="leader-gear-icon">\uD83D\uDCF8</span><span class="leader-gear-label">备份</span></button>' +
                 '<button type="button" class="leader-gear-item" data-action="brush" role="menuitem"><span class="leader-gear-icon">\u270D</span><span class="leader-gear-label">画笔</span></button>' +
                 '<button type="button" class="leader-gear-item" data-action="note" role="menuitem"><span class="leader-gear-icon">\u270F</span><span class="leader-gear-label">备注</span></button>' +
                 '<label class="leader-gear-item leader-gear-item--color" title="字色" role="menuitem"><span class="leader-gear-icon">\u25CF</span><span class="leader-gear-label">字色</span><input type="color" class="leader-side-color-input" aria-label="歌词颜色"></label>' +
@@ -15540,10 +16208,17 @@ ${deleteBtnHtml}
                 '<button type="button" class="leader-gear-mode-btn" data-mode="multi" title="单页模式">单页</button>' +
                 '<button type="button" class="leader-gear-mode-btn" data-mode="scroll" title="滚动模式">滚动</button>' +
                 "</div></div>" +
-                '<button type="button" class="leader-gear-fab" title="设置" aria-label="设置" aria-expanded="false" aria-haspopup="menu">\u2699\uFE0F</button>';
+                '<div class="leader-dock-actions">' +
+                '<button type="button" class="leader-data-sync-fab" id="leader-show-qr-btn" data-action="leader-show-qr" title="把歌单与已编辑歌词打成二维码，供手机/平板扫描后继续编辑" aria-label="传数据">' +
+                '<span class="leader-data-sync-fab__icon" aria-hidden="true">⇄</span><span class="leader-data-sync-fab__label">传数据</span></button>' +
+                '<button type="button" class="leader-gear-fab" title="设置" aria-label="设置" aria-expanded="false" aria-haspopup="menu">\u2699\uFE0F</button>' +
+                "</div>";
 
             const ensureLeaderSideRail = () => {
-                const needsRebuild = leaderSideRailEl && !leaderSideRailEl.querySelector(".leader-gear-fab");
+                const needsRebuild =
+                    leaderSideRailEl &&
+                    (!leaderSideRailEl.querySelector(".leader-gear-fab") ||
+                        !leaderSideRailEl.querySelector(".leader-data-sync-fab"));
                 if (!leaderSideRailEl) {
                     leaderSideRailEl = document.createElement("div");
                     leaderSideRailEl.className = "leader-gear-dock";
@@ -15582,6 +16257,15 @@ ${deleteBtnHtml}
                 if (leaderSideRailWired || !leaderSideRailEl) return;
                 leaderSideRailWired = true;
                 leaderSideRailEl.addEventListener("click", (e) => {
+                    const syncToggle = e.target.closest(".leader-data-sync-fab");
+                    if (syncToggle) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        closeLeaderSideSettingsPanel();
+                        openLeaderQrPopup();
+                        showToolbar();
+                        return;
+                    }
                     const settingsToggle = e.target.closest(".leader-gear-fab");
                     if (settingsToggle) {
                         e.preventDefault();
@@ -15592,7 +16276,7 @@ ${deleteBtnHtml}
                     }
                     if (e.target.closest(".leader-side-color-input")) return;
                     const btn = e.target.closest("button");
-                    if (!btn || btn.classList.contains("leader-gear-fab")) return;
+                    if (!btn || btn.classList.contains("leader-gear-fab") || btn.classList.contains("leader-data-sync-fab")) return;
                     e.preventDefault();
                     e.stopPropagation();
                     handleLeaderSideRailAction(btn);
@@ -15857,7 +16541,7 @@ const linesHtml = rawLines
                 overlay.setAttribute("data-pack-import", "1");
                 overlay.innerHTML = `<div class="leader-note-pop leader-pack-import-pop" style="max-width:min(92vw,480px);text-align:left;">
                     <div style="font-weight:700;margin-bottom:8px;">导入诗歌包</div>
-                    <p style="font-size:13px;color:rgba(230,230,230,0.78);margin:0 0 10px;line-height:1.45;">方式一：粘贴以 <b>W1</b> / <b>W0</b> 开头的整段包文本（与电脑「扫码同步」生成的一致，可含主领偏好字段）。方式二：粘贴手机扫码后浏览器地址栏里的<b>完整链接</b>（须含 <code>#wp1=</code>）。</p>
+                    <p style="font-size:13px;color:rgba(230,230,230,0.78);margin:0 0 10px;line-height:1.45;">方式一：粘贴以 <b>W1</b> / <b>W0</b> 开头的整段包文本（与电脑「传数据」生成的一致，可含主领偏好字段）。方式二：粘贴手机/平板扫描后浏览器地址栏里的<b>完整链接</b>（须含 <code>#wp1=</code> 或 <code>?data=</code>）。</p>
                     <label style="font-size:12px;color:rgba(200,200,200,0.9);display:block;margin-bottom:4px;">包文本</label>
                     <textarea id="leader-pack-import-ta" rows="5" style="width:100%;box-sizing:border-box;border-radius:10px;border:1px solid rgba(255,255,255,0.15);background:#12151f;color:#eee;padding:8px;font-size:13px;" placeholder="W1..."></textarea>
                     <label style="font-size:12px;color:rgba(200,200,200,0.9);display:block;margin:12px 0 4px;">或 完整链接（可选）</label>
@@ -15928,7 +16612,7 @@ const linesHtml = rawLines
                 overlay.querySelector("[data-pack-from-url]")?.addEventListener("click", async (e) => {
                     const rawU = String(urlIn?.value || "").trim();
                     if (!rawU) {
-                        showToast("请先在「完整链接」框粘贴扫码后的网址", e.currentTarget);
+                        showToast("请先在「完整链接」框粘贴传数据后的网址", e.currentTarget);
                         return;
                     }
                     try {
@@ -16191,6 +16875,8 @@ const linesHtml = rawLines
                     const inLeaderModal =
                         e.target?.closest?.("#leader-help-modal") ||
                         e.target?.closest?.("#leader-step-guide-overlay") ||
+                        e.target?.closest?.("#leader-qr-popup") ||
+                        e.target?.closest?.("#leader-backup-modal") ||
                         e.target?.closest?.(".leader-note-pop-wrap");
                     if (!inToolbar && !inFab && !inLeaderModal && !inRail) setToolbarCollapsed(false);
                 }
@@ -16199,11 +16885,13 @@ const linesHtml = rawLines
 
             if (channel) {
                 channel.onmessage = (e) => {
-                    if (e.data?.type === "update" && e.data.payload?.pages) {
-                        if (!applyLeaderLiveUpdateFromPayload(e.data.payload)) render();
+                    const d = e.data;
+                    if (d?.type === "main_projection_end" && d.source === "main") return;
+                    if (d?.type === "update" && d.payload?.pages) {
+                        if (!applyLeaderLiveUpdateFromPayload(d.payload)) render();
                     }
                 };
-                channel.postMessage({ type: "request_state" });
+                channel.postMessage({ type: "request_state", source: "leader" });
             }
             window.addEventListener("storage", (e) => {
                 if (e.key === STORAGE.LIVE && e.newValue) {
@@ -16256,8 +16944,15 @@ const linesHtml = rawLines
             } catch (_e) {
                 /* ignore */
             }
-            globalThis.__leaderReloadAfterPackImport = () => {
+            globalThis.__leaderReloadAfterPackImport = (meta) => {
                 try {
+                    if (meta && meta.total > 1) {
+                        updateLeaderScanPageHint({
+                            page: meta.page,
+                            total: meta.total,
+                            show: !!meta.pagedIncomplete
+                        });
+                    }
                     displayMode = localStorage.getItem(DISPLAY_MODE_KEY) || "scroll";
                     if (displayMode === "single") displayMode = "scroll";
                     if (!["multi", "scroll", "flow"].includes(displayMode)) displayMode = "scroll";
@@ -16644,6 +17339,8 @@ const linesHtml = rawLines
                 const b = $(id);
                 if (b && b.tagName === "BUTTON") b.setAttribute("type", "button");
             });
+            const legacyLeaderQrBtn = $("leader-qr-btn");
+            if (legacyLeaderQrBtn) legacyLeaderQrBtn.hidden = true;
             installOpenDisplayProjectionHelp();
             bindMainMiniPreviewVideoVisibility();
             initResizable();
@@ -16680,8 +17377,10 @@ const linesHtml = rawLines
                         return;
                     }
                     if (d.type === "request_state") {
-                        noteProjectionDisplayAlive();
-                        hideRestoreProjectionBanner();
+                        if (d.source === "display") {
+                            noteProjectionDisplayAlive();
+                            hideRestoreProjectionBanner();
+                        }
                         respondCurrentState();
                         return;
                     }

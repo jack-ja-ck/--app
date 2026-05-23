@@ -3510,7 +3510,7 @@
     }
 
     /** 主领视角：首次自动分步引导完成后写入，不再自动弹出 */
-    const LEADER_ONBOARDING_LS = "worship_leader_onboarding_v1";
+    const LEADER_ONBOARDING_LS = "worship_leader_onboarding_v2";
 
     const LEADER_GUIDE_STEPS = [
         {
@@ -3519,19 +3519,19 @@
                 "电脑：点右下角「⇄ 传数据」，<b>复制链接</b>后在手机/平板浏览器打开（比扫码更稳）。也可 ⚙ → 导入诗歌包粘贴链接或 W1 包文本。"
         },
         {
-            title: "2. 改词与保存",
+            title: "2. 改词与排版",
             text:
-                "⚙ → ✎ 改词：输入会<b>自动写入本机</b>，刷新不易丢。手机/平板可点「💾 保存」留二维码，换设备或清缓存后恢复。"
+                "⚙ → ✎ 改词：粘贴或输入歌词，<b>自动写入本机</b>。段落之间用<b>空行</b>分开——<b>翻页模式</b>下每一空行即一页；<b>滚动模式</b>可连续滑读整首。行首可写【主歌】【副歌】等标记（可选）。"
         },
         {
-            title: "3. 编排与显示",
+            title: "3. 敬拜时浏览",
             text:
-                "⚙ → 📐 编排：识别段落、套模板或加重复，点「使用」按流程走。字号、背景、滚动/单页也在 ⚙ 里。"
+                "默认<b>滚动</b>：上下滑读完一首歌，继续滑或点底栏歌名进入<b>下一首</b>。若需配合投屏逐页：⚙ → <b>翻页</b>，用 ◀ ▶ 或 ← → 翻页，本首结束后在底栏切下一首。"
         },
         {
-            title: "4. 浏览与标注",
+            title: "4. 备注与保存",
             text:
-                "滚动：上下滑歌单，点底栏歌名跳转。单页：◀ ▶ 或 ← →。✏️ 备注、✍️ 画笔在 ⚙ 或底栏工具栏。"
+                "✏️ 备注、✍️ 画笔在 ⚙ 或底栏工具栏。手机/平板可点「💾 保存」留二维码，换设备或清缓存后恢复。"
         },
         {
             title: "5. 与会众投屏",
@@ -3650,16 +3650,19 @@
             "<li><b>手机/平板</b>：⚙ → 导入诗歌包，可粘贴完整链接（含 <code>?wp1=</code> / <code>#wp1=</code>）或 W1 包文本。</li>",
             "<li>「💾 保存」可生成二维码，便于换设备或清缓存后恢复。</li>",
             "</ul>",
-            "<h3>二、改词、编排与显示</h3>",
+            "<h3>二、改词与排版</h3>",
             "<ul>",
-            "<li><b>✎ 改词</b>：输入自动写入本机曲库，仅更新主领画面，<b>不会</b>直接改会众投屏。</li>",
-            "<li><b>📐 编排</b>：识别段落、套模板或加重复，点「使用」进入流程模式。</li>",
-            "<li>字号、背景、滚动/单页等在 ⚙ 菜单；底栏工具栏可展开，约 3 秒无操作收起。</li>",
+            "<li><b>✎ 改词</b>：粘贴或输入歌词，自动写入本机，<b>不会</b>直接改会众投屏。</li>",
+            "<li>段落之间用<b>空行</b>分开：<b>翻页</b>模式下每一空行即一页；<b>滚动</b>模式可连续滑读整首。</li>",
+            "<li>行首可写【主歌】【副歌】等标记（可选，便于自己阅读）。</li>",
+            "<li>字号、背景、滚动/翻页等在 ⚙ 菜单；底栏工具栏可展开，约 3 秒无操作收起。</li>",
             "</ul>",
-            "<h3>三、浏览与标注</h3>",
+            "<h3>三、敬拜时浏览</h3>",
             "<ul>",
-            "<li><b>滚动</b>：上下滑歌单，点底栏歌名跳转。<b>单页</b>：◀ ▶ 或 ← →（画笔开启时除外）。</li>",
+            "<li><b>滚动</b>（默认）：上下滑读完一首歌，继续滑或点底栏歌名进入下一首。</li>",
+            "<li><b>翻页</b>：◀ ▶ 或 ← → 逐页走（画笔开启时除外）；本首结束后在底栏切下一首。</li>",
             "<li><b>✏️ 备注</b>：保存后行末金点可查看。<b>✍️ 画笔</b>：标注后点「完成」或双击空白退出。</li>",
+            "<li><b>📐 编排</b>（可选）：设置翻页顺序；点段落后 + 可复制，完成保存后翻页时按此顺序。</li>",
             "</ul>",
             "<h3>四、与会众投屏</h3>",
             "<ul>",
@@ -5385,6 +5388,7 @@
         try {
             setStore(STORAGE.SONGS, rows);
             writeSongsBackupSnapshot(rows);
+            if (isLeader && rows.length) persistLeaderSongsEmergencyBackup();
         } catch (err) {
             if (!isStorageQuotaExceededError(err)) console.warn("saveSongs", err);
         }
@@ -10075,6 +10079,58 @@ ${deleteBtnHtml}
         return !!draft.trim() && draft !== saved;
     }
 
+    /** 主领分页/编排与显示共用：歌词来源（含未保存草稿） */
+    function getLeaderSongLyricsTextForPaging(sid) {
+        const song = sid ? state.songs.find((s) => s && String(s.id) === String(sid)) : null;
+        if (!song) return "";
+        const saved = String(song.lyrics ?? "").replace(/\r/g, "");
+        if (isLeader) {
+            try {
+                const entry = readLeaderLyricDraftMap()[String(sid)];
+                const draft = String(entry?.text ?? "");
+                if (draft.trim() && draft !== saved) return draft.replace(/\r/g, "");
+            } catch (_e) {
+                /* ignore */
+            }
+        }
+        return saved;
+    }
+
+    function getLeaderDefaultLinesPerPage() {
+        return clamp(Number(state.ui?.defaultLines) || 4, 1, 20);
+    }
+
+    function splitLeaderPagesForSongId(sid) {
+        const lyrics = getLeaderSongLyricsTextForPaging(String(sid || ""));
+        let pages = splitPages(lyrics, getLeaderDefaultLinesPerPage());
+        if (!pages.length) pages = [[""]];
+        return pages;
+    }
+
+    function leaderPagesSignature(pages) {
+        return (Array.isArray(pages) ? pages : [])
+            .map((p) => (Array.isArray(p) ? p : [String(p || "")]).join("\n"))
+            .join("\n---PAGE---\n");
+    }
+
+    function leaderWorshipFlowForSongId(sid) {
+        const song = sid ? state.songs.find((s) => s && String(s.id) === String(sid)) : null;
+        return song?.leaderWorshipFlow || null;
+    }
+
+    /** 分页后某页首行在原始歌词（含空行）中的行号，供滚动模式定位 */
+    function leaderRawLineIndexForPageStart(sid, pageIndex) {
+        const pages = splitLeaderPagesForSongId(sid);
+        const pi = clamp(Number(pageIndex) || 0, 0, Math.max(0, pages.length - 1));
+        const first = (pages[pi] || []).map((l) => String(l || "").trim()).find(Boolean);
+        if (!first) return 0;
+        const rawLines = getLeaderSongLyricsTextForPaging(String(sid || "")).replace(/\r/g, "").split("\n");
+        for (let i = 0; i < rawLines.length; i++) {
+            if (rawLines[i].trim() === first) return i;
+        }
+        return 0;
+    }
+
     function flushLeaderLyricEditorAutosave() {
         const ctx = leaderLyricEditorCtx;
         if (!ctx) return;
@@ -10896,6 +10952,56 @@ ${deleteBtnHtml}
     const LEADER_QR_PUBLIC_BASE = "https://jack-ja-ck.github.io/--app/";
     const LEADER_SCAN_ACC_KEY = "worship.leaderScanAcc.v2";
     const LEADER_LOCAL_SNAPSHOT_LS_KEY = "worship.leaderLocalSnapshot.v2";
+    /** 主领多次改词后的紧急曲库备份（独立于 LIVE，用于空白屏恢复） */
+    const LEADER_SONGS_EMERGENCY_LS = "worship.leaderSongsEmergency.v1";
+
+    function leaderHasLocalSongLibrary() {
+        if (!isLeader) return false;
+        const rows = Array.isArray(state.songs) ? state.songs : [];
+        return rows.some((s) => s && String(s.lyrics ?? "").trim());
+    }
+
+    function persistLeaderSongsEmergencyBackup() {
+        if (!isLeader) return;
+        try {
+            const { songs: ordered } = collectLeaderShareSongsOrdered();
+            if (!ordered.length) return;
+            localStorage.setItem(
+                LEADER_SONGS_EMERGENCY_LS,
+                JSON.stringify({
+                    savedAt: Date.now(),
+                    s: ordered.map(leaderSongToCollapsed),
+                    p: ordered.map((s) => String(s.id)),
+                    ci: clamp(
+                        ordered.findIndex((s) => String(s.id) === String(state.currentSongId || "")),
+                        0,
+                        Math.max(0, ordered.length - 1)
+                    )
+                })
+            );
+        } catch (_e) {
+            /* ignore */
+        }
+    }
+
+    function tryRecoverLeaderSongsEmergency(anchorEl) {
+        if (!isLeader) return false;
+        try {
+            const raw = localStorage.getItem(LEADER_SONGS_EMERGENCY_LS);
+            const collapsed = parseJSON(raw, null);
+            if (!collapsed || !Array.isArray(collapsed.s) || !collapsed.s.length) return false;
+            const ok = applyLeaderSharePayloadToState(expandLeaderSharePayload(collapsed), {
+                fromSnapshot: true,
+                anchor: anchorEl
+            });
+            if (ok && typeof globalThis.__leaderReloadAfterPackImport === "function") {
+                globalThis.__leaderReloadAfterPackImport();
+            }
+            return ok;
+        } catch (_e2) {
+            return false;
+        }
+    }
 
     function isLeaderMobileViewport() {
         return (
@@ -10994,6 +11100,7 @@ ${deleteBtnHtml}
             if (!Array.isArray(collapsed.s) || !collapsed.s.length) return;
             collapsed.savedAt = Date.now();
             localStorage.setItem(LEADER_LOCAL_SNAPSHOT_LS_KEY, JSON.stringify(collapsed));
+            persistLeaderSongsEmergencyBackup();
         } catch (_e) {
             /* ignore */
         }
@@ -11459,7 +11566,8 @@ ${deleteBtnHtml}
         };
         if (isBackup) {
             if (expanded.displayMode && ["multi", "scroll", "flow"].includes(expanded.displayMode)) {
-                applyPref("leader_display_mode", expanded.displayMode, true);
+                const dmIn = expanded.displayMode === "flow" ? "multi" : expanded.displayMode;
+                applyPref("leader_display_mode", dmIn, true);
             }
             if (expanded.bgMode) applyPref("leader_bg_mode", expanded.bgMode, true);
             if (expanded.leaderFontSize) applyPref("leader_font_size", expanded.leaderFontSize, true);
@@ -11820,7 +11928,8 @@ ${deleteBtnHtml}
         };
         let dm = get("leader_display_mode") || "scroll";
         if (dm === "single") dm = "scroll";
-        if (!["multi", "scroll", "flow"].includes(dm)) dm = "scroll";
+        if (dm === "flow") dm = "multi";
+        if (!["multi", "scroll"].includes(dm)) dm = "scroll";
         let bm = get("leader_bg_mode") || "particles";
         if (!["black", "white", "gray", "navy", "particles", "custom"].includes(bm)) bm = "particles";
         if (bm === "custom") bm = "particles";
@@ -14899,12 +15008,74 @@ ${deleteBtnHtml}
             cards.push({
                 id: uidFlowCard(),
                 type: "lyrics",
-                label: getLeaderPageSectionLabel(pgs, pi),
+                label: `第 ${pi + 1} 段 · ${getLeaderPagePreviewText(pgs, pi)}`,
                 pageIndex: pi
             });
         }
         return { version: 1, cards };
     }
+
+    function getLeaderPagePreviewText(pages, pi) {
+        const pgs = Array.isArray(pages) ? pages : [];
+        const idx = clamp(Number(pi) || 0, 0, Math.max(0, pgs.length - 1));
+        const lines = (pgs[idx] || []).map((l) => String(l || "").trim()).filter(Boolean);
+        const first = lines[0] || "";
+        if (!first) return "（空段）";
+        if (first.length <= 28) return first;
+        return first.slice(0, 26) + "…";
+    }
+
+    /** 将旧版 repeat 卡片展开为 lyrics 列表（保存/加载时统一格式） */
+    function normalizeLeaderFlowCardsToLyrics(rawCards, pages) {
+        const pgs = Array.isArray(pages) ? pages : [];
+        const out = [];
+        (Array.isArray(rawCards) ? rawCards : []).forEach((c) => {
+            if (!c || typeof c !== "object") return;
+            if (c.type === "repeat") {
+                const pi = clamp(Number(c.targetPageIndex) || 0, 0, Math.max(0, pgs.length - 1));
+                const n = clamp(Number(c.count) || 1, 1, 12);
+                const label = `第 ${pi + 1} 段 · ${getLeaderPagePreviewText(pgs, pi)}`;
+                for (let i = 0; i < n; i++) {
+                    out.push({ id: uidFlowCard(), type: "lyrics", pageIndex: pi, label });
+                }
+                return;
+            }
+            if (c.type === "lyrics" || c.pageIndex != null) {
+                const pi = clamp(Number(c.pageIndex) || 0, 0, Math.max(0, pgs.length - 1));
+                out.push({
+                    id: c.id || uidFlowCard(),
+                    type: "lyrics",
+                    pageIndex: pi,
+                    label: String(c.label || "").trim() || `第 ${pi + 1} 段 · ${getLeaderPagePreviewText(pgs, pi)}`
+                });
+            }
+        });
+        return out;
+    }
+
+    function leaderFlowPageSequence(cards, pages) {
+        return normalizeLeaderFlowCardsToLyrics(cards, pages).map((c) =>
+            clamp(Number(c.pageIndex) || 0, 0, Math.max(0, (pages || []).length - 1))
+        );
+    }
+
+    function leaderFlowDefaultPageSequence(pages) {
+        const n = Math.max(0, (pages || []).length);
+        const out = [];
+        for (let i = 0; i < n; i++) out.push(i);
+        return out;
+    }
+
+    function leaderFlowDiffersFromDefault(cards, pages) {
+        const seq = leaderFlowPageSequence(cards, pages);
+        const def = leaderFlowDefaultPageSequence(pages);
+        if (seq.length !== def.length) return true;
+        for (let i = 0; i < seq.length; i++) if (seq[i] !== def[i]) return true;
+        return false;
+    }
+
+    const LEADER_FLOW_DUP_BTN_HTML =
+        '<svg class="leader-flow-dup-svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M5 16V5a2 2 0 0 1 2-2h11"/></svg>';
 
     function worshipFlowFromPageSequence(seq, pages) {
         const pgs = Array.isArray(pages) ? pages : [];
@@ -14955,6 +15126,9 @@ ${deleteBtnHtml}
             loadState();
         } catch (_e) {
             /* ignore */
+        }
+        if (!leaderHasLocalSongLibrary()) {
+            tryRecoverLeaderSongsEmergency(null);
         }
         let leaderScanPageMeta = { page: 0, total: 0, show: false };
         const leaderUrlDataParam = new URLSearchParams(location.search).get("data");
@@ -15015,8 +15189,8 @@ ${deleteBtnHtml}
             );
 
             let displayMode = localStorage.getItem(DISPLAY_MODE_KEY) || "scroll";
-            if (displayMode === "single") displayMode = "scroll";
-            if (!["multi", "scroll", "flow"].includes(displayMode)) displayMode = "scroll";
+            if (displayMode === "single" || displayMode === "flow") displayMode = displayMode === "flow" ? "multi" : "scroll";
+            if (!["multi", "scroll"].includes(displayMode)) displayMode = "scroll";
             let bgMode = localStorage.getItem(BG_MODE_KEY) || "particles";
             if (!["black", "white", "gray", "navy", "particles", "custom"].includes(bgMode)) bgMode = "particles";
             let leaderBgCustomDataUrl = "";
@@ -15144,12 +15318,16 @@ ${deleteBtnHtml}
             let brushHudEl = null;
             const FLOW_CACHE_PREFIX = "leader_worship_flow_v1::";
             let localWorshipFlow = null;
-            let flowCursor = 0;
+            let leaderArrangeStepIx = -1;
+            let leaderBrushStorageFullWarned = false;
             let flowEditorWrap = null;
+            let flowEditorSongId = "";
+            let flowEditorReturnDisplayMode = "scroll";
             let flowCtxMenuEl = null;
             let flowLongPressTimer = 0;
             let flowLongPressCardId = null;
             let flowDragId = null;
+            let flowListPtrDrag = null;
             let lastFlowWasVerseOverlay = false;
             let leaderFontSize = localStorage.getItem(FONT_SIZE_KEY) || "5vw";
             const parsedLeaderFont = parseFloat(leaderFontSize);
@@ -15214,7 +15392,13 @@ ${deleteBtnHtml}
             host.appendChild(rightArrow);
 
             const syncLeaderSideNav = () => {
-                const hideArrows = displayMode === "scroll";
+                const sid = getLeaderActiveSongId();
+                loadLeaderFlowSnapshot(sid);
+                const hasArrange = leaderFlowPageSequence(
+                    getLeaderFlowCards(),
+                    splitLeaderPagesForSongId(sid)
+                ).length > 0;
+                const hideArrows = displayMode === "scroll" && !hasArrange;
                 leftArrow.style.display = hideArrows ? "none" : "";
                 rightArrow.style.display = hideArrows ? "none" : "";
                 host.classList.toggle("leader-show-side-arrows", !hideArrows);
@@ -15227,7 +15411,7 @@ ${deleteBtnHtml}
                 '<button class="leader-mini-btn leader-mini-btn--compact-icon" data-action="leader-help" title="主领视角使用说明（与控制台使用帮助类似）"><span class="leader-btn-icon">❓</span><span class="leader-btn-label">帮助</span></button>' +
                 '<button class="leader-mini-btn leader-mini-btn--compact-icon" data-action="leader-guide" title="分步引导：同步、工具栏、翻页等"><span class="leader-btn-icon">🎯</span><span class="leader-btn-label">引导</span></button>' +
                 '</div><div class="leader-toolbar-cluster leader-toolbar-cluster--main">' +
-                '<button class="leader-mini-btn" data-mode="multi" title="分页翻页（当前页多行）"><span class="leader-btn-icon">📄</span><span class="leader-btn-label">翻页</span></button><button class="leader-mini-btn" data-mode="scroll" title="滚动"><span class="leader-btn-icon">📜</span><span class="leader-btn-label">滚动</span></button><button class="leader-mini-btn" data-mode="flow" title="流程视图"><span class="leader-btn-icon">🗂️</span><span class="leader-btn-label">流程</span></button><button class="leader-mini-btn" data-action="flow-arrange" title="编排 / 生成流程"><span class="leader-btn-icon">📐</span><span class="leader-btn-label">编排</span></button><button class="leader-mini-btn" data-action="import-pack" title="导入诗歌包（文本或完整链接）"><span class="leader-btn-icon">📥</span><span class="leader-btn-label">诗歌</span></button><button class="leader-mini-btn" data-action="leader-playlist" title="切换播放列表中的诗歌"><span class="leader-btn-icon">📋</span><span class="leader-btn-label">歌单</span></button><button class="leader-mini-btn" data-action="leader-edit-lyrics" title="编辑当前诗歌歌词（仅本机曲库与主领，不自动改投屏）"><span class="leader-btn-icon">✎</span><span class="leader-btn-label">改词</span></button><button class="leader-mini-btn" data-action="font-panel" title="字号"><span class="leader-btn-icon leader-font-aa">Aa</span><span class="leader-btn-label">字号</span></button><button class="leader-mini-btn" data-action="color-panel" title="歌词颜色（仅主领本机）"><span class="leader-btn-icon leader-color-icon" aria-hidden="true"><span class="leader-color-dot"></span></span><span class="leader-btn-label">字色</span></button><button class="leader-mini-btn" data-action="note" title="备注"><span class="leader-btn-icon">✏️</span><span class="leader-btn-label">备注</span></button><button class="leader-mini-btn leader-brush-btn" data-action="brush" title="标注"><span class="leader-btn-icon">✍️</span><span class="leader-btn-label">画笔</span><span class="leader-brush-indicator"></span></button><button class="leader-mini-btn" data-action="bg-panel" title="背景"><span class="leader-btn-icon">🎨</span><span class="leader-btn-label">背景</span></button><button type="button" class="leader-mini-btn" id="leader-save-qr-btn" data-action="leader-save-qr" title="生成备份二维码"><span class="leader-btn-icon">📸</span><span class="leader-btn-label">备份</span></button>' +
+                '<button class="leader-mini-btn" data-mode="multi" title="分页翻页（当前页多行）"><span class="leader-btn-icon">📄</span><span class="leader-btn-label">翻页</span></button><button class="leader-mini-btn" data-mode="scroll" title="滚动"><span class="leader-btn-icon">📜</span><span class="leader-btn-label">滚动</span></button><button class="leader-mini-btn" data-action="flow-arrange" title="段落编排（翻页顺序）"><span class="leader-btn-icon">📐</span><span class="leader-btn-label">编排</span></button><button class="leader-mini-btn" data-action="import-pack" title="导入诗歌包（文本或完整链接）"><span class="leader-btn-icon">📥</span><span class="leader-btn-label">诗歌</span></button><button class="leader-mini-btn" data-action="leader-edit-lyrics" title="编辑当前诗歌歌词（仅本机曲库与主领，不自动改投屏）"><span class="leader-btn-icon">✎</span><span class="leader-btn-label">改词</span></button><button class="leader-mini-btn" data-action="font-panel" title="字号"><span class="leader-btn-icon leader-font-aa">Aa</span><span class="leader-btn-label">字号</span></button><button class="leader-mini-btn" data-action="color-panel" title="歌词颜色（仅主领本机）"><span class="leader-btn-icon leader-color-icon" aria-hidden="true"><span class="leader-color-dot"></span></span><span class="leader-btn-label">字色</span></button><button class="leader-mini-btn" data-action="note" title="备注"><span class="leader-btn-icon">✏️</span><span class="leader-btn-label">备注</span></button><button class="leader-mini-btn leader-brush-btn" data-action="brush" title="标注"><span class="leader-btn-icon">✍️</span><span class="leader-btn-label">画笔</span><span class="leader-brush-indicator"></span></button><button class="leader-mini-btn" data-action="bg-panel" title="背景"><span class="leader-btn-icon">🎨</span><span class="leader-btn-label">背景</span></button><button type="button" class="leader-mini-btn" id="leader-save-qr-btn" data-action="leader-save-qr" title="生成备份二维码"><span class="leader-btn-icon">📸</span><span class="leader-btn-label">备份</span></button>' +
                 "</div>";
             host.appendChild(toolbar);
             let leaderScanPageHintEl = null;
@@ -15518,33 +15702,48 @@ ${deleteBtnHtml}
                 host.classList.toggle("leader-note-edit-active", noteEditMode);
             };
             const getPages = () => {
-                let pages = Array.isArray(liveState?.pages) ? liveState.pages : [];
-                if (!pages.length) {
-                    const sid = String(liveState?.songId || state.currentSongId || state.songs[0]?.id || "");
-                    const song = sid ? state.songs.find((s) => s && String(s.id) === sid) : state.songs[0] || null;
-                    if (song) {
-                        const lyrics = String(song.lyrics ?? "").replace(/\r/g, "");
-                        const defaultLines = clamp(Number(state.ui?.defaultLines) || 5, 1, 12);
-                        pages = splitPages(lyrics, defaultLines);
-                        if (!pages.length) pages = [[""]];
-                        liveState = {
-                            ...(liveState && typeof liveState === "object" ? liveState : {}),
-                            version: 1,
-                            updatedAt: Date.now(),
-                            songId: String(song.id),
-                            title: String(song.title || ""),
-                            pages,
-                            pageIndex: clamp(
-                                Number(liveState?.pageIndex ?? state.currentPage ?? 0),
-                                0,
-                                Math.max(0, pages.length - 1)
-                            )
-                        };
-                        if (typeof globalThis !== "undefined") globalThis.worshipLiveState = liveState;
-                    }
+                const sid = String(getLeaderActiveSongId() || liveState?.songId || state.currentSongId || state.songs[0]?.id || "");
+                const canonical = splitLeaderPagesForSongId(sid);
+                const needSync =
+                    !liveState?.pages?.length ||
+                    String(liveState.songId || "") !== sid ||
+                    leaderPagesSignature(liveState.pages) !== leaderPagesSignature(canonical);
+                if (needSync) {
+                    const song = sid ? state.songs.find((s) => s && String(s.id) === sid) : null;
+                    liveState = {
+                        ...(liveState && typeof liveState === "object" ? liveState : {}),
+                        version: 1,
+                        updatedAt: Date.now(),
+                        songId: sid,
+                        title: String(song?.title || liveState?.title || ""),
+                        fontColor: liveState?.fontColor || "#ffffff",
+                        pages: canonical,
+                        pageIndex: clamp(
+                            String(liveState?.songId || "") === sid
+                                ? Number(liveState?.pageIndex ?? state.currentPage ?? 0)
+                                : 0,
+                            0,
+                            Math.max(0, canonical.length - 1)
+                        ),
+                        worshipFlow: leaderWorshipFlowForSongId(sid)
+                    };
+                    state.currentSongId = sid;
+                    if (typeof globalThis !== "undefined") globalThis.worshipLiveState = liveState;
                 }
-                const idx = clamp(liveState?.pageIndex || 0, 0, Math.max(0, (liveState?.pages || pages).length - 1));
-                return { pages: liveState?.pages || pages, idx };
+                const pages = canonical;
+                const idx = clamp(Number(liveState?.pageIndex) || 0, 0, Math.max(0, pages.length - 1));
+                if (liveState && liveState.pageIndex !== idx) liveState.pageIndex = idx;
+                return { pages, idx, sid };
+            };
+
+            const resolveLeaderDisplayPageIndex = (pages, arrangeSeq, stepIx) => {
+                const pgs = Array.isArray(pages) ? pages : [];
+                const seq = Array.isArray(arrangeSeq) ? arrangeSeq : [];
+                if (!seq.length) {
+                    return clamp(Number(liveState?.pageIndex) || 0, 0, Math.max(0, pgs.length - 1));
+                }
+                const si = clamp(Number(stepIx) || 0, 0, seq.length - 1);
+                return clamp(Number(seq[si]) || 0, 0, Math.max(0, pgs.length - 1));
             };
             const globalIndex = (pages, pageIndex, lineIndex) => pages.slice(0, pageIndex).reduce((n, p) => n + (p || []).length, 0) + lineIndex;
             const getLeaderHeaderTitle = () => {
@@ -15560,11 +15759,12 @@ ${deleteBtnHtml}
                     const ids = songs.map((s) => String(s?.id ?? "")).join("\u0001");
                     return `pl-scroll::${ids || "empty"}`;
                 }
-                if (displayMode === "flow") {
-                    return `flow::${flowCursor}::${String(liveState?.title || "")}`;
-                }
+                const sid = getLeaderActiveSongId();
+                loadLeaderFlowSnapshot(sid);
                 const { idx } = getPages();
                 const song = String(liveState?.title || "");
+                const seq = leaderFlowPageSequence(getLeaderFlowCards(), splitLeaderPagesForSongId(sid));
+                if (seq.length && leaderArrangeStepIx >= 0) return `${song}::arr::${leaderArrangeStepIx}::${seq.length}`;
                 return `${song}::${idx}`;
             };
             const updateBrushIndicator = () => {
@@ -15583,7 +15783,10 @@ ${deleteBtnHtml}
                     try {
                         localStorage.setItem(LEADER_BRUSH_DRAWINGS_LS, JSON.stringify(pageDrawings));
                     } catch (err) {
-                        if (isStorageQuotaExceededError(err)) showToast("标注存储已满，可清除自定义背景图或浏览器数据后重试", null);
+                        if (isStorageQuotaExceededError(err) && !leaderBrushStorageFullWarned) {
+                            leaderBrushStorageFullWarned = true;
+                            showToast("画笔标注存储已满（与编排无关）；可清除标注或浏览器缓存后重试", null);
+                        }
                     }
                 }, 400);
             };
@@ -16070,118 +16273,206 @@ ${deleteBtnHtml}
                 bgPanel?.querySelectorAll("[data-bg]").forEach((btn) => btn.classList.toggle("active", btn.getAttribute("data-bg") === bgMode));
             }
 
-            const loadLeaderFlowSnapshot = () => {
-                const sid = getLeaderActiveSongId();
-                const song = sid ? state.songs.find((s) => s && String(s.id) === String(sid)) : null;
+            const resolveFlowEditorSongId = () =>
+                String(flowEditorSongId || getLeaderActiveSongId() || liveState?.songId || state.currentSongId || "");
+
+            const getPagesForSongId = (sid) => splitLeaderPagesForSongId(String(sid || ""));
+
+            const loadLeaderFlowSnapshot = (songIdOverride) => {
+                const sid = String(
+                    songIdOverride || resolveFlowEditorSongId() || liveState?.songId || state.currentSongId || ""
+                );
+                const song = sid ? state.songs.find((s) => s && String(s.id) === sid) : null;
+                const pages = getPagesForSongId(sid);
                 if (song?.leaderWorshipFlow?.cards?.length) {
-                    localWorshipFlow = song.leaderWorshipFlow;
+                    localWorshipFlow = {
+                        version: 1,
+                        cards: normalizeLeaderFlowCardsToLyrics(song.leaderWorshipFlow.cards, pages)
+                    };
                     return;
                 }
-                const fromPayload = liveState?.worshipFlow;
-                if (fromPayload?.cards?.length) {
-                    localWorshipFlow = fromPayload;
+                if (liveState && String(liveState.songId || "") === sid && liveState.worshipFlow?.cards?.length) {
+                    localWorshipFlow = {
+                        version: 1,
+                        cards: normalizeLeaderFlowCardsToLyrics(liveState.worshipFlow.cards, pages)
+                    };
                     return;
                 }
-                const key = FLOW_CACHE_PREFIX + encodeURIComponent(String(liveState?.title || song?.title || ""));
+                const key = FLOW_CACHE_PREFIX + encodeURIComponent(sid || String(song?.title || liveState?.title || ""));
                 const cached = parseJSON(localStorage.getItem(key) || "", null);
-                if (cached?.cards?.length) localWorshipFlow = cached;
-                else localWorshipFlow = null;
+                if (cached?.cards?.length) {
+                    localWorshipFlow = { version: 1, cards: normalizeLeaderFlowCardsToLyrics(cached.cards, pages) };
+                } else {
+                    localWorshipFlow = null;
+                }
             };
 
-            const persistLeaderFlowLocal = (flow) => {
-                const key = FLOW_CACHE_PREFIX + encodeURIComponent(String(liveState?.title || ""));
+            const persistLeaderFlowLocal = (flow, sid) => {
+                const key = FLOW_CACHE_PREFIX + encodeURIComponent(String(sid || liveState?.title || ""));
                 try {
                     localStorage.setItem(key, JSON.stringify(flow));
-                } catch (_) {}
+                    return true;
+                } catch (err) {
+                    if (isStorageQuotaExceededError(err)) return false;
+                    return false;
+                }
             };
 
-            const saveLeaderFlowToMain = (flow) => {
-                localWorshipFlow = flow;
-                persistLeaderFlowLocal(flow);
-                const sid = getLeaderActiveSongId();
-                const song = sid ? state.songs.find((s) => s && String(s.id) === String(sid)) : null;
+            const saveLeaderFlowToMain = (flow, songIdOverride) => {
+                const sid = String(songIdOverride || resolveFlowEditorSongId() || "");
+                const pages = getPagesForSongId(sid);
+                const normalized = {
+                    version: 1,
+                    cards: normalizeLeaderFlowCardsToLyrics(flow?.cards || [], pages),
+                    pageSig: leaderPagesSignature(pages)
+                };
+                localWorshipFlow = normalized;
+                const flowCached = persistLeaderFlowLocal(normalized, sid);
+                const song = sid ? state.songs.find((s) => s && String(s.id) === sid) : null;
                 if (song) {
-                    song.leaderWorshipFlow = flow;
+                    song.leaderWorshipFlow = normalized;
                     try {
                         saveSongs();
                     } catch (_e) {
                         /* ignore */
                     }
                 }
-                if (liveState) liveState.worshipFlow = flow;
-                if (channel) channel.postMessage({ type: "leader_flow_save", songId: liveState?.songId || sid || "", flow });
-            };
-
-            const getLeaderFlowCards = () => (localWorshipFlow?.cards && Array.isArray(localWorshipFlow.cards) ? localWorshipFlow.cards : []);
-
-            const clampFlowCursor = () => {
-                const n = getLeaderFlowCards().length;
-                flowCursor = clamp(flowCursor, 0, Math.max(0, n - 1));
-            };
-
-            const syncFlowCursorFromLivePage = () => {
-                const { pages, idx } = getPages();
-                if (!pages.length) return;
-                const cards = getLeaderFlowCards();
-                if (!cards.length) {
-                    flowCursor = 0;
-                    return;
-                }
-                let found = -1;
-                for (let i = 0; i < cards.length; i++) {
-                    const c = cards[i];
-                    if (c.type === "lyrics" && Number(c.pageIndex) === idx) {
-                        found = i;
-                        break;
+                if (liveState && String(liveState.songId || "") === sid) {
+                    liveState.worshipFlow = normalized;
+                    try {
+                        setStore(STORAGE.LIVE, liveState);
+                    } catch (_eLive) {
+                        /* ignore */
                     }
                 }
-                flowCursor = found >= 0 ? found : 0;
+                if (channel) channel.postMessage({ type: "leader_flow_save", songId: sid, flow: normalized });
+                return { ok: true, flowCached, sid };
+            };
+
+            const getLeaderFlowCards = () =>
+                localWorshipFlow?.cards && Array.isArray(localWorshipFlow.cards) ? localWorshipFlow.cards : [];
+
+            const activateLeaderSongContext = (sid, forceRebuild = false) => {
+                const id = String(sid || getLeaderActiveSongId() || liveState?.songId || state.currentSongId || "");
+                if (!id) return "";
+                const plSongs = getLeaderPlaylistOrderedSongs();
+                const ix = plSongs.findIndex((s) => String(s.id) === id);
+                if (ix >= 0) leaderBrowseIx = ix;
+                state.currentSongId = id;
+                ensureLeaderLiveState(id, forceRebuild);
+                loadLeaderFlowSnapshot(id);
+                return id;
+            };
+
+            const getLeaderArrangeSequence = (songIdOverride) => {
+                const sid = String(songIdOverride || getLeaderActiveSongId() || liveState?.songId || "");
+                if (sid) loadLeaderFlowSnapshot(sid);
+                else loadLeaderFlowSnapshot();
+                const pages = sid ? splitLeaderPagesForSongId(sid) : getPages().pages;
+                return leaderFlowPageSequence(getLeaderFlowCards(), pages);
+            };
+
+            const gotoLeaderPageLocal = (pi) => {
+                const sid = String(getLeaderActiveSongId() || liveState?.songId || state.currentSongId || "");
+                const pages = splitLeaderPagesForSongId(sid);
+                const next = clamp(Number(pi) || 0, 0, Math.max(0, pages.length - 1));
+                const song = sid ? state.songs.find((s) => s && String(s.id) === sid) : null;
+                liveState = {
+                    ...(liveState && typeof liveState === "object" ? liveState : {}),
+                    version: 1,
+                    updatedAt: Date.now(),
+                    songId: sid,
+                    title: String(song?.title || liveState?.title || ""),
+                    fontColor: liveState?.fontColor || "#ffffff",
+                    pages,
+                    pageIndex: next,
+                    worshipFlow: leaderWorshipFlowForSongId(sid)
+                };
+                state.currentPage = next;
+                state.currentSongId = sid;
+                if (typeof globalThis !== "undefined") globalThis.worshipLiveState = liveState;
+                if (channel) channel.postMessage({ type: "goto", page: next });
+            };
+
+            const syncLeaderArrangeStepFromPage = () => {
+                const seq = getLeaderArrangeSequence();
+                if (!seq.length) {
+                    leaderArrangeStepIx = -1;
+                    return;
+                }
+                const { idx } = getPages();
+                for (let i = 0; i < seq.length; i++) {
+                    if (seq[i] === idx) {
+                        leaderArrangeStepIx = i;
+                        return;
+                    }
+                }
+                if (leaderArrangeStepIx < 0) leaderArrangeStepIx = 0;
             };
 
             const applyLeaderFlowCardToMain = (card) => {
-                if (!card) return;
-                if (card.type === "lyrics" || card.type === "repeat") {
-                    lastFlowWasVerseOverlay = false;
-                    const { pages } = getPages();
-                    const pi = clamp(
-                        card.type === "lyrics" ? Number(card.pageIndex) || 0 : Number(card.targetPageIndex) || 0,
-                        0,
-                        Math.max(0, pages.length - 1)
-                    );
-                    if (liveState?.pages) {
-                        liveState.pageIndex = pi;
-                        state.currentPage = pi;
-                        if (liveState.songId) state.currentSongId = liveState.songId;
-                    }
-                    if (channel) channel.postMessage({ type: "goto", page: pi });
-                    return;
-                }
-                if (!channel) return;
-                if (card.type === "free") {
-                    lastFlowWasVerseOverlay = true;
-                    const line = String(card.verseText || "你们要赞美耶和华！").trim() || "你们要赞美耶和华！";
-                    channel.postMessage({ type: "leader_overlay", action: "verse", lines: [line], bgType: card.bgType || "solid-black" });
-                    return;
-                }
-                if (card.type === "bridge" || card.type === "speech") {
-                    if (lastFlowWasVerseOverlay) channel.postMessage({ type: "leader_overlay", action: "clear" });
-                    lastFlowWasVerseOverlay = false;
+                if (!card || card.type !== "lyrics") return;
+                lastFlowWasVerseOverlay = false;
+                const { pages } = getPages();
+                const pi = clamp(Number(card.pageIndex) || 0, 0, Math.max(0, pages.length - 1));
+                gotoLeaderPageLocal(pi);
+            };
+
+            const leaderScrollToArrangePage = (sid, pageIndex) => {
+                const id = String(sid || getLeaderActiveSongId() || "");
+                if (!id) return;
+                const lineIx = leaderRawLineIndexForPageStart(id, pageIndex);
+                const plSongs = getLeaderPlaylistOrderedSongs();
+                let blockIx = plSongs.findIndex((s) => String(s.id) === id);
+                if (blockIx < 0) blockIx = clamp(leaderBrowseIx, 0, Math.max(0, plSongs.length - 1));
+                const block = lyricLayer.querySelector(`.leader-song-block[data-pl-ix="${blockIx}"]`);
+                const lineEl = block?.querySelector(`.leader-pl-line[data-line="${lineIx}"]`);
+                if (lineEl) {
+                    lineEl.scrollIntoView({ block: "center", behavior: "smooth" });
+                } else if (block) {
+                    block.scrollIntoView({ block: "start", behavior: "smooth" });
                 }
             };
 
-            const navigateLeaderFlow = (delta) => {
-                loadLeaderFlowSnapshot();
+            const navigateLeaderFlip = (delta) => {
                 const d = Number(delta) || 0;
-                const cards = getLeaderFlowCards();
-                if (displayMode !== "flow" || !cards.length) {
+                const sid = getLeaderActiveSongId();
+                loadLeaderFlowSnapshot(sid);
+                const pages = splitLeaderPagesForSongId(sid);
+                const seq = leaderFlowPageSequence(getLeaderFlowCards(), pages);
+                if (displayMode === "scroll") {
+                    if (seq.length) {
+                        if (leaderArrangeStepIx < 0) leaderArrangeStepIx = 0;
+                        const n = seq.length;
+                        const cur = clamp(leaderArrangeStepIx, 0, n - 1);
+                        const next = clamp(cur + d, 0, n - 1);
+                        if (next === cur && d !== 0) return;
+                        leaderArrangeStepIx = next;
+                        leaderScrollToArrangePage(sid, seq[next]);
+                        updateLeaderTopBarReadout();
+                        if (channel) channel.postMessage({ type: "goto", page: seq[next] });
+                        return;
+                    }
                     if (channel) channel.postMessage({ type: "flip", delta: d });
                     return;
                 }
-                const n = cards.length;
-                const next = clamp(flowCursor + d, 0, n - 1);
-                if (next === flowCursor && d !== 0) return;
-                flowCursor = next;
-                applyLeaderFlowCardToMain(cards[flowCursor]);
+                const { pages: livePages, idx } = getPages();
+                const liveSeq = leaderFlowPageSequence(getLeaderFlowCards(), livePages);
+                if (displayMode === "multi" && liveSeq.length) {
+                    if (leaderArrangeStepIx < 0) syncLeaderArrangeStepFromPage();
+                    const n = liveSeq.length;
+                    const cur = clamp(leaderArrangeStepIx, 0, n - 1);
+                    const next = clamp(cur + d, 0, n - 1);
+                    if (next === cur && d !== 0) return;
+                    leaderArrangeStepIx = next;
+                    gotoLeaderPageLocal(liveSeq[next]);
+                    render();
+                    return;
+                }
+                const nextIdx = clamp(idx + d, 0, Math.max(0, livePages.length - 1));
+                if (nextIdx === idx && d !== 0) return;
+                leaderArrangeStepIx = -1;
+                gotoLeaderPageLocal(nextIdx);
                 render();
             };
 
@@ -16190,8 +16481,24 @@ ${deleteBtnHtml}
                 flowCtxMenuEl = null;
             };
 
+            const teardownFlowListPointerDrag = () => {
+                if (!flowListPtrDrag) return;
+                const d = flowListPtrDrag;
+                if (d.ghost?.parentNode) d.ghost.parentNode.removeChild(d.ghost);
+                if (d.placeholder?.parentNode) d.placeholder.parentNode.removeChild(d.placeholder);
+                if (d.row) {
+                    d.row.classList.remove("leader-flow-editor-card--dragging");
+                    d.row.style.visibility = "";
+                    d.row.style.transform = "";
+                }
+                flowListPtrDrag = null;
+                flowEditorWrap?.querySelector(".leader-flow-editor-list")?.classList.remove("leader-flow-list--dragging");
+            };
+
             const closeFlowEditor = () => {
                 hideFlowCtxMenu();
+                teardownFlowListPointerDrag();
+                flowEditorSongId = "";
                 if (flowEditorWrap?.parentNode) flowEditorWrap.parentNode.removeChild(flowEditorWrap);
                 flowEditorWrap = null;
                 if (flowLongPressTimer) {
@@ -16201,23 +16508,95 @@ ${deleteBtnHtml}
                 flowLongPressCardId = null;
             };
 
+            const updateFlowEditorHeader = () => {
+                if (!flowEditorWrap) return;
+                const sid = resolveFlowEditorSongId();
+                const song = sid ? state.songs.find((s) => s && String(s.id) === sid) : null;
+                const pl = getLeaderPlaylistOrderedSongs();
+                const titleEl = flowEditorWrap.querySelector(".leader-flow-editor-title");
+                const subEl = flowEditorWrap.querySelector(".leader-flow-editor-sub");
+                const cards = getLeaderFlowCards();
+                const pages = getPagesForSongId(sid);
+                if (titleEl) titleEl.textContent = String(song?.title || "当前诗歌").trim() || "当前诗歌";
+                if (subEl) {
+                    subEl.textContent = `${cards.length} 步 · ${pages.length} 段`;
+                }
+                const songRow = flowEditorWrap.querySelector("[data-flow-song-row]");
+                const chipsEl = flowEditorWrap.querySelector("[data-flow-song-chips]");
+                if (songRow && chipsEl) {
+                    if (pl.length > 1) {
+                        songRow.style.display = "";
+                        chipsEl.innerHTML = pl
+                            .map((s) => {
+                                const id = String(s.id);
+                                const active = id === sid;
+                                return `<button type="button" class="leader-flow-song-chip${active ? " is-active" : ""}" data-flow-song-id="${escapeHtml(id)}" role="tab" aria-selected="${active ? "true" : "false"}">${escapeHtml(String(s.title || "未命名"))}</button>`;
+                            })
+                            .join("");
+                        chipsEl.querySelector(".leader-flow-song-chip.is-active")?.scrollIntoView({
+                            block: "nearest",
+                            inline: "center",
+                            behavior: "smooth"
+                        });
+                    } else {
+                        songRow.style.display = "none";
+                        chipsEl.innerHTML = "";
+                    }
+                }
+            };
+
+            const switchFlowEditorSong = (newSid) => {
+                const prev = resolveFlowEditorSongId();
+                if (prev && localWorshipFlow?.cards?.length) saveLeaderFlowToMain(localWorshipFlow, prev);
+                flowEditorSongId = String(newSid || "");
+                ensureLeaderLiveState(flowEditorSongId, true);
+                loadLeaderFlowSnapshot(flowEditorSongId);
+                updateFlowEditorHeader();
+                refreshFlowEditorList();
+            };
+
             const refreshFlowEditorList = () => {
                 if (!flowEditorWrap) return;
                 const list = flowEditorWrap.querySelector(".leader-flow-editor-list");
                 if (!list) return;
-                const { pages: flowPages } = getPages();
-                const cards = getLeaderFlowCards().filter((c) => c.type === "lyrics" || c.type === "repeat");
+                teardownFlowListPointerDrag();
+                const sid = resolveFlowEditorSongId();
+                const flowPages = getPagesForSongId(sid);
+                const cards = getLeaderFlowCards().filter((c) => c.type === "lyrics");
                 list.innerHTML =
                     cards
-                        .map((c) => {
-                            const typeLabel = c.type === "lyrics" ? "段落" : "重复";
-                            const sub =
-                                c.type === "lyrics"
-                                    ? getLeaderPageSectionLabel(flowPages, Number(c.pageIndex) || 0)
-                                    : `→ ${getLeaderPageSectionLabel(flowPages, Number(c.targetPageIndex) || 0)} ×${Math.max(1, Number(c.count) || 1)}`;
-                            return `<div class="leader-flow-editor-card" draggable="true" data-flow-card-id="${escapeHtml(c.id)}"><span class="leader-flow-drag-h">⠿</span><div class="leader-flow-editor-card-main"><div class="leader-flow-editor-card-title">${escapeHtml(c.label || "")} <span class="leader-flow-type-tag">${typeLabel}</span></div><div class="leader-flow-editor-card-sub">${escapeHtml(sub)}</div></div><div class="leader-flow-move-col"><button type="button" class="leader-flow-move-btn" data-flow-move="up" aria-label="上移">↑</button><button type="button" class="leader-flow-move-btn" data-flow-move="down" aria-label="下移">↓</button></div></div>`;
+                        .map((c, i) => {
+                            const pi = Number(c.pageIndex) || 0;
+                            const title = `第 ${i + 1} 步 · 第 ${pi + 1} 段`;
+                            const sub = getLeaderPagePreviewText(flowPages, pi);
+                            return `<div class="leader-flow-editor-card" data-flow-card-id="${escapeHtml(c.id)}"><span class="leader-flow-drag-h" aria-label="拖动排序">⠿</span><div class="leader-flow-editor-card-main"><div class="leader-flow-editor-card-title">${escapeHtml(title)}</div><div class="leader-flow-editor-card-sub">${escapeHtml(sub)}</div></div><button type="button" class="leader-flow-dup-btn" data-flow-dup aria-label="复制此段">${LEADER_FLOW_DUP_BTN_HTML}</button></div>`;
                         })
                         .join("") || "<div class='leader-flow-editor-empty'>暂无段落，请先点「识别段落」</div>";
+                updateFlowEditorHeader();
+            };
+
+            const restoreLeaderFlowToDefault = (anchor) => {
+                const sid = resolveFlowEditorSongId();
+                ensureLeaderLiveState(flowEditorSongId, true);
+                const pp = getPagesForSongId(sid);
+                if (!pp.length || (pp.length === 1 && String(pp[0]?.[0] || "") === "...")) {
+                    showToast("请先导入诗歌或在改词中填写歌词", anchor);
+                    return;
+                }
+                const curCards = getLeaderFlowCards().filter((c) => c.type === "lyrics");
+                const defFlow = generateDefaultWorshipFlowFromPages(pp);
+                const defCards = (defFlow.cards || []).filter((c) => c.type === "lyrics");
+                if (
+                    curCards.length &&
+                    !leaderFlowDiffersFromDefault(curCards, pp) &&
+                    curCards.length === defCards.length
+                ) {
+                    showToast("已是歌词默认分段，无需恢复", anchor);
+                    return;
+                }
+                saveLeaderFlowToMain(defFlow, sid);
+                refreshFlowEditorList();
+                showToast(`已恢复默认 · 共 ${defCards.length} 段（已清除重复与自定义顺序）`, anchor);
             };
 
             const moveFlowCard = (cardId, delta) => {
@@ -16232,87 +16611,84 @@ ${deleteBtnHtml}
                 refreshFlowEditorList();
             };
 
-            const openFlowTemplateModal = () => {
-                hideFlowCtxMenu();
-                let modal = flowEditorWrap.querySelector(".leader-flow-template-modal");
-                if (!modal) {
-                    modal = document.createElement("div");
-                    modal.className = "leader-flow-template-modal";
-                    modal.innerHTML =
-                        '<div class="leader-flow-template-box"><h3>常用模板</h3><p class="leader-flow-template-desc">按当前诗歌段落生成主歌/副歌顺序；可在行首写【主歌】【副歌】以便自动识别。</p><button type="button" data-tpl="verse-chorus">主歌 → 副歌</button><button type="button" data-tpl="vcv">主歌 → 副歌 → 主歌 → 副歌</button><button type="button" data-tpl="repeat-chorus">主歌 → 副歌 → 副歌（副歌重复）</button><button type="button" class="leader-flow-tpl-close" data-tpl-close>取消</button></div>';
-                    flowEditorWrap.appendChild(modal);
-                    modal.addEventListener("click", (e) => {
-                        if (e.target.closest("[data-tpl-close]") || e.target.closest(".leader-flow-tpl-close")) {
-                            modal.style.display = "none";
-                            return;
-                        }
-                        if (e.target === modal) {
-                            modal.style.display = "none";
-                            return;
-                        }
-                        const b = e.target.closest("[data-tpl]");
-                        if (!b) return;
-                        const key = b.getAttribute("data-tpl");
-                        const { pages: pp } = getPages();
-                        if (!pp.length) {
-                            showToast("当前没有歌词段落，请先在改词中用空行或【主歌】【副歌】分段", b);
-                            return;
-                        }
-                        const f = worshipFlowTemplateBuild(key, pp);
-                        if (!f.cards.length) {
-                            showToast("无法生成流程", b);
-                            return;
-                        }
-                        saveLeaderFlowToMain(f);
-                        flowCursor = 0;
-                        modal.style.display = "none";
-                        refreshFlowEditorList();
-                    });
-                }
-                modal.style.display = "flex";
+            const duplicateFlowCardAfter = (cardId) => {
+                const cards = getLeaderFlowCards();
+                const ix = cards.findIndex((c) => c.id === cardId);
+                if (ix < 0) return;
+                const src = cards[ix];
+                cards.splice(ix + 1, 0, {
+                    id: uidFlowCard(),
+                    type: "lyrics",
+                    pageIndex: Number(src.pageIndex) || 0,
+                    label: src.label
+                });
+                saveLeaderFlowToMain({ version: 1, cards });
+                refreshFlowEditorList();
             };
 
-            const openFlowCardEditor = (cardId) => {
+            const reorderFlowCards = (fromId, toId) => {
+                if (!fromId || !toId || fromId === toId) return;
                 const cards = getLeaderFlowCards();
-                const c = cards.find((x) => x.id === cardId);
-                if (!c) return;
-                hideFlowCtxMenu();
-                const sheet = document.createElement("div");
-                sheet.className = "leader-flow-sheet";
-                let inner = "";
-                if (c.type === "repeat") {
-                    const { pages: px } = getPages();
-                    const opts = px
-                        .map(
-                            (_, i) =>
-                                `<option value="${i}"${i === Number(c.targetPageIndex) ? " selected" : ""}>${escapeHtml(getLeaderPageSectionLabel(px, i))}</option>`
-                        )
-                        .join("");
-                    inner = `<label>重复哪一段</label><select class="leader-flow-sheet-inp" data-rep-page>${opts || '<option value="0">第 1 段</option>'}</select><label>重复次数</label><input type="number" class="leader-flow-sheet-inp" min="1" max="12" value="${Math.max(1, Number(c.count) || 1)}" data-rep-count /><div class="leader-flow-sheet-actions"><button type="button" data-save>保存</button><button type="button" data-cancel>取消</button></div>`;
-                } else {
-                    inner = '<p>段落卡片由「识别段落」生成，可删除后重新识别；也可添加「重复段落」指定某段再唱几遍。</p><div class="leader-flow-sheet-actions"><button type="button" data-cancel>关闭</button></div>';
+                const fromIx = cards.findIndex((c) => c.id === fromId);
+                const toIx = cards.findIndex((c) => c.id === toId);
+                if (fromIx < 0 || toIx < 0) return;
+                const [moved] = cards.splice(fromIx, 1);
+                cards.splice(toIx, 0, moved);
+                saveLeaderFlowToMain({ version: 1, cards });
+                refreshFlowEditorList();
+            };
+
+
+            const finishFlowEditor = () => {
+                const sid = resolveFlowEditorSongId();
+                const cards = getLeaderFlowCards().filter((c) => c.type === "lyrics");
+                if (!cards.length) {
+                    showToast("请先识别段落", flowEditorWrap?.querySelector("[data-flow-finish]"));
+                    return;
                 }
-                sheet.innerHTML = `<div class="leader-flow-sheet-inner"><h3>${escapeHtml(c.label || "")}</h3>${inner}</div>`;
-                flowEditorWrap.appendChild(sheet);
-                const closeSheet = () => {
-                    if (sheet.parentNode) sheet.parentNode.removeChild(sheet);
-                };
-                sheet.querySelector("[data-cancel]")?.addEventListener("click", closeSheet);
-                sheet.addEventListener("click", (e) => {
-                    if (e.target === sheet) closeSheet();
-                });
-                sheet.querySelector("[data-save]")?.addEventListener("click", () => {
-                    if (c.type === "repeat") {
-                        const { pages: px } = getPages();
-                        const p1 = parseInt(String(sheet.querySelector("[data-rep-page]")?.value || "0"), 10) || 0;
-                        c.targetPageIndex = clamp(p1, 0, Math.max(0, px.length - 1));
-                        c.label = "【重复】" + getLeaderPageSectionLabel(px, c.targetPageIndex);
-                        c.count = clamp(parseInt(String(sheet.querySelector("[data-rep-count]")?.value || "1"), 10) || 1, 1, 12);
-                    }
-                    saveLeaderFlowToMain({ version: 1, cards: [...cards] });
-                    closeSheet();
-                    refreshFlowEditorList();
-                });
+                saveLeaderFlowToMain({ version: 1, cards }, sid);
+                activateLeaderSongContext(sid, true);
+                const song = sid ? state.songs.find((s) => s && String(s.id) === sid) : null;
+                const savedFlow = song?.leaderWorshipFlow || localWorshipFlow;
+                const savedCards = (savedFlow?.cards || []).filter((c) => c.type === "lyrics");
+                if (liveState && String(liveState.songId || "") === sid && savedFlow) {
+                    liveState.worshipFlow = savedFlow;
+                }
+                leaderArrangeStepIx = 0;
+                const restoreMode = flowEditorReturnDisplayMode === "flow" ? "multi" : flowEditorReturnDisplayMode || "scroll";
+                displayMode = restoreMode;
+                try {
+                    localStorage.setItem(DISPLAY_MODE_KEY, displayMode);
+                } catch (_e) {
+                    /* ignore */
+                }
+                const arrangePages = splitLeaderPagesForSongId(sid);
+                const arrangeSeq = leaderFlowPageSequence(savedCards, arrangePages);
+                if (displayMode === "multi" && savedCards.length) {
+                    applyLeaderFlowCardToMain(savedCards[0]);
+                } else if (displayMode === "scroll" && arrangeSeq.length) {
+                    requestAnimationFrame(() => leaderScrollToArrangePage(sid, arrangeSeq[0]));
+                }
+                try {
+                    setStore(STORAGE.LIVE, liveState);
+                } catch (_eLive) {
+                    /* ignore */
+                }
+                try {
+                    persistLeaderLocalSnapshot();
+                } catch (_eSnap) {
+                    /* ignore */
+                }
+                closeFlowEditor();
+                render();
+                showToolbar();
+                const flowToast =
+                    displayMode === "multi"
+                        ? `已保存 · 共 ${savedCards.length} 步；请用 ◀ ▶ 按编排翻页`
+                        : displayMode === "scroll" && arrangeSeq.length
+                          ? `已保存 · 共 ${savedCards.length} 步；左右滑动或 ◀ ▶ 按编排跳转`
+                          : `已保存 · 共 ${savedCards.length} 步；切到「翻页」模式后按编排翻页`;
+                showToast(flowToast, leaderToastAnchor());
             };
 
             const showFlowCardContextMenu = (clientX, clientY, cardId) => {
@@ -16320,11 +16696,11 @@ ${deleteBtnHtml}
                 flowCtxMenuEl = document.createElement("div");
                 flowCtxMenuEl.className = "leader-flow-ctx-menu";
                 flowCtxMenuEl.innerHTML =
-                    '<button type="button" data-ctx="edit">编辑</button><button type="button" data-ctx="copy">复制</button><button type="button" data-ctx="delete">删除</button>';
+                    '<button type="button" data-ctx="copy">复制</button><button type="button" data-ctx="delete">删除</button>';
                 flowEditorWrap.appendChild(flowCtxMenuEl);
                 const pad = 6;
-                const w = 140;
-                const h = 110;
+                const w = 120;
+                const h = 88;
                 const left = clamp(clientX, pad, window.innerWidth - w - pad);
                 const top = clamp(clientY, pad, window.innerHeight - h - pad);
                 flowCtxMenuEl.style.left = `${left}px`;
@@ -16335,118 +16711,141 @@ ${deleteBtnHtml}
                     const act = b.getAttribute("data-ctx");
                     const cards = getLeaderFlowCards();
                     const ix = cards.findIndex((x) => x.id === cardId);
-                    if (act === "edit") {
-                        openFlowCardEditor(cardId);
-                    } else if (act === "copy" && ix >= 0) {
-                        const copy = { ...cards[ix], id: uidFlowCard() };
-                        cards.splice(ix + 1, 0, copy);
-                        saveLeaderFlowToMain({ version: 1, cards });
-                    } else if (act === "delete" && ix >= 0) {
+                    if (act === "copy" && ix >= 0) duplicateFlowCardAfter(cardId);
+                    else if (act === "delete" && ix >= 0) {
                         cards.splice(ix, 1);
                         saveLeaderFlowToMain({ version: 1, cards });
+                        refreshFlowEditorList();
                     }
                     hideFlowCtxMenu();
-                    refreshFlowEditorList();
                 };
             };
 
-            const openFlowEditor = () => {
-                hideFontPanel();
-                hideColorPanel();
-                ensureLeaderLiveState();
-                loadLeaderFlowSnapshot();
-                closeFlowEditor();
-                const existingFlowCards = getLeaderFlowCards();
-                const cleanedFlowCards = existingFlowCards.filter((c) => c.type === "lyrics" || c.type === "repeat");
-                if (cleanedFlowCards.length !== existingFlowCards.length) {
-                    saveLeaderFlowToMain({ version: 1, cards: cleanedFlowCards });
-                }
-                flowEditorWrap = document.createElement("div");
-                flowEditorWrap.className = "leader-flow-editor-overlay";
-                flowEditorWrap.innerHTML =
-                    '<div class="leader-flow-editor-panel"><div class="leader-flow-editor-head"><span>段落编排</span><button type="button" class="leader-flow-editor-x" data-flow-close>✕</button></div><div class="leader-flow-editor-toolbar"><button type="button" data-gen>识别段落</button><button type="button" data-tpl-open>常用模板</button><button type="button" data-add="repeat">＋重复段落</button></div><div class="leader-flow-editor-list" role="list"></div><p class="leader-flow-editor-tip" data-tip="desktop">拖拽排序 · 长按或右键菜单</p><p class="leader-flow-editor-tip" data-tip="handheld">点卡片编辑 · 用 ↑↓ 调整顺序</p><div class="leader-flow-editor-footer"><button type="button" class="leader-flow-editor-use-btn" data-flow-apply-use>使用编排</button></div></div>';
-                host.appendChild(flowEditorWrap);
+            const wireFlowEditorListInteractions = (list) => {
+                if (!list || list._flowListWired) return;
+                list._flowListWired = true;
 
-                flowEditorWrap.querySelector("[data-flow-close]")?.addEventListener("click", closeFlowEditor);
-                flowEditorWrap.addEventListener("click", (e) => {
-                    if (e.target === flowEditorWrap) closeFlowEditor();
-                });
-                flowEditorWrap.querySelector("[data-gen]")?.addEventListener("click", () => {
-                    ensureLeaderLiveState();
-                    const { pages: pp } = getPages();
-                    if (!pp.length) {
-                        showToast("请先导入诗歌或在改词中填写歌词", flowEditorWrap.querySelector("[data-gen]"));
-                        return;
+                const flowInsertIndexAtY = (clientY) => {
+                    const rows = [...list.querySelectorAll(".leader-flow-editor-card:not(.leader-flow-editor-card--placeholder)")].filter(
+                        (r) => r !== flowListPtrDrag?.row
+                    );
+                    for (let i = 0; i < rows.length; i++) {
+                        const rect = rows[i].getBoundingClientRect();
+                        if (clientY < rect.top + rect.height * 0.5) return i;
                     }
-                    const f = generateDefaultWorshipFlowFromPages(pp);
-                    saveLeaderFlowToMain(f);
-                    refreshFlowEditorList();
+                    return rows.length;
+                };
+
+                const movePlaceholderToIndex = (insertIx) => {
+                    if (!flowListPtrDrag?.placeholder) return;
+                    const ph = flowListPtrDrag.placeholder;
+                    const rows = [...list.querySelectorAll(".leader-flow-editor-card:not(.leader-flow-editor-card--placeholder)")].filter(
+                        (r) => r !== flowListPtrDrag.row
+                    );
+                    const ref = rows[insertIx] || null;
+                    if (ref) list.insertBefore(ph, ref);
+                    else list.appendChild(ph);
+                };
+
+                list.addEventListener("click", (e) => {
+                    const dupBtn = e.target.closest("[data-flow-dup]");
+                    if (dupBtn) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const row = dupBtn.closest("[data-flow-card-id]");
+                        const cid = row?.getAttribute("data-flow-card-id");
+                        if (cid) duplicateFlowCardAfter(cid);
+                    }
                 });
-                flowEditorWrap.querySelector("[data-tpl-open]")?.addEventListener("click", () => openFlowTemplateModal());
-                flowEditorWrap.querySelectorAll("[data-add]").forEach((btn) => {
-                    btn.addEventListener("click", () => {
-                        const kind = btn.getAttribute("data-add");
-                        const cards = getLeaderFlowCards().filter((c) => c.type === "lyrics" || c.type === "repeat");
-                        if (kind === "repeat") {
-                            const { pages: pp } = getPages();
-                            const ti = clamp(Number(liveState?.pageIndex) || 0, 0, Math.max(0, pp.length - 1));
-                            cards.push({
-                                id: uidFlowCard(),
-                                type: "repeat",
-                                label: "【重复】" + getLeaderPageSectionLabel(pp, ti),
-                                targetPageIndex: ti,
-                                count: 2
-                            });
-                            saveLeaderFlowToMain({ version: 1, cards });
-                            refreshFlowEditorList();
+
+                list.addEventListener(
+                    "pointerdown",
+                    (e) => {
+                        if (e.button !== 0 && e.pointerType === "mouse") return;
+                        if (e.target.closest("[data-flow-dup]")) return;
+                        const handle = e.target.closest(".leader-flow-drag-h");
+                        const row = e.target.closest(".leader-flow-editor-card");
+                        if (!handle || !row || !list.contains(row)) return;
+                        e.preventDefault();
+                        const rect = row.getBoundingClientRect();
+                        flowListPtrDrag = {
+                            id: row.getAttribute("data-flow-card-id"),
+                            row,
+                            pointerId: e.pointerId,
+                            offsetY: e.clientY - rect.top,
+                            startY: e.clientY,
+                            moved: false
+                        };
+                        row.setPointerCapture(e.pointerId);
+                        row.classList.add("leader-flow-editor-card--dragging");
+                    },
+                    { passive: false }
+                );
+
+                list.addEventListener(
+                    "pointermove",
+                    (e) => {
+                        if (!flowListPtrDrag || e.pointerId !== flowListPtrDrag.pointerId) return;
+                        const dy = Math.abs(e.clientY - flowListPtrDrag.startY);
+                        if (!flowListPtrDrag.moved) {
+                            if (dy < 6) return;
+                            flowListPtrDrag.moved = true;
+                            const rect = flowListPtrDrag.row.getBoundingClientRect();
+                            const ph = document.createElement("div");
+                            ph.className = "leader-flow-editor-card leader-flow-editor-card--placeholder";
+                            ph.style.height = `${rect.height}px`;
+                            flowListPtrDrag.placeholder = ph;
+                            list.insertBefore(ph, flowListPtrDrag.row);
+                            flowListPtrDrag.row.style.visibility = "hidden";
+                            const ghost = flowListPtrDrag.row.cloneNode(true);
+                            ghost.classList.add("leader-flow-editor-card--ghost");
+                            ghost.style.cssText = `position:fixed;left:${rect.left}px;width:${rect.width}px;top:${rect.top}px;z-index:100050;margin:0;pointer-events:none;transform:scale(1.02);box-shadow:0 12px 32px rgba(0,0,0,0.45);`;
+                            document.body.appendChild(ghost);
+                            flowListPtrDrag.ghost = ghost;
+                            list.classList.add("leader-flow-list--dragging");
                         }
-                    });
-                });
+                        e.preventDefault();
+                        flowListPtrDrag.ghost.style.top = `${e.clientY - flowListPtrDrag.offsetY}px`;
+                        movePlaceholderToIndex(flowInsertIndexAtY(e.clientY));
+                    },
+                    { passive: false }
+                );
 
-                flowEditorWrap.querySelector("[data-flow-apply-use]")?.addEventListener("click", () => {
-                    const cc = getLeaderFlowCards().filter((c) => c.type === "lyrics" || c.type === "repeat");
-                    if (!cc.length) {
-                        showToast("请先识别段落或添加重复", flowEditorWrap.querySelector("[data-flow-apply-use]"));
-                        return;
-                    }
-                    if (cc.length !== getLeaderFlowCards().length) saveLeaderFlowToMain({ version: 1, cards: cc });
-                    displayMode = "flow";
+                const finishPointerDrag = (e) => {
+                    if (!flowListPtrDrag || e.pointerId !== flowListPtrDrag.pointerId) return;
+                    const drag = flowListPtrDrag;
                     try {
-                        localStorage.setItem(DISPLAY_MODE_KEY, displayMode);
+                        drag.row.releasePointerCapture(e.pointerId);
                     } catch (_e) {
                         /* ignore */
                     }
-                    loadLeaderFlowSnapshot();
-                    syncFlowCursorFromLivePage();
-                    clampFlowCursor();
-                    const cardsNow = getLeaderFlowCards();
-                    if (cardsNow.length) applyLeaderFlowCardToMain(cardsNow[flowCursor]);
-                    closeFlowEditor();
-                    render();
-                    showToolbar();
-                });
-
-                const list = flowEditorWrap.querySelector(".leader-flow-editor-list");
-                list.addEventListener("click", (e) => {
-                    const moveBtn = e.target.closest("[data-flow-move]");
-                    if (moveBtn) {
-                        e.preventDefault();
-                        const row = moveBtn.closest("[data-flow-card-id]");
-                        const cid = row?.getAttribute("data-flow-card-id");
-                        if (cid) moveFlowCard(cid, moveBtn.getAttribute("data-flow-move") === "up" ? -1 : 1);
-                        return;
-                    }
-                    if (isLeaderHandheldViewport()) {
-                        const row = e.target.closest("[data-flow-card-id]");
-                        if (row && !e.target.closest(".leader-flow-move-col")) {
-                            openFlowCardEditor(row.getAttribute("data-flow-card-id"));
+                    if (drag.moved && drag.placeholder) {
+                        const cards = getLeaderFlowCards();
+                        const fromIx = cards.findIndex((c) => c.id === drag.id);
+                        const rowsBefore = [...list.querySelectorAll(".leader-flow-editor-card:not(.leader-flow-editor-card--placeholder)")].filter(
+                            (r) => r !== drag.row
+                        );
+                        let toIx = rowsBefore.indexOf(drag.placeholder);
+                        if (toIx < 0) toIx = cards.length - 1;
+                        if (fromIx >= 0 && fromIx < toIx) toIx -= 1;
+                        if (fromIx >= 0 && toIx >= 0 && fromIx !== toIx) {
+                            const [moved] = cards.splice(fromIx, 1);
+                            cards.splice(toIx, 0, moved);
+                            saveLeaderFlowToMain({ version: 1, cards });
                         }
                     }
-                });
+                    teardownFlowListPointerDrag();
+                    refreshFlowEditorList();
+                };
+
+                list.addEventListener("pointerup", finishPointerDrag);
+                list.addEventListener("pointercancel", finishPointerDrag);
+
                 list.addEventListener("dragstart", (e) => {
                     const row = e.target.closest("[data-flow-card-id]");
-                    if (!row || !list.contains(row)) return;
+                    if (!row || !list.contains(row) || e.target.closest("[data-flow-dup]")) return;
                     flowDragId = row.getAttribute("data-flow-card-id");
+                    row.setAttribute("draggable", "true");
                     if (e.dataTransfer) {
                         e.dataTransfer.effectAllowed = "move";
                         e.dataTransfer.setData("text/plain", flowDragId);
@@ -16460,16 +16859,8 @@ ${deleteBtnHtml}
                     e.preventDefault();
                     const row = e.target.closest("[data-flow-card-id]");
                     if (!row || !flowDragId) return;
-                    const toId = row.getAttribute("data-flow-card-id");
-                    const cards = getLeaderFlowCards();
-                    const fromIx = cards.findIndex((c) => c.id === flowDragId);
-                    const toIx = cards.findIndex((c) => c.id === toId);
+                    reorderFlowCards(flowDragId, row.getAttribute("data-flow-card-id"));
                     flowDragId = null;
-                    if (fromIx < 0 || toIx < 0 || fromIx === toIx) return;
-                    const [moved] = cards.splice(fromIx, 1);
-                    cards.splice(toIx, 0, moved);
-                    saveLeaderFlowToMain({ version: 1, cards });
-                    refreshFlowEditorList();
                 });
                 list.addEventListener("dragend", () => {
                     flowDragId = null;
@@ -16485,6 +16876,7 @@ ${deleteBtnHtml}
                 list.addEventListener(
                     "touchstart",
                     (e) => {
+                        if (flowListPtrDrag || e.target.closest("[data-flow-dup]") || e.target.closest(".leader-flow-drag-h")) return;
                         const row = e.target.closest("[data-flow-card-id]");
                         if (!row) return;
                         const id = row.getAttribute("data-flow-card-id");
@@ -16516,8 +16908,60 @@ ${deleteBtnHtml}
                     },
                     { passive: true }
                 );
+            };
 
+            const openFlowEditor = () => {
+                hideFontPanel();
+                hideColorPanel();
+                flowEditorReturnDisplayMode = displayMode === "flow" ? "multi" : displayMode;
+                flowEditorSongId = getLeaderActiveSongId();
+                activateLeaderSongContext(flowEditorSongId, true);
+                loadLeaderFlowSnapshot(flowEditorSongId);
+                const openSid = resolveFlowEditorSongId();
+                const openPages = getPagesForSongId(openSid);
+                const openSong = openSid ? state.songs.find((s) => s && String(s.id) === openSid) : null;
+                const savedSig = openSong?.leaderWorshipFlow?.pageSig;
+                const flowStale =
+                    savedSig &&
+                    getLeaderFlowCards().length &&
+                    savedSig !== leaderPagesSignature(openPages);
+                closeFlowEditor();
+                flowEditorWrap = document.createElement("div");
+                flowEditorWrap.className = "leader-flow-editor-overlay";
+                flowEditorWrap.innerHTML =
+                    '<div class="leader-flow-editor-panel"><div class="leader-flow-editor-head"><div class="leader-flow-editor-head-top"><div class="leader-flow-editor-head-text"><span class="leader-flow-editor-head-label">段落编排</span><strong class="leader-flow-editor-title"></strong><span class="leader-flow-editor-sub"></span></div><div class="leader-flow-editor-head-actions"><button type="button" class="leader-flow-restore-btn" data-flow-restore title="清除本首全部自定义编排，恢复为歌词默认分段">恢复默认</button><button type="button" class="leader-flow-gen-btn" data-gen>识别段落</button><button type="button" class="leader-flow-editor-x" data-flow-close>\u2715</button></div></div><div class="leader-flow-song-row" data-flow-song-row style="display:none"><div class="leader-flow-song-chips" data-flow-song-chips role="tablist"></div></div></div><div class="leader-flow-editor-list" role="list"></div><p class="leader-flow-editor-tip" data-tip="desktop">恢复默认 · 识别段落 · 按住 \u2807 拖动 · 复制图标追加 · 右键删除</p><p class="leader-flow-editor-tip" data-tip="handheld">恢复默认 · 识别段落 · 按住 \u2807 拖动 · 复制图标追加 · 长按删除</p><div class="leader-flow-editor-footer"><button type="button" class="leader-flow-editor-use-btn" data-flow-finish>完成</button></div></div>';
+                host.appendChild(flowEditorWrap);
+
+                flowEditorWrap.querySelector("[data-flow-close]")?.addEventListener("click", closeFlowEditor);
+                flowEditorWrap.querySelector("[data-flow-finish]")?.addEventListener("click", finishFlowEditor);
+                flowEditorWrap.addEventListener("click", (e) => {
+                    const chip = e.target.closest("[data-flow-song-id]");
+                    if (chip && flowEditorWrap.contains(chip)) {
+                        e.preventDefault();
+                        switchFlowEditorSong(chip.getAttribute("data-flow-song-id"));
+                    }
+                });
+                flowEditorWrap.querySelector("[data-flow-restore]")?.addEventListener("click", (e) => {
+                    restoreLeaderFlowToDefault(e.currentTarget);
+                });
+                flowEditorWrap.querySelector("[data-gen]")?.addEventListener("click", () => {
+                    ensureLeaderLiveState(flowEditorSongId, true);
+                    const pp = getPagesForSongId(flowEditorSongId);
+                    if (!pp.length) {
+                        showToast("请先导入诗歌或在改词中填写歌词", flowEditorWrap.querySelector("[data-gen]"));
+                        return;
+                    }
+                    saveLeaderFlowToMain(generateDefaultWorshipFlowFromPages(pp), flowEditorSongId);
+                    refreshFlowEditorList();
+                });
+
+                const list = flowEditorWrap.querySelector(".leader-flow-editor-list");
+                wireFlowEditorListInteractions(list);
+                updateFlowEditorHeader();
                 refreshFlowEditorList();
+                if (flowStale) {
+                    showToast("歌词分页已变化，建议重新点「识别段落」", flowEditorWrap.querySelector("[data-gen]"));
+                }
             };
 
             let leaderBrowseIx = 0;
@@ -16559,25 +17003,16 @@ ${deleteBtnHtml}
             function getLeaderActiveSongId() {
                 const songs = getLeaderPlaylistOrderedSongs();
                 if (songs.length) {
-                    if (displayMode === "scroll") {
-                        const ix = clamp(leaderBrowseIx, 0, songs.length - 1);
-                        return String(songs[ix]?.id || "");
-                    }
-                    const sid = String(liveState?.songId || state.currentSongId || "");
-                    if (sid && songs.some((s) => String(s.id) === sid)) return sid;
-                    return String(songs[0]?.id || "");
+                    const ix = clamp(leaderBrowseIx, 0, songs.length - 1);
+                    return String(songs[ix]?.id || "");
                 }
                 return String(liveState?.songId || state.currentSongId || state.songs[0]?.id || "");
             }
-
             function buildLeaderLocalLiveState(songIdOverride) {
                 const sid = String(songIdOverride || getLeaderActiveSongId() || "");
                 const song = sid ? state.songs.find((s) => s && String(s.id) === sid) : null;
                 if (!song) return null;
-                const lyrics = String(song.lyrics ?? "").replace(/\r/g, "");
-                const defaultLines = clamp(Number(state.ui?.defaultLines) || 5, 1, 12);
-                let pages = splitPages(lyrics, defaultLines);
-                if (!pages.length) pages = [[""]];
+                const pages = splitLeaderPagesForSongId(sid);
                 const prevIdx =
                     liveState && String(liveState.songId || "") === sid ? Number(liveState.pageIndex) || 0 : 0;
                 return {
@@ -16588,19 +17023,84 @@ ${deleteBtnHtml}
                     fontColor: liveState?.fontColor || "#ffffff",
                     pages,
                     pageIndex: clamp(prevIdx, 0, Math.max(0, pages.length - 1)),
-                    worshipFlow: song.leaderWorshipFlow || liveState?.worshipFlow || null
+                    worshipFlow: leaderWorshipFlowForSongId(sid)
                 };
             }
 
-            function ensureLeaderLiveState(forceSongId) {
+            function ensureLeaderLiveState(forceSongId, forceRebuild) {
                 const sid = String(forceSongId || getLeaderActiveSongId() || "");
-                if (liveState?.pages?.length && String(liveState.songId || "") === sid && sid) return liveState;
+                const song = sid ? state.songs.find((s) => s && String(s.id) === sid) : null;
+                const canonical = splitLeaderPagesForSongId(sid);
+                const sigOk =
+                    liveState?.pages?.length &&
+                    String(liveState.songId || "") === sid &&
+                    leaderPagesSignature(liveState.pages) === leaderPagesSignature(canonical);
+                if (!forceRebuild && sigOk && song) {
+                    return liveState;
+                }
                 const built = buildLeaderLocalLiveState(sid);
                 if (built) {
                     liveState = built;
                     if (typeof globalThis !== "undefined") globalThis.worshipLiveState = liveState;
+                    try {
+                        setStore(STORAGE.LIVE, liveState);
+                    } catch (_eLive) {
+                        /* ignore */
+                    }
                 }
                 return liveState;
+            }
+
+            let leaderRecoveryBannerEl = null;
+
+            function leaderLyricsAppearMissing() {
+                const pl = getLeaderPlaylistOrderedSongs();
+                if (!pl.length) return true;
+                return !pl.some((s) => String(s.lyrics ?? "").trim());
+            }
+
+            function hideLeaderRecoveryBanner() {
+                if (leaderRecoveryBannerEl) {
+                    leaderRecoveryBannerEl.remove();
+                    leaderRecoveryBannerEl = null;
+                }
+            }
+
+            function ensureLeaderRecoveryBanner() {
+                if (!leaderLyricsAppearMissing()) {
+                    hideLeaderRecoveryBanner();
+                    return;
+                }
+                if (leaderRecoveryBannerEl) return;
+                leaderRecoveryBannerEl = document.createElement("div");
+                leaderRecoveryBannerEl.className = "leader-recovery-banner";
+                leaderRecoveryBannerEl.setAttribute("role", "alert");
+                leaderRecoveryBannerEl.innerHTML =
+                    '<div class="leader-recovery-banner__inner">' +
+                    "<strong>歌词未显示</strong>" +
+                    "<span>本机数据可能未同步完成，可尝试恢复。</span>" +
+                    '<div class="leader-recovery-banner__actions">' +
+                    '<button type="button" class="leader-recovery-btn" data-leader-recover-emergency>从本机恢复</button>' +
+                    '<button type="button" class="leader-recovery-btn leader-recovery-btn--ghost" data-leader-recover-import>导入诗歌包</button>' +
+                    '<button type="button" class="leader-recovery-btn leader-recovery-btn--ghost" data-leader-recover-reload>刷新页面</button>' +
+                    "</div></div>";
+                leaderRecoveryBannerEl.querySelector("[data-leader-recover-emergency]")?.addEventListener("click", (e) => {
+                    if (tryRecoverLeaderSongsEmergency(e.currentTarget)) {
+                        ensureLeaderLiveState(undefined, true);
+                        hideLeaderRecoveryBanner();
+                        render();
+                        showToast("已从本机备份恢复", e.currentTarget);
+                    } else {
+                        showToast("暂无可用备份，请用「导入诗歌包」粘贴链接", e.currentTarget);
+                    }
+                });
+                leaderRecoveryBannerEl.querySelector("[data-leader-recover-import]")?.addEventListener("click", () => {
+                    openLeaderSongPackImportUI();
+                });
+                leaderRecoveryBannerEl.querySelector("[data-leader-recover-reload]")?.addEventListener("click", () => {
+                    location.reload();
+                });
+                host.appendChild(leaderRecoveryBannerEl);
             }
 
             const syncLeaderHandheldChrome = () => {
@@ -16635,7 +17135,20 @@ ${deleteBtnHtml}
                 const tit = lyricLayer.querySelector(".leader-top-bar-title");
                 const prog = lyricLayer.querySelector(".leader-top-bar-progress");
                 if (tit) tit.textContent = String(songs[ix]?.title || getLeaderHeaderTitle()).trim() || "当前诗歌";
-                if (prog) prog.textContent = `第 ${ix + 1} 首 / 共 ${Math.max(1, songs.length)} 首`;
+                if (prog) {
+                    const sid = String(songs[ix]?.id || getLeaderActiveSongId() || "");
+                    loadLeaderFlowSnapshot(sid);
+                    const arrangeSeq = leaderFlowPageSequence(
+                        getLeaderFlowCards(),
+                        splitLeaderPagesForSongId(sid)
+                    );
+                    if (displayMode === "scroll" && arrangeSeq.length) {
+                        const stepIx = clamp(leaderArrangeStepIx, 0, arrangeSeq.length - 1);
+                        prog.textContent = `第 ${stepIx + 1} 步 / 共 ${arrangeSeq.length} 步`;
+                    } else {
+                        prog.textContent = `第 ${ix + 1} 首 / 共 ${Math.max(1, songs.length)} 首`;
+                    }
+                }
             };
 
             const updateBottomRailHighlight = () => {
@@ -16660,22 +17173,63 @@ ${deleteBtnHtml}
 
             const leaderToastAnchor = () => leaderSideRailEl || leaderBottomRailEl || null;
 
-            const renderBottomRailChips = (songs) => {
+            const buildLeaderPageProgressHtml = (current, total) => {
+                const n = Math.max(1, Number(total) || 1);
+                const cur = clamp(Number(current) || 0, 0, n - 1);
+                const segs = [];
+                for (let i = 0; i < n; i++) {
+                    let cls = "leader-page-seg";
+                    if (i < cur) cls += " is-done";
+                    else if (i === cur) cls += " is-current";
+                    segs.push(`<span class="${cls}" aria-hidden="true"></span>`);
+                }
+                return `<div class="leader-page-progress-segments" role="progressbar" aria-valuemin="1" aria-valuemax="${n}" aria-valuenow="${cur + 1}" aria-label="翻页进度">${segs.join("")}</div>`;
+            };
+
+            const renderBottomRailChips = (songs, pageProgress) => {
                 const el = ensureLeaderBottomRail();
-                const track = el.querySelector(".leader-rail-scroll");
-                if (!track) return;
+                if (!el) return;
                 el.style.display = "flex";
+                const isPageMode = displayMode === "multi";
+                el.classList.toggle("leader-bottom-rail--page", isPageMode);
                 if (!songs || !songs.length) {
-                    track.innerHTML = '<span class="leader-rail-empty">暂无诗歌</span>';
+                    el.innerHTML = '<div class="leader-rail-scroll"><span class="leader-rail-empty">暂无诗歌</span></div>';
                     return;
                 }
                 const ixActive = clamp(leaderBrowseIx, 0, Math.max(0, songs.length - 1));
-                track.innerHTML = songs
+                const chipsHtml = songs
                     .map(
                         (s, i) =>
                             `<button type="button" class="leader-rail-chip${i === ixActive ? " is-active" : ""}" data-rail-ix="${i}">${escapeHtml(s.title || "未命名")}</button>`
                     )
                     .join("");
+                if (isPageMode) {
+                    const total = Math.max(1, Number(pageProgress?.total) || 1);
+                    const current = clamp(Number(pageProgress?.current) ?? 0, 0, total - 1);
+                    el.innerHTML = `<div class="leader-rail-songs">${chipsHtml}</div>${buildLeaderPageProgressHtml(current, total)}`;
+                    return;
+                }
+                const track = el.querySelector(".leader-rail-scroll") || document.createElement("div");
+                if (!el.querySelector(".leader-rail-scroll")) {
+                    el.innerHTML = "";
+                    track.className = "leader-rail-scroll";
+                    el.appendChild(track);
+                }
+                track.innerHTML = chipsHtml;
+            };
+
+            const updateLeaderPageProgress = (current, total) => {
+                if (displayMode !== "multi" || !leaderBottomRailEl) return;
+                const n = Math.max(1, Number(total) || 1);
+                const cur = clamp(Number(current) ?? 0, 0, n - 1);
+                const bar = leaderBottomRailEl.querySelector(".leader-page-progress-segments");
+                if (!bar) return;
+                bar.setAttribute("aria-valuemax", String(n));
+                bar.setAttribute("aria-valuenow", String(cur + 1));
+                bar.querySelectorAll(".leader-page-seg").forEach((seg, i) => {
+                    seg.classList.toggle("is-done", i < cur);
+                    seg.classList.toggle("is-current", i === cur);
+                });
             };
 
             const leaderPlaylistSignature = (songs) =>
@@ -16721,7 +17275,8 @@ ${deleteBtnHtml}
                     if (opts.light) {
                         leaderApplyPlaylistIndexLocal(targetIx);
                         try {
-                            liveState = buildLiveState();
+                            const sid = String(items[targetIx] || getLeaderActiveSongId() || "");
+                            liveState = buildLeaderLocalLiveState(sid) || liveState;
                             globalThis.worshipLiveState = liveState;
                         } catch (_e2) {
                             /* ignore */
@@ -16734,7 +17289,8 @@ ${deleteBtnHtml}
                     }
                     if (!opts.light) {
                         try {
-                            liveState = buildLiveState();
+                            const sid = String(items[targetIx] || getLeaderActiveSongId() || "");
+                            liveState = buildLeaderLocalLiveState(sid) || liveState;
                             globalThis.worshipLiveState = liveState;
                         } catch (_e2) {
                             /* ignore */
@@ -16782,6 +17338,7 @@ ${deleteBtnHtml}
                 if (n < 1) return;
                 const targetIx = clamp(Number(ix) || 0, 0, n - 1);
                 leaderBrowseIx = targetIx;
+                leaderArrangeStepIx = 0;
                 const sig = leaderPlaylistSignature(plSongs);
                 const canLightScroll =
                     displayMode === "scroll" &&
@@ -16793,8 +17350,9 @@ ${deleteBtnHtml}
                     leaderPendingScrollIx = null;
                     leaderSkipNextFullRender = true;
                     leaderSuppressRenderUntil = Date.now() + 180;
-                    scrollLeaderToPlaylistIndex(targetIx, "smooth");
                     const targetSong = plSongs[targetIx];
+                    if (targetSong?.id) activateLeaderSongContext(String(targetSong.id), true);
+                    scrollLeaderToPlaylistIndex(targetIx, "smooth");
                     if (targetSong?.id) lastLeaderFollowSongId = String(targetSong.id);
                     updateLeaderTopBarReadout();
                     updateBottomRailHighlight();
@@ -16804,6 +17362,15 @@ ${deleteBtnHtml}
                 }
 
                 if (displayMode === "scroll") leaderPendingScrollIx = targetIx;
+                const targetSong = plSongs[targetIx];
+                if (targetSong?.id) {
+                    const sid = activateLeaderSongContext(String(targetSong.id), true);
+                    const seq = getLeaderArrangeSequence(sid);
+                    if (seq.length) {
+                        leaderArrangeStepIx = 0;
+                        if (displayMode === "multi") gotoLeaderPageLocal(seq[0]);
+                    }
+                }
                 scheduleLeaderPlaylistSync(targetIx);
                 if (opts.render !== false) render();
                 else {
@@ -16816,8 +17383,12 @@ ${deleteBtnHtml}
 
             const applyLeaderLiveUpdateFromPayload = (payload) => {
                 if (!payload?.pages) return false;
+                if (leaderHasLocalSongLibrary()) return false;
                 liveState = payload;
-                if (liveState?.worshipFlow?.cards?.length) localWorshipFlow = liveState.worshipFlow;
+                if (liveState?.worshipFlow?.cards?.length) {
+                    const sid = String(liveState?.songId || getLeaderActiveSongId() || "");
+                    loadLeaderFlowSnapshot(sid);
+                }
                 const plSongs = getLeaderPlaylistOrderedSongs();
                 const plN = plSongs.length;
                 const sig = leaderPlaylistSignature(plSongs);
@@ -16887,22 +17458,20 @@ ${deleteBtnHtml}
                 } else if (btn.dataset.action === "leader-guide") {
                     openLeaderGuideModal(0, null);
                 } else if (btn.dataset.mode) {
-                    displayMode = btn.dataset.mode;
+                    displayMode = btn.dataset.mode === "flow" ? "multi" : btn.dataset.mode;
                     localStorage.setItem(DISPLAY_MODE_KEY, displayMode);
                     if (displayMode === "scroll") lastLeaderFollowSongId = "";
-                    if (displayMode === "flow") {
-                        loadLeaderFlowSnapshot();
-                        syncFlowCursorFromLivePage();
-                        const cc = getLeaderFlowCards();
-                        if (cc.length) applyLeaderFlowCardToMain(cc[flowCursor]);
+                    if (displayMode === "multi") {
+                        const sid = activateLeaderSongContext(getLeaderActiveSongId(), true);
+                        leaderArrangeStepIx = 0;
+                        const seq = getLeaderArrangeSequence(sid);
+                        if (seq.length) gotoLeaderPageLocal(seq[0]);
                     }
                     render();
                 } else if (btn.dataset.action === "flow-arrange") {
                     openFlowEditor();
                 } else if (btn.dataset.action === "import-pack") {
                     openLeaderSongPackImportUI();
-                } else if (btn.dataset.action === "leader-playlist") {
-                    openLeaderPlaylistSheet();
                 } else if (btn.dataset.action === "leader-edit-lyrics") {
                     openLeaderLyricEditor();
                 } else if (btn.dataset.action === "leader-show-qr") {
@@ -17033,12 +17602,11 @@ ${deleteBtnHtml}
                 '<button type="button" class="leader-side-font-btn" data-action="font-plus" title="放大">+</button>' +
                 "</div></div>" +
                 '<button type="button" class="leader-gear-item" data-action="leader-edit-lyrics" role="menuitem"><span class="leader-gear-icon">\u270E</span><span class="leader-gear-label">改词</span></button>' +
-                '<button type="button" class="leader-gear-item" data-action="leader-playlist" role="menuitem"><span class="leader-gear-icon">\u2630</span><span class="leader-gear-label">歌单</span></button>' +
                 '<div class="leader-gear-mode-row" role="group" aria-label="显示模式">' +
                 '<button type="button" class="leader-gear-mode-btn" data-mode="multi" title="单页模式">单页</button>' +
                 '<button type="button" class="leader-gear-mode-btn" data-mode="scroll" title="滚动模式">滚动</button>' +
                 "</div></div>" +
-                '<div class="leader-dock-actions" data-dock-v="7">' +
+                '<div class="leader-dock-actions" data-dock-v="8">' +
                 '<button type="button" class="leader-save-fab" data-action="leader-save-qr" title="保存播放列表歌词、改词、备注与显示设置，便于日后再次打开" aria-label="保存">' +
                 '<span class="leader-save-fab__icon" aria-hidden="true">💾</span><span class="leader-save-fab__label">保存</span></button>' +
                 '<button type="button" class="leader-data-sync-fab" id="leader-show-qr-btn" data-action="leader-show-qr" title="传输播放列表歌词与主领设置到手机/平板" aria-label="传数据">' +
@@ -17049,7 +17617,8 @@ ${deleteBtnHtml}
             const ensureLeaderSideRail = () => {
                 const needsRebuild =
                     !leaderSideRailEl ||
-                    !leaderSideRailEl.querySelector('.leader-dock-actions[data-dock-v="7"]') ||
+                    !leaderSideRailEl.querySelector('.leader-dock-actions[data-dock-v="8"]') ||
+                    !!leaderSideRailEl.querySelector('[data-action="leader-playlist"]') ||
                     !!leaderSideRailEl.querySelector(".leader-gear-item--sync") ||
                     !!leaderSideRailEl.querySelector(".leader-gear-item--backup") ||
                     !leaderSideRailEl.querySelector(".leader-data-sync-fab");
@@ -17074,11 +17643,17 @@ ${deleteBtnHtml}
                 const fromSettings = !!btn.closest(".leader-gear-menu");
                 if (fromSettings) closeLeaderSideSettingsPanel();
                 if (isMode) {
-                    const m = btn.dataset.mode;
+                    const m = btn.dataset.mode === "flow" ? "multi" : btn.dataset.mode;
                     if (m !== displayMode) {
                         displayMode = m;
                         localStorage.setItem(DISPLAY_MODE_KEY, displayMode);
                         if (m === "scroll") lastLeaderFollowSongId = "";
+                        if (m === "multi") {
+                            loadLeaderFlowSnapshot();
+                            leaderArrangeStepIx = 0;
+                            const cc = getLeaderFlowCards();
+                            if (cc.length) applyLeaderFlowCardToMain(cc[0]);
+                        }
                         render();
                     }
                     syncLeaderSideRailUI();
@@ -17136,57 +17711,6 @@ ${deleteBtnHtml}
                 colorInp?.addEventListener("click", (e) => e.stopPropagation());
             };
 
-            function renderLeaderFlowView() {
-                host.classList.toggle("leader-scroll-mode", false);
-                host.classList.add("leader-has-bottom-rail");
-                teardownLeaderScrollIO();
-                const plSongsFlow = getLeaderPlaylistOrderedSongs();
-                if (leaderBottomRailEl) leaderBottomRailEl.style.display = "flex";
-                renderBottomRailChips(plSongsFlow);
-                wireLeaderBottomRailOnce();
-                const { pages, idx } = getPages();
-                const color = getLeaderLyricColorForRender();
-                const cards = getLeaderFlowCards();
-                clampFlowCursor();
-                const card = cards[flowCursor];
-                let content = "";
-                if (!cards.length) {
-                    content = `<div class="leader-brush-mount leader-brush-mount--fit"><div class="leader-flow-empty"><p>尚无敬拜流程</p><p class="leader-flow-empty-hint">点「编排」根据段落自动生成，或使用快速模板</p><p class="leader-flow-empty-hint">当前页（传统翻页）：${idx + 1}/${Math.max(1, pages.length)}</p></div></div>`;
-                } else if (card && (card.type === "lyrics" || card.type === "repeat")) {
-                    const pi = clamp(
-                        card.type === "lyrics" ? Number(card.pageIndex) || 0 : Number(card.targetPageIndex) || 0,
-                        0,
-                        Math.max(0, pages.length - 1)
-                    );
-                    const lines = pages[pi] || [];
-                    content = `<div class="leader-brush-mount leader-brush-mount--fit"><div class="leader-current leader-multi" style="color:${color};font-size:${leaderFontSize};">${lines
-                        .map((line, i) => {
-                            const gi = globalIndex(pages, pi, i);
-                            return `<div class="leader-line" data-line="${gi}">${escapeHtml(line)}${!noteEditMode && loadNote(gi) ? `<span class="leader-note-dot" data-line="${gi}" role="button" tabindex="0" aria-label="查看备注"></span>` : ""}${noteEditMode ? `<span class="leader-plus-dot" data-line="${gi}" title="添加备注" role="button" tabindex="0" aria-label="添加备注">⊕</span>` : ""}</div>`;
-                        })
-                        .join("") || "<div class='leader-line'>...</div>"}</div></div>`;
-                } else if (card && card.type === "bridge") {
-                    content = `<div class="leader-brush-mount leader-brush-mount--fit"><div class="leader-flow-stage"><div class="leader-flow-badge">${escapeHtml(card.label)}</div><div class="leader-flow-big" style="color:${color};">${escapeHtml(card.body || "（在编排中填写过渡语）")}</div></div></div>`;
-                } else if (card && card.type === "speech") {
-                    content = `<div class="leader-brush-mount leader-brush-mount--fit"><div class="leader-flow-stage"><div class="leader-flow-badge">${escapeHtml(card.label)}</div><div class="leader-flow-big" style="color:${color};">${escapeHtml(card.body || "")}</div><div class="leader-flow-stage-note">仅主领平板 · 会众屏保持上一页歌词</div></div></div>`;
-                } else if (card && card.type === "free") {
-                    content = `<div class="leader-brush-mount leader-brush-mount--fit"><div class="leader-flow-stage"><div class="leader-flow-badge">${escapeHtml(card.label)}</div><div class="leader-flow-stage-note">会众屏：经文 / 纯色背景</div><div class="leader-flow-hint">${escapeHtml(card.leaderHint || "")}</div></div></div>`;
-                }
-                let curPlIx = plSongsFlow.findIndex((s) => String(s.id) === String(liveState?.songId || state.currentSongId || ""));
-                if (curPlIx < 0) curPlIx = 0;
-                const topBar = buildLeaderTopBarHtml(
-                    String(plSongsFlow[curPlIx]?.title || getLeaderHeaderTitle()).trim() || "当前诗歌",
-                    `第 ${curPlIx + 1} 首 / 共 ${Math.max(1, plSongsFlow.length)} 首`
-                );
-                lyricLayer.innerHTML = `${topBar}<div class="leader-main">${content}</div>`;
-                syncLeaderSideNav();
-                ensureLeaderSideRail();
-                wireLeaderSideRailOnce();
-                syncLeaderSideRailUI();
-                requestAnimationFrame(() => setupBrushCanvas());
-                updateLeaderColorBtnSwatch();
-            }
-
             /** 主歌/副歌等：行首标记行可加样式间距 */
             const isLeaderLyricSectionHeaderLine = (raw) => {
                 const t = String(raw || "").trim();
@@ -17201,7 +17725,8 @@ ${deleteBtnHtml}
             const buildLeaderPlaylistSongBlocksHtml = (songs, color) => {
                 return songs
                     .map((song, six) => {
-                        const raw = String(song.lyrics ?? "").replace(/\r/g, "");
+                        const sidForLyrics = String(song.id ?? six);
+                        const raw = getLeaderSongLyricsTextForPaging(sidForLyrics).replace(/\r/g, "");
                         const rawLines = raw.split("\n");
                         const sidForNotes = String(song.id ?? six);
 const linesHtml = rawLines
@@ -17222,53 +17747,54 @@ const linesHtml = rawLines
     })
                             .join("");
                         const sidAttr = escapeHtml(String(song.id ?? six));
-                        return `<section class="leader-song-block" id="leader-song-anchor-${six}" data-pl-ix="${six}" data-song-id="${sidAttr}"><div class="leader-song-divider" aria-hidden="true"></div><h2 class="leader-song-block-title">${escapeHtml(song.title || "未命名")}</h2><div class="leader-song-lyrics" style="color:${escapeHtml(color)}">${linesHtml || '<div class="leader-pl-line">…</div>'}</div></section>`;
+                        return `<section class="leader-song-block" id="leader-song-anchor-${six}" data-pl-ix="${six}" data-song-id="${sidAttr}"><div class="leader-song-divider" aria-hidden="true"></div><div class="leader-song-lyrics" style="color:${escapeHtml(color)}">${linesHtml || '<div class="leader-pl-line">…</div>'}</div></section>`;
                     })
                     .join("");
             };
 
             function render() {
+                ensureLeaderRecoveryBanner();
                 const keepOverlay = overlay && overlay.classList.contains("leader-note-pop-wrap");
                 if (!keepOverlay) {
                     closeOverlay();
                     closeLeaderSideSettingsPanel();
                 }
-                if (displayMode === "flow") {
-                    loadLeaderFlowSnapshot();
-                    renderLeaderFlowView();
-                    return;
-                }
+                if (displayMode === "flow") displayMode = "multi";
                 const color = getLeaderLyricColorForRender();
                 const plSongs = getLeaderPlaylistOrderedSongs();
                 host.classList.add("leader-has-bottom-rail");
                 if (leaderBottomRailEl) leaderBottomRailEl.style.display = "flex";
-                renderBottomRailChips(plSongs);
                 wireLeaderBottomRailOnce();
+                let leaderPageProgress = null;
 
                 if (displayMode === "scroll") {
                     host.classList.add("leader-scroll-mode");
                     lyricLayer.classList.add("leader-lyric-shell--playlist");
                     lyricLayer.classList.remove("leader-lyric-shell--multi");
-                    const curSid = String(liveState?.songId || state.currentSongId || "");
-                    let syncIx = plSongs.findIndex((s) => String(s.id) === curSid);
-                    if (syncIx < 0) syncIx = clamp(state.playlist?.activeIndex ?? 0, 0, Math.max(0, plSongs.length - 1));
+                    const activeSid = getLeaderActiveSongId();
+                    let syncIx = plSongs.findIndex((s) => String(s.id) === activeSid);
+                    if (syncIx < 0) syncIx = clamp(state.playlist?.activeIndex ?? leaderBrowseIx ?? 0, 0, Math.max(0, plSongs.length - 1));
+                    leaderBrowseIx = clamp(syncIx, 0, Math.max(0, plSongs.length - 1));
                     let snapToSong = false;
-                    if (curSid && curSid !== lastLeaderFollowSongId) {
-                        lastLeaderFollowSongId = curSid;
-                        leaderBrowseIx = clamp(syncIx, 0, Math.max(0, plSongs.length - 1));
+                    if (activeSid && activeSid !== lastLeaderFollowSongId) {
+                        lastLeaderFollowSongId = activeSid;
                         snapToSong = true;
-                    } else {
-                        leaderBrowseIx = clamp(leaderBrowseIx, 0, Math.max(0, plSongs.length - 1));
                     }
                     const topLeft = String(plSongs[leaderBrowseIx]?.title || getLeaderHeaderTitle()).trim() || "当前诗歌";
-                    const topBar = buildLeaderTopBarHtml(
-                        topLeft,
-                        `第 ${leaderBrowseIx + 1} 首 / 共 ${Math.max(1, plSongs.length)} 首`
+                    loadLeaderFlowSnapshot(activeSid);
+                    const scrollArrangeSeq = leaderFlowPageSequence(
+                        getLeaderFlowCards(),
+                        splitLeaderPagesForSongId(activeSid)
                     );
+                    const scrollProgress =
+                        scrollArrangeSeq.length && leaderArrangeStepIx >= 0
+                            ? `第 ${clamp(leaderArrangeStepIx, 0, scrollArrangeSeq.length - 1) + 1} 步 / 共 ${scrollArrangeSeq.length} 步`
+                            : `第 ${leaderBrowseIx + 1} 首 / 共 ${Math.max(1, plSongs.length)} 首`;
+                    const topBar = buildLeaderTopBarHtml(topLeft, scrollProgress);
                     const blocks =
                         plSongs.length > 0
                             ? buildLeaderPlaylistSongBlocksHtml(plSongs, color)
-                            : `<section class="leader-song-block" id="leader-song-anchor-0" data-pl-ix="0"><div class="leader-song-divider" aria-hidden="true"></div><h2 class="leader-song-block-title">（暂无诗歌）</h2><div class="leader-song-lyrics" style="color:${escapeHtml(color)}"><div class="leader-pl-line">请使用「诗歌」导入或等待主控台同步</div></div></section>`;
+                            : `<section class="leader-song-block" id="leader-song-anchor-0" data-pl-ix="0"><div class="leader-song-divider" aria-hidden="true"></div><div class="leader-song-lyrics" style="color:${escapeHtml(color)}"><div class="leader-pl-line">请使用「诗歌」导入或等待主控台同步</div></div></section>`;
                     const playlistMain = `<div class="leader-playlist-layout"><div class="leader-playlist-scroll-root"><div class="leader-brush-mount leader-brush-mount--scroll">${blocks}</div></div></div>`;
                     leaderLastPlaylistSig = leaderPlaylistSignature(plSongs);
                     lyricLayer.innerHTML = `${topBar}<div class="leader-main leader-main-scroll leader-main--playlist">${playlistMain}</div>`;
@@ -17295,28 +17821,58 @@ const linesHtml = rawLines
                     lyricLayer.classList.remove("leader-lyric-shell--playlist");
                     lyricLayer.classList.add("leader-lyric-shell--multi");
                     teardownLeaderScrollIO();
-                    const { pages, idx } = getPages();
-                    const lines = pages[idx] || [];
-                    const nextLine = pages[idx + 1]?.[0] || "（无）";
-                    const curSid = String(liveState?.songId || state.currentSongId || "");
-                    let syncIx = plSongs.findIndex((s) => String(s.id) === curSid);
-                    if (syncIx < 0) syncIx = 0;
+                    const activeSid = activateLeaderSongContext(getLeaderActiveSongId(), false);
+                    const { pages } = getPages();
+                    loadLeaderFlowSnapshot(activeSid);
+                    const arrangeSeq = leaderFlowPageSequence(getLeaderFlowCards(), pages);
+                    if (arrangeSeq.length && leaderArrangeStepIx < 0) {
+                        leaderArrangeStepIx = 0;
+                    }
+                    const stepIx =
+                        arrangeSeq.length && leaderArrangeStepIx >= 0
+                            ? clamp(leaderArrangeStepIx, 0, arrangeSeq.length - 1)
+                            : arrangeSeq.length
+                              ? 0
+                              : -1;
+                    const displayPi = resolveLeaderDisplayPageIndex(pages, arrangeSeq, stepIx);
+                    if (liveState && Number(liveState.pageIndex) !== displayPi) {
+                        liveState.pageIndex = displayPi;
+                        state.currentPage = displayPi;
+                    }
+                    const lines = pages[displayPi] || [];
+                    let syncIx = plSongs.findIndex((s) => String(s.id) === activeSid);
+                    if (syncIx < 0) syncIx = clamp(leaderBrowseIx, 0, Math.max(0, plSongs.length - 1));
                     leaderBrowseIx = syncIx;
-                    const topBar = buildLeaderTopBarHtml(
-                        getLeaderHeaderTitle(),
-                        `第 ${idx + 1} 页 / 共 ${Math.max(1, pages.length)} 页`
-                    );
+                    const topTitle = String(
+                        plSongs[syncIx]?.title || liveState?.title || getLeaderHeaderTitle()
+                    ).trim() || "当前诗歌";
+                    const progressText = arrangeSeq.length
+                        ? `第 ${(stepIx >= 0 ? stepIx : 0) + 1} 步 / 共 ${arrangeSeq.length} 步`
+                        : `第 ${displayPi + 1} 页 / 共 ${Math.max(1, pages.length)} 页`;
+                    const topBar = buildLeaderTopBarHtml(topTitle, progressText);
                     const pageHtml = lines
                         .map((line, i) => {
-                            const gi = globalIndex(pages, idx, i);
+                            const gi = globalIndex(pages, displayPi, i);
                             return `<div class="leader-line" data-line="${gi}">${escapeHtml(line)}${!noteEditMode && loadNote(gi) ? `<span class="leader-note-dot" data-line="${gi}" role="button" tabindex="0" aria-label="查看备注"></span>` : ""}${noteEditMode ? `<span class="leader-plus-dot" data-line="${gi}" title="添加备注" role="button" tabindex="0" aria-label="添加备注">⊕</span>` : ""}</div>`;
                         })
                         .join("") || "<div class='leader-line'>...</div>";
+                    const nextStepPi =
+                        arrangeSeq.length && stepIx >= 0 && stepIx + 1 < arrangeSeq.length
+                            ? arrangeSeq[stepIx + 1]
+                            : displayPi + 1;
+                    const nextLine = arrangeSeq.length
+                        ? pages[nextStepPi]?.[0] || "（无）"
+                        : pages[displayPi + 1]?.[0] || "（无）";
                     const content = `<div class="leader-brush-mount leader-brush-mount--fit"><div class="leader-current leader-multi" style="color:${escapeHtml(color)};font-size:${leaderFontSize};">${pageHtml}</div></div>`;
                     const nextHtml = `<div class="leader-next">下句：${escapeHtml(nextLine)}</div>`;
                     lyricLayer.innerHTML = `${topBar}<div class="leader-main leader-main--page">${content}${nextHtml}</div>`;
                     lyricLayer.style.removeProperty("--leader-song-fs-mul");
+                    leaderPageProgress = {
+                        current: stepIx >= 0 ? stepIx : displayPi,
+                        total: arrangeSeq.length ? arrangeSeq.length : Math.max(1, pages.length)
+                    };
                 }
+                renderBottomRailChips(plSongs, leaderPageProgress);
                 syncLeaderSideNav();
                 ensureLeaderSideRail();
                 wireLeaderSideRailOnce();
@@ -17344,7 +17900,7 @@ const linesHtml = rawLines
                 document.body.classList.add("leader-note-modal-open");
                 overlay.innerHTML = `<div class="leader-note-pop leader-lyric-editor-pop" style="max-width:min(94vw,560px);text-align:left;">
                     <div style="font-weight:700;margin-bottom:8px;">编辑歌词 · ${escapeHtml(song.title || "未命名")}</div>
-                    <p style="font-size:12px;color:rgba(220,220,220,0.78);margin:0 0 8px;line-height:1.45;">输入会<b>自动保存到本机</b>，刷新不易丢。段落之间用<b>空行</b>分段；滚动模式可在行首写 <b>【主歌】</b>、<b>【副歌】</b> 等标记。<b>不会</b>直接改动会众投屏。</p>
+                    <p style="font-size:12px;color:rgba(220,220,220,0.78);margin:0 0 8px;line-height:1.45;">输入会<b>自动保存到本机</b>，刷新不易丢。段落之间用<b>空行</b>分开：<b>翻页</b>时每一空行即一页；<b>滚动</b>时连续显示整首。行首可写 <b>【主歌】</b>、<b>【副歌】</b> 等标记（可选）。<b>不会</b>直接改动会众投屏。</p>
                     ${hasDraft ? '<p class="leader-lyric-draft-hint" style="font-size:12px;color:#d4af37;margin:0 0 8px;line-height:1.45;">已载入本地未保存草稿</p>' : ""}
                     <textarea class="leader-lyric-editor-ta" rows="14" style="width:100%;box-sizing:border-box;border-radius:10px;border:1px solid rgba(255,255,255,0.15);background:#12151f;color:#eee;padding:10px;font-size:max(16px,14px);line-height:1.45;"></textarea>
                     <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end;flex-wrap:wrap;">
@@ -17558,7 +18114,7 @@ const linesHtml = rawLines
                 });
             };
 
-            const flip = (delta) => navigateLeaderFlow(delta);
+            const flip = (delta) => navigateLeaderFlip(delta);
 
             let leaderLyricNotePtrDown = null;
             let leaderLyricNoteSuppressClick = false;
@@ -17590,7 +18146,7 @@ const linesHtml = rawLines
                     );
                     return true;
                 }
-                if (noteEditMode && (displayMode === "scroll" || displayMode === "multi" || displayMode === "flow")) {
+                if (noteEditMode && (displayMode === "scroll" || displayMode === "multi")) {
                     const line = hitEl.closest(".leader-pl-line:not(.leader-pl-line--blank), .leader-line");
                     if (line && !hitEl.closest(".leader-plus-dot,.leader-note-dot")) {
                         ev?.preventDefault?.();
@@ -17696,7 +18252,13 @@ const linesHtml = rawLines
                 const y = e.changedTouches?.[0]?.clientY || 0;
                 const dx = x - touchStartX;
                 const dy = y - touchStartY;
-                if (displayMode !== "scroll" && Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) flip(dx < 0 ? 1 : -1);
+                if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) {
+                    const sid = getLeaderActiveSongId();
+                    loadLeaderFlowSnapshot(sid);
+                    const canArrangeFlip =
+                        leaderFlowPageSequence(getLeaderFlowCards(), splitLeaderPagesForSongId(sid)).length > 0;
+                    if (displayMode !== "scroll" || canArrangeFlip) flip(dx < 0 ? 1 : -1);
+                }
                 if (!host.classList.contains("leader-minimal-chrome") && toolbarCollapsed && swipeFromBottomY != null && y < swipeFromBottomY - leaderBottomSwipeMinDy()) setToolbarCollapsed(false);
                 swipeFromBottomY = null;
                 showToolbar();
@@ -17712,8 +18274,14 @@ const linesHtml = rawLines
                     showToolbar();
                     return;
                 }
-                if (!brushMode && displayMode !== "scroll" && e.key === "ArrowLeft") flip(-1);
-                if (!brushMode && displayMode !== "scroll" && e.key === "ArrowRight") flip(1);
+                if (!brushMode && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+                    const sid = getLeaderActiveSongId();
+                    loadLeaderFlowSnapshot(sid);
+                    const canArrangeFlip =
+                        displayMode !== "scroll" ||
+                        leaderFlowPageSequence(getLeaderFlowCards(), splitLeaderPagesForSongId(sid)).length > 0;
+                    if (canArrangeFlip) flip(e.key === "ArrowLeft" ? -1 : 1);
+                }
                 if (brushMode && e.key === "Escape") setBrushMode(false);
                 if (e.key === "Escape") {
                     if (overlay?.classList?.contains("leader-note-pop-wrap")) {
@@ -17791,13 +18359,17 @@ const linesHtml = rawLines
                     const d = e.data;
                     if (d?.type === "main_projection_end" && d.source === "main") return;
                     if (d?.type === "update" && d.payload?.pages) {
+                        if (d.source === "main" && leaderHasLocalSongLibrary()) return;
                         if (!applyLeaderLiveUpdateFromPayload(d.payload)) render();
                     }
                 };
-                channel.postMessage({ type: "request_state", source: "leader" });
+                if (!leaderHasLocalSongLibrary()) {
+                    channel.postMessage({ type: "request_state", source: "leader" });
+                }
             }
             window.addEventListener("storage", (e) => {
                 if (e.key === STORAGE.LIVE && e.newValue) {
+                    if (leaderHasLocalSongLibrary()) return;
                     const payload = parseJSON(e.newValue, null);
                     if (payload?.pages) {
                         if (!applyLeaderLiveUpdateFromPayload(payload)) render();
@@ -17868,7 +18440,8 @@ const linesHtml = rawLines
                     }
                     displayMode = localStorage.getItem(DISPLAY_MODE_KEY) || "scroll";
                     if (displayMode === "single") displayMode = "scroll";
-                    if (!["multi", "scroll", "flow"].includes(displayMode)) displayMode = "scroll";
+                    if (displayMode === "flow") displayMode = "multi";
+                    if (!["multi", "scroll"].includes(displayMode)) displayMode = "scroll";
                     bgMode = localStorage.getItem(BG_MODE_KEY) || "particles";
                     if (!["black", "white", "gray", "navy", "particles", "custom"].includes(bgMode)) bgMode = "particles";
                     try {
@@ -17907,7 +18480,7 @@ const linesHtml = rawLines
                         /* ignore */
                     }
                     loadLeaderFlowSnapshot();
-                    ensureLeaderLiveState();
+                    ensureLeaderLiveState(undefined, true);
                     applyBg();
                     hideFontPanel();
                     hideColorPanel();

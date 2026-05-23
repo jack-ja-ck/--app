@@ -39,8 +39,9 @@
         .leader-dock-actions,.leader-data-sync-fab,.leader-save-fab{pointer-events:auto}
         .leader-gear-dock .leader-dock-actions{position:fixed;right:max(10px,env(safe-area-inset-right,0px));bottom:max(10px,env(safe-area-inset-bottom,0px));z-index:128;display:flex!important;flex-direction:row;align-items:flex-end;gap:8px;flex-shrink:0}
         .leader-gear-dock .leader-gear-menu{margin-bottom:56px;max-height:min(calc(78vh - 58px),calc(78dvh - 58px))}
-        .leader-qr-lan-row{text-align:left;margin:12px 0 0;width:100%;box-sizing:border-box}
-        .leader-qr-lan-warn{background:rgba(212,175,55,0.12);border-left:4px solid #d4af37;border-radius:8px;padding:10px 12px;margin:0 0 10px;font-size:12px;color:rgba(255,248,220,0.92);line-height:1.55}
+        .leader-qr-share-row{text-align:left;margin:12px 0 0;width:100%;box-sizing:border-box}
+        .leader-qr-share-hint{background:rgba(212,175,55,0.1);border-left:4px solid #d4af37;border-radius:8px;padding:10px 12px;margin:0 0 10px;font-size:12px;color:rgba(255,248,220,0.92);line-height:1.55}
+        .leader-qr-share-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
         .leader-qr-base-label{display:block;font-size:12px;color:rgba(255,255,255,0.65);margin:0 0 6px;text-align:left}
         .leader-panel-lan-input{width:100%;box-sizing:border-box;border-radius:8px;border:1px solid rgba(255,255,255,0.18);background:#12151f;color:#eee;padding:8px 10px;font-size:13px}
         .leader-qr-lan-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
@@ -696,8 +697,7 @@
 
 <h4>1. 基础操作</h4>
 <ul>
-<li><b>用途</b>：编辑歌词与备注（<b>不是</b>会众投屏）。电脑「传数据」→ 传输播放列表歌词与主领设置；手机/平板扫码进入后点「💾 保存」留存自己的修改</li>
-<li><b>再次打开</b>：同一设备会自动恢复本机保存；清缓存或换设备后，扫描之前「保存」时截图的二维码</li>
+<li><b>传数据</b>：生成<b>一个二维码</b>（歌词与设置压缩在内），手机可用<b>任意网络</b>扫描；<b>同一码可多台设备</b>。扫不出时点「复制链接」或「复制分享码」</li>
 <li><b>帮助与引导</b>：右侧 ⚙ 菜单中的「帮助」「引导」；或展开底部工具栏左侧入口；首次打开主领页会自动弹出一次引导</li>
 <li><b>显示模式</b>：默认<b>滚动</b>（整份歌单上下滑，底栏歌名芯片切歌）；⚙ 或工具栏可切换<b>单页</b> / 滚动 / 流程</li>
 <li><b>翻页</b>：单页模式下点左右 ◀ ▶ 或键盘方向键；滚动模式不翻页</li>

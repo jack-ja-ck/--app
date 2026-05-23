@@ -10550,11 +10550,12 @@ ${deleteBtnHtml}
         }
     }
 
-    /** 主领「诗歌包」二维码：标题+歌词 + 可选主领偏好（lp），离线可扫 */
-    const WORSHIP_QR_PACK_MAX_CHARS = 2400;
-    /** 扫码打开链接总长度上限（含 #wp1=），兼顾常见二维码生成接口 */
-    const LEADER_QR_OPEN_URL_MAX = 3000;
-    /** ?data= 参数压缩后最大字节（encodeURIComponent 之后） */
+    /** 主领「诗歌包」二维码：标题+歌词 + 可选主领偏好（lp），gzip 压缩单码 */
+    /** 扫码打开链接总长度上限（含 #wp1=）；单码 gzip 压缩，跨网络可用 */
+    const LEADER_QR_OPEN_URL_MAX = 3800;
+    /** wp1 诗歌包最大字符（W1 压缩后） */
+    const WORSHIP_QR_PACK_MAX_CHARS = 2900;
+    /** 旧 ?data= 分页上限（仅兼容旧链接解析，不再用于生成） */
     const LEADER_DATA_QR_MAX_BYTES = 2500;
     const LEADER_DATA_QR_SONGS_PER_PAGE = 3;
     const LEADER_QR_PUBLIC_BASE = "https://jack-ja-ck.github.io/--app/";
@@ -10655,125 +10656,167 @@ ${deleteBtnHtml}
         return encodeURIComponent(JSON.stringify(collapsed)).length;
     }
 
-    function getLeaderQrPageBaseUrl() {
+    function getLeaderQrShareEntryUrl() {
         try {
             const custom = String(localStorage.getItem(LEADER_QR_BASE_LS_KEY) || "").trim();
             if (custom) {
                 let base = custom;
-                if (!/^https?:\/\//i.test(base)) base = "http://" + base;
-                return base.replace(/\/?$/, "/");
+                if (!/^https?:\/\//i.test(base)) base = "https://" + base;
+                return new URL("index.html?leader=1", base.replace(/\/?$/, "/")).href.split("#")[0];
             }
         } catch (_e) {
             /* ignore */
         }
-        const resolved = resolveLeaderJoinUrlForQr();
-        if (resolved.qrEncode) {
-            try {
-                const u = new URL(resolved.qrEncode);
-                let path = u.pathname || "/";
-                if (/[^/]+\.html?$/i.test(path)) {
-                    path = path.replace(/[^/]+\.html?$/i, "");
-                }
-                if (!path.endsWith("/")) path += "/";
-                return u.origin + path;
-            } catch (_e2) {
-                /* fall through */
-            }
-        }
         const pub = derivePublicHttpsLeaderJoinBaseFromLocation();
-        if (pub) return pub.endsWith("/") ? pub : pub + "/";
-        return "";
+        const base =
+            pub && String(pub).startsWith("https://") && !hostnameLooksPrivateOrLocal(new URL(pub).hostname)
+                ? pub
+                : LEADER_QR_PUBLIC_BASE;
+        try {
+            return new URL("index.html?leader=1", base.replace(/\/?$/, "/")).href.split("#")[0];
+        } catch (_e2) {
+            return LEADER_QR_PUBLIC_BASE.replace(/\/?$/, "/") + "index.html?leader=1";
+        }
+    }
+
+    function getLeaderQrPageBaseUrl() {
+        return getLeaderQrShareEntryUrl().replace(/\?leader=1.*$/, "/").replace(/index\.html$/, "") || LEADER_QR_PUBLIC_BASE;
     }
 
     function getLeaderQrReachabilityMeta() {
-        const base = getLeaderQrPageBaseUrl();
-        const resolved = resolveLeaderJoinUrlForQr();
-        if (!base) {
-            let hint =
-                "当前地址（localhost 或本地文件）手机无法直接打开。请用局域网 IP 访问本页（如 http://192.168.x.x:端口/），或在下方填写电脑站点地址后点「保存」再生成二维码。";
-            if (resolved.mode === "local") {
-                hint =
-                    "您正在用 localhost 打开，手机扫不到。请改用电脑的局域网地址（如 http://192.168.1.5:8080/本程序目录/）打开主控台，或在下框填写该地址并保存。";
-            }
-            return { ok: false, hint, mode: resolved.mode || "none" };
-        }
-        if (resolved.needsLanHint) {
-            return {
-                ok: true,
-                hint: "请确保手机/平板与电脑在同一 Wi‑Fi，并用手机浏览器能打开上述地址后再扫码。",
-                mode: resolved.mode
-            };
-        }
-        return { ok: true, hint: "", mode: resolved.mode };
-    }
-
-    function saveLeaderQrBaseFromInput(inputEl) {
-        const v = String(inputEl?.value || "").trim();
+        let crossInternet = true;
         try {
-            if (v) localStorage.setItem(LEADER_QR_BASE_LS_KEY, v);
-            else localStorage.removeItem(LEADER_QR_BASE_LS_KEY);
+            const entry = getLeaderQrShareEntryUrl();
+            crossInternet =
+                entry.startsWith("https://") && !hostnameLooksPrivateOrLocal(new URL(entry).hostname);
         } catch (_e) {
-            /* ignore */
+            crossInternet = true;
+        }
+        return {
+            ok: true,
+            crossInternet,
+            hint:
+                "💡 歌词与设置已压缩进二维码/链接，<b>手机可用任意网络</b>扫描（无需与电脑同 Wi‑Fi）。<b>同一码可多台设备</b>使用。若扫不出，请点「复制链接」发微信，或「复制分享码」到主领页「诗歌」粘贴。"
+        };
+    }
+
+    async function refreshLeaderShareQrPages(force) {
+        const bundle = await buildLeaderShareQrBundle({ force: !!force });
+        return bundle.pages || [];
+    }
+
+    function renderLeaderShareQrView(container, bundle) {
+        if (!container || !bundle) return;
+        const img = container.querySelector("#leader-panel-qr-img, #leader-qr-popup-img, #leader-backup-qr-img");
+        const pager = container.querySelector("#leader-panel-pager, #leader-qr-popup-pager, #leader-backup-pager");
+        const tipEl = container.querySelector("#leader-panel-qr-tip, #leader-qr-popup-tip, #leader-backup-tip");
+        if (pager) pager.hidden = true;
+        if (bundle.url) setLeaderQrImageSrc(img, bundle.url);
+        else if (img) {
+            img.removeAttribute("src");
+            img.alt = "无法生成";
+        }
+        syncLeaderQrShareHint(container, bundle);
+        if (tipEl && !bundle.url) {
+            tipEl.textContent = bundle.note || "歌单为空或内容过多，请减少诗歌后重试，或使用「复制分享码」/「导出」。";
+        } else if (tipEl && bundle.url) {
+            tipEl.textContent = "💡 扫描下方二维码打开主领页；也可复制链接或分享码发给其他设备。";
         }
     }
 
-    function suggestLeaderLanBaseUrl() {
-        try {
-            const u = new URL(location.href);
-            if (u.protocol === "file:") return "";
-            if (hostnameLooksPrivateOrLocal(u.hostname)) {
-                let path = u.pathname || "/";
-                if (/[^/]+\.html?$/i.test(path)) path = path.replace(/[^/]+\.html?$/i, "");
-                if (!path.endsWith("/")) path += "/";
-                return u.origin + path;
-            }
-        } catch (_e) {
-            /* ignore */
+    let leaderShareQrBundleCache = null;
+
+    async function buildLeaderShareQrBundle(opts) {
+        const force = !!(opts && opts.force);
+        if (!force && leaderShareQrBundleCache) return leaderShareQrBundleCache;
+        const baseFull = getLeaderQrShareEntryUrl();
+        let maxPack = Math.min(
+            WORSHIP_QR_PACK_MAX_CHARS,
+            Math.max(900, LEADER_QR_OPEN_URL_MAX - baseFull.length - 14)
+        );
+        let built = await buildLeaderSongPackQrPayload(maxPack);
+        let openUrl = "";
+        for (let attempt = 0; attempt < 14 && built.qrText; attempt++) {
+            openUrl = `${baseFull}#wp1=${encodeURIComponent(built.qrText)}`;
+            if (openUrl.length <= LEADER_QR_OPEN_URL_MAX) break;
+            maxPack = Math.max(420, Math.floor(maxPack * 0.82));
+            built = await buildLeaderSongPackQrPayload(maxPack);
         }
-        return "";
+        const ok = !!(built.qrText && openUrl && openUrl.length <= LEADER_QR_OPEN_URL_MAX);
+        const bundle = {
+            url: ok ? openUrl : "",
+            pasteText: built.qrText || "",
+            songCount: built.songCount,
+            totalWanted: built.totalWanted,
+            truncated: !!built.truncated,
+            note: built.note || "",
+            pages: ok ? [{ page: 1, total: 1, url: openUrl, pasteText: built.qrText }] : []
+        };
+        leaderShareQrBundleCache = bundle;
+        return bundle;
     }
 
-    function bindLeaderQrBaseInputRow(container, onSaved) {
-        if (!container || container.dataset.leaderQrBaseBound) return;
-        container.dataset.leaderQrBaseBound = "1";
-        const inp = container.querySelector(".leader-qr-base-input");
-        const saveBtn = container.querySelector("[data-leader-qr-save-base]");
-        const fillBtn = container.querySelector("[data-leader-qr-fill-lan]");
-        try {
-            if (inp && !inp.value) inp.value = String(localStorage.getItem(LEADER_QR_BASE_LS_KEY) || suggestLeaderLanBaseUrl() || "");
-        } catch (_e) {
-            /* ignore */
-        }
-        saveBtn?.addEventListener("click", (e) => {
-            saveLeaderQrBaseFromInput(inp);
-            showCornerSuccessToast(inp?.value?.trim() ? "已保存访问地址" : "已清除访问地址", e.currentTarget);
-            onSaved?.();
-        });
-        fillBtn?.addEventListener("click", () => {
-            const sug = suggestLeaderLanBaseUrl();
-            if (inp && sug) inp.value = sug;
-            else showToast("请手动填写电脑的局域网地址（如 http://192.168.x.x/目录/）", fillBtn);
-        });
+    /** @deprecated 请用 buildLeaderShareQrBundle；保留空实现避免旧调用报错 */
+    function buildLeaderUnifiedQrPages() {
+        return leaderShareQrBundleCache?.pages?.length
+            ? leaderShareQrBundleCache.pages
+            : [];
     }
 
-    const LEADER_QR_LAN_ROW_HTML =
-        '<div class="leader-qr-lan-row">' +
-        '<p class="leader-qr-lan-warn" id="leader-qr-lan-warn" hidden></p>' +
-        '<label class="leader-qr-base-label">手机访问地址（局域网或公网，以 / 结尾）</label>' +
-        '<input type="url" class="leader-qr-base-input leader-panel-lan-input" placeholder="http://192.168.1.5:8080/WorshipApp/" autocomplete="url" inputmode="url">' +
-        '<div class="leader-qr-lan-actions">' +
-        '<button type="button" class="leader-panel-lan-btn" data-leader-qr-fill-lan>填入当前局域网</button>' +
-        '<button type="button" class="leader-panel-lan-btn leader-panel-lan-btn--primary" data-leader-qr-save-base>保存并刷新</button>' +
+    const LEADER_QR_SHARE_ROW_HTML =
+        '<div class="leader-qr-share-row">' +
+        '<p class="leader-qr-share-hint" id="leader-qr-share-hint"></p>' +
+        '<div class="leader-qr-share-actions">' +
+        '<button type="button" class="leader-panel-lan-btn leader-panel-lan-btn--primary" data-leader-copy-link>复制链接</button>' +
+        '<button type="button" class="leader-panel-lan-btn" data-leader-copy-pack>复制分享码</button>' +
         "</div></div>";
 
-    function syncLeaderQrLanWarn(container) {
+    function syncLeaderQrShareHint(container, bundle) {
         if (!container) return;
+        const hint = container.querySelector(".leader-qr-share-hint, #leader-qr-share-hint");
+        if (!hint) return;
         const meta = getLeaderQrReachabilityMeta();
-        const warn = container.querySelector(".leader-qr-lan-warn");
-        if (warn) {
-            warn.textContent = meta.hint || "";
-            warn.hidden = !meta.hint;
+        let text = meta.hint || "";
+        if (bundle?.truncated && bundle.note) {
+            text += " " + bundle.note;
+        } else if (bundle?.songCount && bundle.totalWanted && bundle.songCount < bundle.totalWanted) {
+            text += ` 当前含 ${bundle.songCount}/${bundle.totalWanted} 首（已自动精简以放进一个码）。`;
         }
+        hint.innerHTML = text;
+        hint.hidden = !text;
+    }
+
+    async function copyLeaderShareToClipboard(text, anchor) {
+        const t = String(text || "").trim();
+        if (!t) {
+            showToast("暂无可复制内容", anchor);
+            return false;
+        }
+        try {
+            await navigator.clipboard.writeText(t);
+            showCornerSuccessToast("已复制", anchor);
+            return true;
+        } catch (_e) {
+            showToast("复制失败，请长按全选后手动复制", anchor);
+            return false;
+        }
+    }
+
+    function bindLeaderQrShareRow(container, refreshBundle) {
+        if (!container || container.dataset.leaderQrShareBound) return;
+        container.dataset.leaderQrShareBound = "1";
+        container.querySelector("[data-leader-copy-link]")?.addEventListener("click", async (e) => {
+            const bundle = await refreshBundle(true);
+            await copyLeaderShareToClipboard(bundle.url, e.currentTarget);
+        });
+        container.querySelector("[data-leader-copy-pack]")?.addEventListener("click", async (e) => {
+            const bundle = await refreshBundle(true);
+            await copyLeaderShareToClipboard(bundle.pasteText, e.currentTarget);
+        });
+    }
+
+    function syncLeaderQrLanWarn(container) {
+        syncLeaderQrShareHint(container, leaderShareQrBundleCache);
     }
 
     function buildLeaderOpenUrlFromCollapsed(collapsed) {
@@ -10831,10 +10874,7 @@ ${deleteBtnHtml}
         return fits.length ? fits : singlePages.slice(0, 1);
     }
 
-    /** 电脑传数据 / 手机保存：完整数据包（播放列表歌词、备注、编排、主领显示设置） */
-    function buildLeaderUnifiedQrPages() {
-        return buildLeaderDataQrPages({ backup: true });
-    }
+    /** 电脑传数据 / 手机保存：见 buildLeaderShareQrBundle（单码 gzip #wp1=） */
 
     function buildLeaderDataQrPages(opts) {
         const collapsed = buildLeaderShareCollapsedBase(opts);
@@ -10854,9 +10894,10 @@ ${deleteBtnHtml}
         if (!img || !openUrl) return;
         const enc = encodeURIComponent(openUrl);
         const len = openUrl.length;
-        const size = len > 2200 ? 360 : len > 1400 ? 280 : 200;
-        const primary = `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&margin=8&ecc=M&data=${enc}`;
-        const fallback = `https://quickchart.io/qr?size=${size}&margin=1&ecLevel=M&text=${enc}`;
+        const size = len > 3200 ? 420 : len > 2400 ? 380 : len > 1600 ? 320 : 260;
+        const ecc = len > 2800 ? "L" : "M";
+        const primary = `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&margin=6&ecc=${ecc}&data=${enc}`;
+        const fallback = `https://quickchart.io/qr?size=${size}&margin=1&ecLevel=${ecc}&text=${enc}`;
         img.onerror = function () {
             img.onerror = null;
             img.src = fallback;
@@ -11012,7 +11053,7 @@ ${deleteBtnHtml}
 
     function ensureLeaderPanelModal() {
         let modal = $("leader-panel-modal");
-        if (modal && !modal.querySelector("#leader-panel-qr-view .leader-qr-lan-row")) {
+        if (modal && !modal.querySelector("#leader-panel-qr-view .leader-qr-share-row")) {
             modal.remove();
             modal = null;
         }
@@ -11030,8 +11071,8 @@ ${deleteBtnHtml}
             '<button type="button" class="leader-panel-choice-btn" data-leader-panel-mode="desktop"><span class="leader-panel-choice-icon leader-panel-choice-icon--device" aria-hidden="true">💻</span><span>在电脑上打开</span></button>' +
             "</div>" +
             '<div class="leader-panel-tip-box" data-v="2">' +
-            "<p><b>平板/手机传数据</b>：把<b>播放列表中的歌词</b>与<b>主领显示设置</b>（字号、字色、背景、备注、编排等）打成二维码，供手机/平板扫描后继续编辑。</p>" +
-            "<p><b>在电脑上打开</b>：在本机浏览器编辑歌词与排版；完成后点右下角金色「传数据」（⚙ 左侧）传到移动设备。手机进入后请用「保存」留存自己的修改，便于日后再次打开。</p>" +
+            "<p><b>平板/手机传数据</b>：生成<b>一个二维码</b>（歌词与设置已压缩在内），手机可用<b>任意网络</b>扫描，<b>同一码可多台设备</b>使用。</p>" +
+            "<p><b>扫不出？</b>点「复制链接」发微信，或「复制分享码」到主领页 ⚙ →「诗歌」粘贴。无需填写局域网地址。</p>" +
             "</div>" +
             "</div>" +
             '<div id="leader-panel-qr-view" hidden>' +
@@ -11043,13 +11084,14 @@ ${deleteBtnHtml}
             '<span id="leader-panel-pager-label">第1/1页</span>' +
             '<button type="button" data-leader-panel-next aria-label="下一页">›</button>' +
             "</div>" +
-            '<div class="leader-panel-tip" id="leader-panel-qr-tip">💡 用手机或平板扫描下方二维码即可打开主领页并载入数据。</div>' +
-            LEADER_QR_LAN_ROW_HTML +
+            '<div class="leader-panel-tip" id="leader-panel-qr-tip">正在生成二维码…</div>' +
+            LEADER_QR_SHARE_ROW_HTML +
             "</div>" +
             '<button type="button" class="leader-panel-close-btn" data-leader-panel-close>返回</button>' +
             "</div></div>";
         document.body.appendChild(modal);
-        bindLeaderQrBaseInputRow(modal.querySelector("#leader-panel-qr-view"), () => showLeaderPanelQrView(modal));
+        const panelQrRoot = modal.querySelector("#leader-panel-qr-view");
+        bindLeaderQrShareRow(panelQrRoot, (force) => buildLeaderShareQrBundle({ force }));
         modal.addEventListener("click", (e) => {
             if (e.target === modal) setLeaderPanelModalOpen(false);
         });
@@ -11066,7 +11108,9 @@ ${deleteBtnHtml}
                 setLeaderPanelModalOpen(false);
             });
         });
-        modal.querySelector('[data-leader-panel-mode="qr"]')?.addEventListener("click", () => showLeaderPanelQrView(modal));
+        modal.querySelector('[data-leader-panel-mode="qr"]')?.addEventListener("click", () => {
+            void showLeaderPanelQrView(modal);
+        });
         modal.querySelector('[data-leader-panel-mode="desktop"]')?.addEventListener("click", () => {
             setLeaderPanelModalOpen(false);
             openLeaderWindow();
@@ -11086,49 +11130,23 @@ ${deleteBtnHtml}
         return modal;
     }
 
-    function renderLeaderPanelQrPage(modal) {
-        const img = modal.querySelector("#leader-panel-qr-img");
-        const pager = modal.querySelector("#leader-panel-pager");
-        const label = modal.querySelector("#leader-panel-pager-label");
-        const prev = modal.querySelector("[data-leader-panel-prev]");
-        const next = modal.querySelector("[data-leader-panel-next]");
-        const page = leaderPanelQrPages[leaderPanelQrIndex];
-        syncLeaderQrLanWarn(modal.querySelector("#leader-panel-qr-view"));
-        if (!page) return;
-        if (page.url) setLeaderQrImageSrc(img, page.url);
-        else if (img) img.removeAttribute("src");
-        if (pager) pager.hidden = leaderPanelQrPages.length <= 1;
-        if (label) label.textContent = `第 ${page.page} / ${page.total} 个码`;
-        if (prev) prev.disabled = leaderPanelQrIndex <= 0;
-        if (next) next.disabled = leaderPanelQrIndex >= leaderPanelQrPages.length - 1;
-        const tipEl = modal.querySelector("#leader-panel-qr-tip");
-        if (tipEl) {
-            if (leaderPanelQrPages.length > 1) {
-                tipEl.innerHTML =
-                    "💡 <b>为何有多个码？</b>歌单与歌词较多时，一个二维码装不下，会拆成 " +
-                    page.total +
-                    " 个。<br><b>如何依次扫描：</b>① 先扫当前这个码（第 " +
-                    page.page +
-                    " 个）→ 手机会打开主领页并暂存；② 在本窗口点 <b>›</b> 切到下一个码；③ 再扫下一个，重复直到扫完第 " +
-                    page.total +
-                    " 个。全部扫完后歌单与编辑内容才会完整载入。";
-            } else {
-                tipEl.textContent = "💡 用手机或平板扫描下方二维码，即可打开主领页并载入歌单、歌词、备注与编排。";
-            }
-        }
-    }
-
-    function showLeaderPanelQrView(modal) {
-        leaderPanelQrPages = buildLeaderUnifiedQrPages();
-        leaderPanelQrIndex = 0;
+    async function showLeaderPanelQrView(modal) {
+        leaderShareQrBundleCache = null;
         const chooser = modal.querySelector("#leader-panel-chooser");
         const qrView = modal.querySelector("#leader-panel-qr-view");
         if (chooser) chooser.hidden = true;
         if (qrView) qrView.hidden = false;
-        if (!leaderPanelQrPages.length || !leaderPanelQrPages[0]?.url) {
-            showToast("请先填写并保存手机可访问的局域网地址", $("open-leader-btn"));
-        }
-        renderLeaderPanelQrPage(modal);
+        const tipEl = modal.querySelector("#leader-panel-qr-tip");
+        if (tipEl) tipEl.textContent = "正在生成二维码…";
+        const bundle = await buildLeaderShareQrBundle({ force: true });
+        leaderPanelQrPages = bundle.pages || [];
+        leaderPanelQrIndex = 0;
+        if (!bundle.url) showToast(bundle.note || "无法生成，请减少诗歌或改用「复制分享码」", $("open-leader-btn"));
+        renderLeaderShareQrView(qrView, bundle);
+    }
+
+    function renderLeaderPanelQrPage(modal) {
+        renderLeaderShareQrView(modal.querySelector("#leader-panel-qr-view"), leaderShareQrBundleCache);
     }
 
     function setLeaderPanelModalOpen(open) {
@@ -11146,13 +11164,14 @@ ${deleteBtnHtml}
 
     function openLeaderPanelModal() {
         if (isDisplay || isLeader) return;
+        leaderShareQrBundleCache = null;
         const modal = ensureLeaderPanelModal();
         setLeaderPanelModalOpen(true);
     }
 
     function ensureLeaderQrPopup() {
         let popup = $("leader-qr-popup");
-        if (popup && !popup.querySelector(".leader-qr-lan-row")) {
+        if (popup && !popup.querySelector(".leader-qr-share-row")) {
             popup.remove();
             popup = null;
         }
@@ -11171,17 +11190,13 @@ ${deleteBtnHtml}
             '<button type="button" data-leader-qr-popup-next aria-label="下一页">›</button>' +
             "</div>" +
             '<div class="leader-panel-tip" id="leader-qr-popup-tip">💡 用手机或平板扫描，可载入歌单、歌词、备注与编排。</div>' +
-            LEADER_QR_LAN_ROW_HTML +
-            '<p class="leader-qr-popup-foot">建议截图保存此二维码，换设备或清缓存后仍可恢复</p>' +
+            LEADER_QR_SHARE_ROW_HTML +
+            '<p class="leader-qr-popup-foot">建议截图保存；同一码可多台设备扫描（任意网络）</p>' +
             "</div>" +
             '<button type="button" class="leader-panel-close-btn" data-leader-qr-popup-close>关闭</button>' +
             "</div>";
         document.body.appendChild(popup);
-        bindLeaderQrBaseInputRow(popup.querySelector(".leader-qr-popup-dialog"), () => {
-            leaderQrPopupPages = buildLeaderUnifiedQrPages();
-            leaderQrPopupIndex = 0;
-            renderLeaderQrPopupPage(popup);
-        });
+        bindLeaderQrShareRow(popup.querySelector(".leader-qr-popup-dialog"), (force) => buildLeaderShareQrBundle({ force }));
         popup.addEventListener("click", (e) => {
             if (e.target === popup) setLeaderQrPopupOpen(false);
         });
@@ -11212,49 +11227,25 @@ ${deleteBtnHtml}
     }
 
     function renderLeaderQrPopupPage(popup) {
-        const img = popup.querySelector("#leader-qr-popup-img");
-        const pager = popup.querySelector("#leader-qr-popup-pager");
-        const label = popup.querySelector("#leader-qr-popup-pager-label");
-        const prev = popup.querySelector("[data-leader-qr-popup-prev]");
-        const next = popup.querySelector("[data-leader-qr-popup-next]");
-        const page = leaderQrPopupPages[leaderQrPopupIndex];
-        syncLeaderQrLanWarn(popup.querySelector(".leader-qr-popup-dialog"));
-        if (!page) return;
-        if (page.url) setLeaderQrImageSrc(img, page.url);
-        else if (img) img.removeAttribute("src");
-        if (pager) pager.hidden = leaderQrPopupPages.length <= 1;
-        if (label) label.textContent = `第 ${page.page} / ${page.total} 个码`;
-        if (prev) prev.disabled = leaderQrPopupIndex <= 0;
-        if (next) next.disabled = leaderQrPopupIndex >= leaderQrPopupPages.length - 1;
-        const tipEl = popup.querySelector("#leader-qr-popup-tip");
-        if (tipEl) {
-            if (leaderQrPopupPages.length > 1) {
-                tipEl.innerHTML =
-                    "💡 <b>多个码时：</b>先扫当前码（第 " +
-                    page.page +
-                    " / " +
-                    page.total +
-                    " 个）→ 再点 <b>›</b> 显示下一码 → 继续扫，直到扫完。手机底部会提示是否还需扫其余码。";
-            } else {
-                tipEl.textContent = "💡 用手机或平板扫描，可载入歌单、歌词、备注与编排。";
-            }
-        }
+        renderLeaderShareQrView(popup.querySelector(".leader-qr-popup-dialog"), leaderShareQrBundleCache);
     }
 
-    function openLeaderQrPopup() {
-        leaderQrPopupPages = buildLeaderUnifiedQrPages();
-        leaderQrPopupIndex = 0;
+    async function openLeaderQrPopup() {
+        leaderShareQrBundleCache = null;
         const popup = ensureLeaderQrPopup();
-        if (!leaderQrPopupPages.length || !leaderQrPopupPages[0]?.url) {
-            showToast("请先填写并保存手机可访问的局域网地址", null);
-        }
-        renderLeaderQrPopupPage(popup);
+        const tipEl = popup.querySelector("#leader-qr-popup-tip");
+        if (tipEl) tipEl.textContent = "正在生成二维码…";
         setLeaderQrPopupOpen(true);
+        const bundle = await buildLeaderShareQrBundle({ force: true });
+        leaderQrPopupPages = bundle.pages || [];
+        leaderQrPopupIndex = 0;
+        if (!bundle.url) showToast(bundle.note || "无法生成，请减少诗歌或复制分享码", null);
+        renderLeaderShareQrView(popup.querySelector(".leader-qr-popup-dialog"), bundle);
     }
 
     function ensureLeaderBackupModal() {
         let modal = $("leader-backup-modal");
-        if (modal && !modal.querySelector('[data-backup-v="2"]')) {
+        if (modal && !modal.querySelector('[data-backup-v="3"]')) {
             modal.remove();
             modal = null;
         }
@@ -11262,7 +11253,7 @@ ${deleteBtnHtml}
         modal = document.createElement("div");
         modal.id = "leader-backup-modal";
         modal.innerHTML =
-            '<div class="leader-backup-dialog" data-backup-v="2" role="dialog" aria-modal="true" style="width:min(450px,92vw);">' +
+            '<div class="leader-backup-dialog" data-backup-v="3" role="dialog" aria-modal="true" style="width:min(450px,92vw);">' +
             '<button type="button" class="leader-panel-close-x" data-leader-backup-x aria-label="关闭">✕</button>' +
             '<h2 class="leader-panel-title">💾 保存我的主领数据</h2>' +
             '<p class="leader-panel-desc">打包播放列表歌词、改词、备注、编排与显示设置。截图保存下方二维码，日后扫描可恢复。</p>' +
@@ -11273,11 +11264,13 @@ ${deleteBtnHtml}
             '<span id="leader-backup-pager-label">第1/1页</span>' +
             '<button type="button" data-leader-backup-next aria-label="下一页">›</button>' +
             "</div>" +
-            '<div class="leader-backup-warn" id="leader-backup-tip">💡 编辑会自动保存在本机浏览器；清缓存或换设备后，请用此二维码恢复。多个码时请依次扫描。</div>' +
+            '<div class="leader-backup-warn" id="leader-backup-tip">正在生成…</div>' +
+            LEADER_QR_SHARE_ROW_HTML +
             "</div>" +
             '<button type="button" class="leader-panel-close-btn" data-leader-backup-close>关闭</button>' +
             "</div>";
         document.body.appendChild(modal);
+        bindLeaderQrShareRow(modal.querySelector(".leader-backup-dialog"), (force) => buildLeaderShareQrBundle({ force }));
         modal.addEventListener("click", (e) => {
             if (e.target === modal) setLeaderBackupModalOpen(false);
         });
@@ -11311,39 +11304,23 @@ ${deleteBtnHtml}
     }
 
     function renderLeaderBackupQrPage(modal) {
-        const img = modal.querySelector("#leader-backup-qr-img");
-        const pager = modal.querySelector("#leader-backup-pager");
-        const label = modal.querySelector("#leader-backup-pager-label");
-        const prev = modal.querySelector("[data-leader-backup-prev]");
-        const next = modal.querySelector("[data-leader-backup-next]");
-        const page = leaderBackupQrPages[leaderBackupQrIndex];
-        if (!page) return;
-        setLeaderQrImageSrc(img, page.url);
-        if (pager) pager.hidden = leaderBackupQrPages.length <= 1;
-        if (label) label.textContent = `第 ${page.page} / ${page.total} 个码`;
-        if (prev) prev.disabled = leaderBackupQrIndex <= 0;
-        if (next) next.disabled = leaderBackupQrIndex >= leaderBackupQrPages.length - 1;
-        const tipEl = modal.querySelector("#leader-backup-tip");
-        if (tipEl && leaderBackupQrPages.length > 1) {
-            tipEl.textContent =
-                "💡 内容较多已拆成 " +
-                page.total +
-                " 个码：请截图每一页，日后按顺序扫描恢复。本机编辑仍会自动保存。";
-        }
+        renderLeaderShareQrView(modal.querySelector(".leader-backup-dialog"), leaderShareQrBundleCache);
     }
 
-    function openLeaderBackupModal() {
+    async function openLeaderBackupModal() {
         persistLeaderLocalSnapshot();
+        leaderShareQrBundleCache = null;
         const modal = ensureLeaderBackupModal();
-        leaderBackupQrPages = buildLeaderUnifiedQrPages();
-        leaderBackupQrIndex = 0;
-        if (!leaderBackupQrPages.length || !leaderBackupQrPages[0]?.url) {
-            showToast("暂无歌单可保存，或请先填写手机可访问的地址", null);
-            return;
-        }
-        renderLeaderBackupQrPage(modal);
         setLeaderBackupModalOpen(true);
-        showCornerSuccessToast("已保存到本机，请截图二维码以便日后恢复", null);
+        const bundle = await buildLeaderShareQrBundle({ force: true });
+        leaderBackupQrPages = bundle.pages || [];
+        leaderBackupQrIndex = 0;
+        if (!bundle.url) {
+            showToast(bundle.note || "暂无歌单可保存", null);
+        } else {
+            showCornerSuccessToast("已保存到本机，请截图或复制链接", null);
+        }
+        renderLeaderShareQrView(modal.querySelector(".leader-backup-dialog"), bundle);
     }
 
     function collectLeaderShareSongsOrdered() {
@@ -11623,22 +11600,21 @@ ${deleteBtnHtml}
         return { qrText: "", songCount: 0, totalWanted: ordered.length, truncated: true, note: "无法生成" };
     }
 
-    /** 生成「手机浏览器可打开」的主领链接：?leader=1#wp1=诗歌包 */
+    /** 生成「手机浏览器可打开」的主领链接：?leader=1#wp1=诗歌包（gzip 单码，跨网） */
     async function buildLeaderSongPackAndOpenUrl() {
-        const resolved = resolveLeaderJoinUrlForQr();
-        const baseFull = resolved.qrEncode ? String(resolved.qrEncode).split("#")[0].trim() : "";
+        const baseFull = getLeaderQrShareEntryUrl();
         if (!baseFull) {
             const built = await buildLeaderSongPackQrPayload();
             return {
                 ...built,
                 openUrl: "",
-                scanKind: "need-http",
-                scanHint: "请展开下方填写站点根地址并保存（公网 https 可跨网；局域网须同 Wi‑Fi）。"
+                scanKind: "empty",
+                scanHint: "无法确定分享地址"
             };
         }
         let maxPack = Math.min(
             WORSHIP_QR_PACK_MAX_CHARS,
-            Math.max(480, LEADER_QR_OPEN_URL_MAX - baseFull.length - 12)
+            Math.max(900, LEADER_QR_OPEN_URL_MAX - baseFull.length - 14)
         );
         let built = await buildLeaderSongPackQrPayload(maxPack);
         let openUrl = "";
@@ -11646,7 +11622,7 @@ ${deleteBtnHtml}
             if (!built.qrText) break;
             openUrl = `${baseFull}#wp1=${encodeURIComponent(built.qrText)}`;
             if (openUrl.length <= LEADER_QR_OPEN_URL_MAX) break;
-            maxPack = Math.max(400, Math.floor(maxPack * 0.82));
+            maxPack = Math.max(420, Math.floor(maxPack * 0.82));
             built = await buildLeaderSongPackQrPayload(maxPack);
         }
         if (built.qrText && openUrl && openUrl.length <= LEADER_QR_OPEN_URL_MAX) {
@@ -11661,7 +11637,7 @@ ${deleteBtnHtml}
             openUrl: "",
             scanKind: built.qrText ? "too-long" : "empty",
             scanHint: built.qrText
-                ? "诗歌内容过多，链接超出传数据限制。请删减诗歌或使用「导出」分享。"
+                ? "诗歌内容过多，请减少诗歌或使用「复制分享码」/「导出」。"
                 : built.note || "无法生成"
         };
     }

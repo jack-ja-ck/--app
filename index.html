@@ -33,12 +33,28 @@
         .leader-panel-choice-row{display:flex;gap:10px;margin:0 0 8px}
         .leader-panel-choice-row .leader-panel-choice-btn{flex:1;margin:0;min-height:48px}
         @media (min-width:768px){.leader-host .leader-gear-item--backup{display:none!important}}
-        .leader-dock-actions,.leader-data-sync-fab{pointer-events:auto}
-        .leader-dock-actions{display:flex;flex-direction:row;align-items:flex-end;gap:8px;flex-shrink:0}
+        @media (max-width:767px){.leader-host .leader-data-sync-fab,.leader-host .leader-gear-item--sync{display:none!important}}
+        @media (max-width:767px){.leader-host .leader-gear-item--backup{display:none!important}}
+        @media (min-width:768px){.leader-host .leader-save-fab{display:none!important}}
+        .leader-dock-actions,.leader-data-sync-fab,.leader-save-fab{pointer-events:auto}
+        .leader-gear-dock .leader-dock-actions{position:fixed;right:max(10px,env(safe-area-inset-right,0px));bottom:max(10px,env(safe-area-inset-bottom,0px));z-index:128;display:flex!important;flex-direction:row;align-items:flex-end;gap:8px;flex-shrink:0}
+        .leader-gear-dock .leader-gear-menu{margin-bottom:56px;max-height:min(calc(78vh - 58px),calc(78dvh - 58px))}
+        .leader-qr-lan-row{text-align:left;margin:12px 0 0;width:100%;box-sizing:border-box}
+        .leader-qr-lan-warn{background:rgba(212,175,55,0.12);border-left:4px solid #d4af37;border-radius:8px;padding:10px 12px;margin:0 0 10px;font-size:12px;color:rgba(255,248,220,0.92);line-height:1.55}
+        .leader-qr-base-label{display:block;font-size:12px;color:rgba(255,255,255,0.65);margin:0 0 6px;text-align:left}
+        .leader-panel-lan-input{width:100%;box-sizing:border-box;border-radius:8px;border:1px solid rgba(255,255,255,0.18);background:#12151f;color:#eee;padding:8px 10px;font-size:13px}
+        .leader-qr-lan-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+        .leader-panel-lan-btn{padding:6px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.08);color:#eee;font-size:12px;cursor:pointer}
+        .leader-panel-lan-btn--primary{border-color:rgba(212,175,55,0.65);background:rgba(212,175,55,0.25);color:#fff8dc}
+        .leader-panel-qr-img{max-width:min(320px,88vw);height:auto}
         .leader-data-sync-fab{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-width:54px;height:48px;margin:0;padding:4px 8px;border:2px solid rgba(212,175,55,0.8);border-radius:14px;background:linear-gradient(165deg,rgba(212,175,55,0.35) 0%,rgba(120,90,30,0.45) 100%);color:#fff8dc;cursor:pointer;box-shadow:0 4px 18px rgba(212,175,55,0.25);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
         .leader-data-sync-fab:active{transform:scale(0.94)}
         .leader-data-sync-fab__icon{font-size:20px;line-height:1;font-weight:700}
         .leader-data-sync-fab__label{font-size:10px;font-weight:700;letter-spacing:0.02em;line-height:1.1;color:#f5e6c8}
+        .leader-save-fab{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-width:54px;height:48px;margin:0;padding:4px 8px;border:2px solid rgba(96,165,200,0.85);border-radius:14px;background:linear-gradient(165deg,rgba(96,165,200,0.38) 0%,rgba(30,70,100,0.5) 100%);color:#e8f4fc;cursor:pointer;box-shadow:0 4px 18px rgba(64,140,180,0.28);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+        .leader-save-fab:active{transform:scale(0.94)}
+        .leader-save-fab__icon{font-size:18px;line-height:1}
+        .leader-save-fab__label{font-size:10px;font-weight:700;letter-spacing:0.02em;line-height:1.1;color:#dceefb}
         .leader-panel-tip-box{background:rgba(255,255,255,0.05);border-left:4px solid #d4af37;border-radius:8px;padding:12px 14px;margin:14px 0 0;font-size:13px;color:rgba(255,255,255,0.72);line-height:1.65;text-align:left}
         .leader-panel-tip-box p{margin:0 0 8px}
         .leader-panel-tip-box p:last-child{margin:0}
@@ -680,8 +696,8 @@
 
 <h4>1. 基础操作</h4>
 <ul>
-<li><b>用途</b>：编辑、排版歌词与备注（<b>不是</b>会众投屏）。电脑：「主领视角 → 在电脑上打开」用网站编辑；完成后点「⇄ 传数据」生成码，手机/平板扫描获取。也可直接「平板/手机传数据」扫入主控台当前歌单</li>
-<li><b>多个二维码</b>：歌单很大时会拆成多个码；电脑端用 ‹ › 切换，手机按顺序逐个扫描，扫齐后内容才完整</li>
+<li><b>用途</b>：编辑歌词与备注（<b>不是</b>会众投屏）。电脑「传数据」→ 传输播放列表歌词与主领设置；手机/平板扫码进入后点「💾 保存」留存自己的修改</li>
+<li><b>再次打开</b>：同一设备会自动恢复本机保存；清缓存或换设备后，扫描之前「保存」时截图的二维码</li>
 <li><b>帮助与引导</b>：右侧 ⚙ 菜单中的「帮助」「引导」；或展开底部工具栏左侧入口；首次打开主领页会自动弹出一次引导</li>
 <li><b>显示模式</b>：默认<b>滚动</b>（整份歌单上下滑，底栏歌名芯片切歌）；⚙ 或工具栏可切换<b>单页</b> / 滚动 / 流程</li>
 <li><b>翻页</b>：单页模式下点左右 ◀ ▶ 或键盘方向键；滚动模式不翻页</li>

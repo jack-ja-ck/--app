@@ -176,7 +176,12 @@ function broadcastState() {
         }
     }
 
-    if (typeof routerGlobal.saveSongs === "function") routerGlobal.saveSongs();
+    if (typeof routerGlobal.saveSongs === "function") {
+        const songList = Array.isArray(routerGlobal.songs) ? routerGlobal.songs : [];
+        const appSongs =
+            routerGlobal.AppState && Array.isArray(routerGlobal.AppState.songs) ? routerGlobal.AppState.songs : [];
+        if (songList.length || appSongs.length) routerGlobal.saveSongs();
+    }
     if (typeof routerGlobal.saveSettings === "function") routerGlobal.saveSettings();
 }
 

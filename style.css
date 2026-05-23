@@ -6512,7 +6512,10 @@ body.leader-note-modal-open {
     box-sizing: border-box;
 }
 .leader-gear-fab,
-.leader-gear-menu {
+.leader-gear-menu,
+.leader-dock-actions,
+.leader-data-sync-fab,
+.leader-save-fab {
     pointer-events: auto;
 }
 .leader-gear-fab {

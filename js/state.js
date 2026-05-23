@@ -88,6 +88,14 @@ var playlist = {
 var defaultSongPosY = 45;
 
 function saveSongs() {
+    if (!Array.isArray(songs) || !songs.length) {
+        try {
+            const existing = getStore(STORAGE.SONGS, []);
+            if (Array.isArray(existing) && existing.length) return;
+        } catch (_e) {
+            /* ignore */
+        }
+    }
     setStore(STORAGE.SONGS, songs);
 }
 

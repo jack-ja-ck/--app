@@ -1054,6 +1054,10 @@
     let projectionCloseInitiatedByMain = false;
     /** 固定 window.name：同一时刻只保留一个投屏窗口，重复打开时聚焦并刷新状态 */
     const WORSHIP_PROJECTION_DISPLAY_WINDOW_NAME = "worship_projection_display_v1";
+    /** 固定 window.name：电脑端主领视角只允许一个窗口 */
+    const WORSHIP_LEADER_WINDOW_NAME = "worship_leader_view_v1";
+    /** 主窗口缓存的主领视角窗口引用（?leader=1） */
+    let leaderWindowRef = null;
     /** 主控台：投屏窗关闭/退出全屏后的居中提示层 */
     let projectionClosedAttentionModal = null;
     /** 为 true 时表示翻页来自投屏窗口 BroadcastChannel，不向投屏窗口回发「控制台已翻页」提示 */
@@ -10913,6 +10917,76 @@ ${deleteBtnHtml}
         return isLeaderCompactBackupViewport();
     }
 
+    /** 电脑端主领窗：同一时刻只保留一个实例（多标签/多窗时关闭较新的重复页） */
+    function enforceLeaderDesktopSingleton() {
+        if (!isLeader || isLeaderHandheldViewport()) return true;
+        const LOCK_KEY = "worship.leaderDesktopLock.v1";
+        let winId = "";
+        try {
+            winId = sessionStorage.getItem("worship.leaderWinId") || "";
+            if (!winId) {
+                winId = "l" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+                sessionStorage.setItem("worship.leaderWinId", winId);
+            }
+        } catch (_e) {
+            return true;
+        }
+        const readLock = () => {
+            try {
+                return parseJSON(localStorage.getItem(LOCK_KEY), null);
+            } catch (_e2) {
+                return null;
+            }
+        };
+        const renewLock = () => {
+            try {
+                localStorage.setItem(LOCK_KEY, JSON.stringify({ id: winId, ts: Date.now() }));
+            } catch (_e3) {
+                /* ignore */
+            }
+        };
+        const otherActive = () => {
+            const cur = readLock();
+            return cur && cur.id !== winId && Date.now() - (Number(cur.ts) || 0) < 7000;
+        };
+        if (otherActive()) {
+            try {
+                if (window.opener && !window.opener.closed) window.opener.focus();
+            } catch (_e4) {
+                /* ignore */
+            }
+            try {
+                window.close();
+            } catch (_e5) {
+                /* ignore */
+            }
+            return false;
+        }
+        renewLock();
+        if (!enforceLeaderDesktopSingleton._timer) {
+            enforceLeaderDesktopSingleton._timer = window.setInterval(renewLock, 2500);
+            window.addEventListener("beforeunload", () => {
+                window.clearInterval(enforceLeaderDesktopSingleton._timer);
+                enforceLeaderDesktopSingleton._timer = 0;
+                try {
+                    const cur = readLock();
+                    if (cur && cur.id === winId) localStorage.removeItem(LOCK_KEY);
+                } catch (_e6) {
+                    /* ignore */
+                }
+            });
+            window.addEventListener("storage", (e) => {
+                if (e.key !== LOCK_KEY || !otherActive()) return;
+                try {
+                    window.close();
+                } catch (_e7) {
+                    /* ignore */
+                }
+            });
+        }
+        return true;
+    }
+
     function persistLeaderLocalSnapshot() {
         if (!isLeader) return;
         try {
@@ -12613,12 +12687,46 @@ ${deleteBtnHtml}
         openDisplayWindow();
     }
 
+    function attachLeaderWindow(win) {
+        if (!win) return;
+        leaderWindowRef = win;
+        if (win.__worshipLeaderUnloadBound) return;
+        win.__worshipLeaderUnloadBound = true;
+        try {
+            win.addEventListener("unload", () => {
+                if (leaderWindowRef === win) leaderWindowRef = null;
+            });
+        } catch (_) {
+            /* ignore */
+        }
+    }
+
     function openLeaderWindow() {
         const anchor = $("open-leader-btn");
-        const leaderWinName =
-            "worship_leader_" + Date.now() + "_" + Math.random().toString(36).slice(2, 10);
-        openDisplayOnSecondScreen(projectionEntryUrl("leader"), leaderWinName, anchor);
+        let w = leaderWindowRef;
+        if (w && w.closed) {
+            leaderWindowRef = null;
+            w = null;
+        }
+        if (w && !w.closed) {
+            try {
+                w.focus();
+            } catch (_e) {
+                /* ignore */
+            }
+            safeBroadcastState("openLeaderWindow:focus-existing");
+            showToast("主领视角已打开，已切换到该窗口", anchor);
+            return;
+        }
+        const newWin = openDisplayOnSecondScreen(
+            projectionEntryUrl("leader"),
+            WORSHIP_LEADER_WINDOW_NAME,
+            anchor
+        );
         safeBroadcastState("openLeaderWindow:after-open");
+        if (newWin && !newWin.closed) {
+            attachLeaderWindow(newWin);
+        }
     }
 
     try {
@@ -14841,6 +14949,7 @@ ${deleteBtnHtml}
     }
 
     function initLeaderView() {
+        if (!enforceLeaderDesktopSingleton()) return;
         tryFreeLocalStorageForWorshipBoot();
         try {
             loadState();
@@ -16929,7 +17038,7 @@ ${deleteBtnHtml}
                 '<button type="button" class="leader-gear-mode-btn" data-mode="multi" title="单页模式">单页</button>' +
                 '<button type="button" class="leader-gear-mode-btn" data-mode="scroll" title="滚动模式">滚动</button>' +
                 "</div></div>" +
-                '<div class="leader-dock-actions" data-dock-v="6">' +
+                '<div class="leader-dock-actions" data-dock-v="7">' +
                 '<button type="button" class="leader-save-fab" data-action="leader-save-qr" title="保存播放列表歌词、改词、备注与显示设置，便于日后再次打开" aria-label="保存">' +
                 '<span class="leader-save-fab__icon" aria-hidden="true">💾</span><span class="leader-save-fab__label">保存</span></button>' +
                 '<button type="button" class="leader-data-sync-fab" id="leader-show-qr-btn" data-action="leader-show-qr" title="传输播放列表歌词与主领设置到手机/平板" aria-label="传数据">' +
@@ -16940,7 +17049,7 @@ ${deleteBtnHtml}
             const ensureLeaderSideRail = () => {
                 const needsRebuild =
                     !leaderSideRailEl ||
-                    !leaderSideRailEl.querySelector('.leader-dock-actions[data-dock-v="6"]') ||
+                    !leaderSideRailEl.querySelector('.leader-dock-actions[data-dock-v="7"]') ||
                     !!leaderSideRailEl.querySelector(".leader-gear-item--sync") ||
                     !!leaderSideRailEl.querySelector(".leader-gear-item--backup") ||
                     !leaderSideRailEl.querySelector(".leader-data-sync-fab");
@@ -17716,6 +17825,7 @@ const linesHtml = rawLines
             ensureBrushHud();
             ensureLeaderSideRail();
             wireLeaderSideRailOnce();
+            syncLeaderDockFabVisibility();
             applyBg();
             if (!leaderWp1PendingBoot()) {
                 render();

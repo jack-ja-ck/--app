@@ -1,4 +1,24 @@
-const CACHE_NAME = "worship-app-v6";
+const CACHE_NAME = "worship-app-v7";
+const NETWORK_FIRST_PATHS = [
+  "/index.html",
+  "/app.js",
+  "/style.css",
+  "/service-worker.js",
+  "index.html",
+  "app.js",
+  "style.css",
+  "service-worker.js"
+];
+
+function isNetworkFirstRequest(url) {
+  try {
+    const path = new URL(url).pathname || "";
+    const base = path.split("/").pop() || path;
+    return NETWORK_FIRST_PATHS.some((p) => path.endsWith(p) || base === p.replace(/^\//, ""));
+  } catch (_e) {
+    return false;
+  }
+}
 const ASSETS = [
   "index.html",
   "manifest.json",
@@ -47,7 +67,21 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("fetch", (event) => {
-  event.respondWith(
-    caches.match(event.request).then((cachedResponse) => cachedResponse || fetch(event.request))
-  );
+  if (event.request.method !== "GET") return;
+  const url = event.request.url;
+  if (isNetworkFirstRequest(url)) {
+    event.respondWith(
+      fetch(event.request)
+        .then((res) => {
+          if (res && res.status === 200) {
+            const clone = res.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          }
+          return res;
+        })
+        .catch(() => caches.match(event.request))
+    );
+    return;
+  }
+  event.respondWith(caches.match(event.request).then((cachedResponse) => cachedResponse || fetch(event.request)));
 });

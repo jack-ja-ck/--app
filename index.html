@@ -45,6 +45,8 @@
         .leader-host.leader-handheld .leader-save-fab{display:flex!important;visibility:visible!important;opacity:1!important;pointer-events:auto!important}
         .leader-host:not(.leader-handheld) .leader-save-fab{display:none!important;visibility:hidden!important;pointer-events:none!important}
         .leader-host:not(.leader-handheld) .leader-data-sync-fab{display:flex!important;visibility:visible!important;opacity:1!important;pointer-events:auto!important}
+        @media (min-width:1025px){.leader-gear-dock .leader-data-sync-fab{display:flex!important;visibility:visible!important;opacity:1!important;pointer-events:auto!important}.leader-gear-dock .leader-save-fab{display:none!important;visibility:hidden!important;pointer-events:none!important}}
+        @media (max-width:1024px){.leader-gear-dock .leader-data-sync-fab{display:none!important;visibility:hidden!important;opacity:0!important;pointer-events:none!important}.leader-gear-dock .leader-save-fab{display:flex!important;visibility:visible!important;opacity:1!important;pointer-events:auto!important}}
         .leader-gear-dock .leader-dock-actions,.leader-gear-dock .leader-data-sync-fab,.leader-gear-dock .leader-save-fab,.leader-gear-dock .leader-gear-fab{pointer-events:auto!important}
         .leader-gear-dock .leader-dock-actions{position:fixed;right:max(10px,env(safe-area-inset-right,0px));bottom:max(10px,env(safe-area-inset-bottom,0px));z-index:128;display:flex!important;flex-direction:row;align-items:flex-end;gap:8px;flex-shrink:0;pointer-events:auto!important}
         .leader-panel-pager{display:none!important}
@@ -139,7 +141,10 @@
           navigator.serviceWorker
             .register("./service-worker.js")
             .then(function (reg) {
-              if (reg) void reg.update();
+              if (reg) {
+                void reg.update();
+                if (reg.waiting) reg.waiting.postMessage({ type: "SKIP_WAITING" });
+              }
             })
             .catch(function () {});
         }

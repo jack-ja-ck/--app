@@ -16453,7 +16453,6 @@ ${deleteBtnHtml}
                         if (channel) channel.postMessage({ type: "goto", page: seq[next] });
                         return;
                     }
-                    if (channel) channel.postMessage({ type: "flip", delta: d });
                     return;
                 }
                 const { pages: livePages, idx } = getPages();
@@ -16496,6 +16495,10 @@ ${deleteBtnHtml}
             };
 
             const closeFlowEditor = () => {
+                const sid = resolveFlowEditorSongId();
+                if (sid && localWorshipFlow?.cards?.length) {
+                    saveLeaderFlowToMain(localWorshipFlow, sid);
+                }
                 hideFlowCtxMenu();
                 teardownFlowListPointerDrag();
                 flowEditorSongId = "";
@@ -17590,6 +17593,7 @@ ${deleteBtnHtml}
                 '<div class="leader-gear-menu" role="menu" aria-label="主领工具" aria-hidden="true">' +
                 '<button type="button" class="leader-gear-item" data-action="leader-help" role="menuitem"><span class="leader-gear-icon">\u2753</span><span class="leader-gear-label">帮助</span></button>' +
                 '<button type="button" class="leader-gear-item" data-action="leader-guide" role="menuitem"><span class="leader-gear-icon">\u25CE</span><span class="leader-gear-label">引导</span></button>' +
+                '<button type="button" class="leader-gear-item" data-action="import-pack" role="menuitem"><span class="leader-gear-icon">\uD83D\uDCE5</span><span class="leader-gear-label">诗歌</span></button>' +
                 '<button type="button" class="leader-gear-item" data-action="flow-arrange" role="menuitem"><span class="leader-gear-icon">\u2692</span><span class="leader-gear-label">编排</span></button>' +
                 '<button type="button" class="leader-gear-item" data-action="bg-panel" role="menuitem"><span class="leader-gear-icon">\u25A0</span><span class="leader-gear-label">背景</span></button>' +
                 '<button type="button" class="leader-gear-item" data-action="brush" role="menuitem"><span class="leader-gear-icon">\u270D</span><span class="leader-gear-label">画笔</span></button>' +
@@ -17606,7 +17610,7 @@ ${deleteBtnHtml}
                 '<button type="button" class="leader-gear-mode-btn" data-mode="multi" title="单页模式">单页</button>' +
                 '<button type="button" class="leader-gear-mode-btn" data-mode="scroll" title="滚动模式">滚动</button>' +
                 "</div></div>" +
-                '<div class="leader-dock-actions" data-dock-v="8">' +
+                '<div class="leader-dock-actions" data-dock-v="9">' +
                 '<button type="button" class="leader-save-fab" data-action="leader-save-qr" title="保存播放列表歌词、改词、备注与显示设置，便于日后再次打开" aria-label="保存">' +
                 '<span class="leader-save-fab__icon" aria-hidden="true">💾</span><span class="leader-save-fab__label">保存</span></button>' +
                 '<button type="button" class="leader-data-sync-fab" id="leader-show-qr-btn" data-action="leader-show-qr" title="传输播放列表歌词与主领设置到手机/平板" aria-label="传数据">' +
@@ -17617,7 +17621,7 @@ ${deleteBtnHtml}
             const ensureLeaderSideRail = () => {
                 const needsRebuild =
                     !leaderSideRailEl ||
-                    !leaderSideRailEl.querySelector('.leader-dock-actions[data-dock-v="8"]') ||
+                    !leaderSideRailEl.querySelector('.leader-dock-actions[data-dock-v="9"]') ||
                     !!leaderSideRailEl.querySelector('[data-action="leader-playlist"]') ||
                     !!leaderSideRailEl.querySelector(".leader-gear-item--sync") ||
                     !!leaderSideRailEl.querySelector(".leader-gear-item--backup") ||
@@ -17649,10 +17653,10 @@ ${deleteBtnHtml}
                         localStorage.setItem(DISPLAY_MODE_KEY, displayMode);
                         if (m === "scroll") lastLeaderFollowSongId = "";
                         if (m === "multi") {
-                            loadLeaderFlowSnapshot();
+                            const sid = activateLeaderSongContext(getLeaderActiveSongId(), true);
                             leaderArrangeStepIx = 0;
-                            const cc = getLeaderFlowCards();
-                            if (cc.length) applyLeaderFlowCardToMain(cc[0]);
+                            const seq = getLeaderArrangeSequence(sid);
+                            if (seq.length) gotoLeaderPageLocal(seq[0]);
                         }
                         render();
                     }
@@ -18528,6 +18532,17 @@ const linesHtml = rawLines
                 }
                 return "";
             };
+            const stripLeaderWp1FromUrl = () => {
+                try {
+                    let path = location.pathname;
+                    let search = location.search.replace(/[?&]wp1=[^&]*/g, "").replace(/^&/, "?").replace(/\?$/, "");
+                    const hash = String(location.hash || "");
+                    const nextHash = /^#wp1=/i.test(hash) ? "" : hash;
+                    history.replaceState(null, "", path + search + nextHash);
+                } catch (_e) {
+                    /* ignore */
+                }
+            };
             const consumeLeaderWp1HashFromLocation = async () => {
                 if (leaderWp1PackImportLock) return false;
                 const packStr = extractLeaderWp1PackFromLocation();
@@ -18538,11 +18553,7 @@ const linesHtml = rawLines
                     showToast("正在载入诗歌…", anchor);
                     const data = await decodeWorshipPackFromRawString(packStr);
                     applyWorshipSongPackFromObject(data, anchor);
-                    try {
-                        history.replaceState(null, "", location.pathname + location.search.replace(/[?&]wp1=[^&]*/g, "").replace(/\?$/, ""));
-                    } catch (_e2) {
-                        /* ignore */
-                    }
+                    stripLeaderWp1FromUrl();
                     return true;
                 } catch (err) {
                     try {

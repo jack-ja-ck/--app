@@ -44,6 +44,14 @@
     const WORSHIP_THEME_VIDEO_LS = "worship_theme_video";
     /** 用户命名的已保存播放列表（localStorage JSON 数组） */
     const WORSHIP_SETLISTS_LS = "worship_setlists";
+    /** 诗歌「+」加入播放列表后，按钮成功动画的展示时长（毫秒） */
+    const SONG_ADD_BTN_FEEDBACK_MS = 1000;
+    /** 播放列表移出项淡出动画时长（毫秒） */
+    const PLAYLIST_REMOVE_ANIM_MS = 320;
+
+    function prefersReducedMotion() {
+        return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+    }
 
     /** 部分浏览器对 .mov/.mp4 会生成 data:application/octet-stream，需与 data:video/* 同等对待 */
     function isLikelyThemeConsoleVideoDataUrl(s) {
@@ -7119,7 +7127,7 @@
   </div>
 </div>
 ${deleteBtnHtml}
-<button type="button" class="song-add-btn" title="加入播放列表" data-song-id="${song.id}">+</button>`;
+<button type="button" class="song-add-btn${state.playlist.items.includes(song.id) ? " in-playlist" : ""}" title="${state.playlist.items.includes(song.id) ? "已在播放列表" : "加入播放列表"}" data-song-id="${song.id}">${state.playlist.items.includes(song.id) ? "✓" : "+"}</button>`;
 
         const openSong = () => {
             switchSong(song.id);
@@ -7279,7 +7287,88 @@ ${deleteBtnHtml}
         }, 200);
     }
 
-    function renderPlaylist() {
+    function clearSongAddBtnFeedbackTimer(btn) {
+        if (!btn) return;
+        const t = btn._addPlaylistFeedbackTimer;
+        if (t) {
+            clearTimeout(t);
+            btn._addPlaylistFeedbackTimer = null;
+        }
+    }
+
+    function applySongAddBtnState(btn, songId) {
+        if (!btn || !document.contains(btn)) return;
+        const inPl = state.playlist.items.includes(songId);
+        btn.classList.remove("is-added", "is-duplicate");
+        btn.disabled = false;
+        if (inPl) {
+            btn.classList.add("in-playlist");
+            btn.textContent = "✓";
+            btn.title = "已在播放列表";
+        } else {
+            btn.classList.remove("in-playlist");
+            btn.textContent = "+";
+            btn.title = "加入播放列表";
+        }
+    }
+
+    function syncSongAddButtonsForId(songId, opts) {
+        const animateRestore = !!(opts && opts.animateRestore);
+        document.querySelectorAll(`.song-add-btn[data-song-id="${songId}"]`).forEach((btn) => {
+            if (btn._addPlaylistFeedbackTimer || btn.classList.contains("is-added") || btn.classList.contains("is-duplicate")) return;
+            if (animateRestore && btn.classList.contains("in-playlist")) {
+                flashSongAddBtnRestored(btn);
+            }
+            applySongAddBtnState(btn, songId);
+        });
+    }
+
+    function syncAllSongAddButtons() {
+        document.querySelectorAll(".song-add-btn[data-song-id]").forEach((btn) => {
+            const sid = btn.getAttribute("data-song-id");
+            if (!sid || btn._addPlaylistFeedbackTimer || btn.classList.contains("is-added") || btn.classList.contains("is-duplicate")) return;
+            applySongAddBtnState(btn, sid);
+        });
+    }
+
+    function flashSongAddBtnDuplicate(btn) {
+        if (!btn) return;
+        clearSongAddBtnFeedbackTimer(btn);
+        btn.classList.remove("is-added");
+        btn.classList.add("is-duplicate");
+        btn.disabled = true;
+        btn._addPlaylistFeedbackTimer = setTimeout(() => {
+            btn._addPlaylistFeedbackTimer = null;
+            if (!document.contains(btn)) return;
+            btn.classList.remove("is-duplicate");
+            btn.disabled = false;
+        }, 500);
+    }
+
+    function flashSongAddBtnRestored(btn) {
+        if (!btn) return;
+        btn.classList.remove("is-restored");
+        void btn.offsetWidth;
+        btn.classList.add("is-restored");
+        setTimeout(() => {
+            if (document.contains(btn)) btn.classList.remove("is-restored");
+        }, 400);
+    }
+
+    function scrollPlaylistItemIntoView(li) {
+        if (!li || !document.contains(li)) return;
+        try {
+            li.scrollIntoView({
+                block: "nearest",
+                behavior: prefersReducedMotion() ? "auto" : "smooth"
+            });
+        } catch (_e) {
+            li.scrollIntoView();
+        }
+    }
+
+    function renderPlaylist(opts) {
+        const highlightSongId = opts && opts.highlightSongId;
         const list = $("playlist-list");
         if (!list) return;
         list.innerHTML = "";
@@ -7287,6 +7376,7 @@ ${deleteBtnHtml}
         if (!state.playlist.items.length) {
             list.innerHTML =
                 '<li class="playlist-empty-hint" role="status">点击左侧诗歌旁的 ＋ 添加到播放列表</li>';
+            syncAllSongAddButtons();
             return;
         }
         state.playlist.items.forEach((songId, idx) => {
@@ -7294,10 +7384,16 @@ ${deleteBtnHtml}
             if (!song) return;
             const li = document.createElement("li");
             li.className = "playlist-item" + (state.playlist.running && idx === state.playlist.activeIndex ? " active" : "");
+            if (highlightSongId && songId === highlightSongId) {
+                li.classList.add("playlist-item--just-added");
+            }
             li.draggable = true;
             li.dataset.idx = String(idx);
-            li.innerHTML = `<span>${escapeHtml(song.title || "未命名")}</span><button class="playlist-remove-btn" title="移出">✕</button>`;
-            li.querySelector(".playlist-remove-btn")?.addEventListener("click", () => removeFromPlaylist(songId));
+            li.innerHTML = `<span>${escapeHtml(song.title || "未命名")}</span><button class="playlist-remove-btn" title="移出" aria-label="移出播放列表">✕</button>`;
+            li.querySelector(".playlist-remove-btn")?.addEventListener("click", (e) => {
+                e.stopPropagation();
+                removeFromPlaylist(songId, { listItem: li });
+            });
             li.addEventListener("dragstart", (e) => {
                 dragFromIndex = idx;
                 if (e.dataTransfer) {
@@ -7333,7 +7429,14 @@ ${deleteBtnHtml}
                 savePlaylist();
             });
             list.appendChild(li);
+            if (highlightSongId && songId === highlightSongId) {
+                requestAnimationFrame(() => scrollPlaylistItemIntoView(li));
+                setTimeout(() => {
+                    if (document.contains(li)) li.classList.remove("playlist-item--just-added");
+                }, SONG_ADD_BTN_FEEDBACK_MS);
+            }
         });
+        syncAllSongAddButtons();
     }
 
     function loadSavedSetlists() {
@@ -7931,26 +8034,57 @@ ${deleteBtnHtml}
     }
 
     function addToPlaylist(songId, triggerElement) {
-        if (!songId || state.playlist.items.includes(songId)) return;
+        if (!songId) return;
+        if (state.playlist.items.includes(songId)) {
+            flashSongAddBtnDuplicate(triggerElement);
+            return;
+        }
         state.playlist.items.push(songId);
         savePlaylist();
-        renderPlaylist();
-        showToast("已加入播放列表", triggerElement || $("playlist-start-btn"));
+        renderPlaylist({ highlightSongId: songId });
+        if (triggerElement) {
+            clearSongAddBtnFeedbackTimer(triggerElement);
+            triggerElement.classList.remove("in-playlist", "is-duplicate");
+            triggerElement.classList.add("is-added");
+            triggerElement.disabled = true;
+            triggerElement.textContent = "✓";
+            triggerElement._addPlaylistFeedbackTimer = setTimeout(() => {
+                triggerElement._addPlaylistFeedbackTimer = null;
+                if (!document.contains(triggerElement)) return;
+                applySongAddBtnState(triggerElement, songId);
+            }, SONG_ADD_BTN_FEEDBACK_MS);
+        }
     }
 
-    function removeFromPlaylist(songId) {
-        const idx = state.playlist.items.indexOf(songId);
-        if (idx < 0) return;
-        state.playlist.items.splice(idx, 1);
-        if (state.playlist.activeIndex >= state.playlist.items.length) {
-            state.playlist.activeIndex = Math.max(0, state.playlist.items.length - 1);
+    function removeFromPlaylist(songId, opts) {
+        if (!songId || state.playlist.items.indexOf(songId) < 0) return;
+
+        const commitRemove = () => {
+            const idx = state.playlist.items.indexOf(songId);
+            if (idx < 0) return;
+            state.playlist.items.splice(idx, 1);
+            if (state.playlist.activeIndex >= state.playlist.items.length) {
+                state.playlist.activeIndex = Math.max(0, state.playlist.items.length - 1);
+            }
+            if (!state.playlist.items.length) {
+                state.playlist.running = false;
+                state.playlist.activeIndex = -1;
+            }
+            savePlaylist();
+            renderPlaylist();
+            syncSongAddButtonsForId(songId, { animateRestore: true });
+        };
+
+        const li = opts && opts.listItem;
+        if (li && document.contains(li) && !(opts && opts.skipAnim) && !li.classList.contains("playlist-item--removing")) {
+            li.classList.add("playlist-item--removing");
+            const rmBtn = li.querySelector(".playlist-remove-btn");
+            if (rmBtn) rmBtn.disabled = true;
+            setTimeout(commitRemove, prefersReducedMotion() ? 180 : PLAYLIST_REMOVE_ANIM_MS);
+            return;
         }
-        if (!state.playlist.items.length) {
-            state.playlist.running = false;
-            state.playlist.activeIndex = -1;
-        }
-        savePlaylist();
-        renderPlaylist();
+
+        commitRemove();
     }
 
     /** @param {"first"|"last"} [whichPage] 切到该首的第 1 页或最后一页（用于键盘跨歌翻页） */

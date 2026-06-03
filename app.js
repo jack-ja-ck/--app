@@ -2683,8 +2683,25 @@
 
     function showPopupBlockedBanner() {
         const el = $("popup-blocked-banner");
-        if (!el) return;
-        el.hidden = false;
+        if (el) el.hidden = false;
+        showProjectionPopupBlockedHint();
+    }
+
+    function showProjectionPopupBlockedHint() {
+        const hint = $("projection-popup-blocked-hint");
+        const btn = $("open-display-btn");
+        if (!hint) return;
+        hint.hidden = false;
+        try {
+            btn?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        } catch (_e) {
+            btn?.scrollIntoView();
+        }
+    }
+
+    function hideProjectionPopupBlockedHint() {
+        const hint = $("projection-popup-blocked-hint");
+        if (hint) hint.hidden = true;
     }
 
     /** 首次引导完成后写入 worship_visited=true，永不再显示 */
@@ -2804,7 +2821,7 @@
             selector: "#editor-lyrics-drawer-summary",
             title: "第 1 步：编辑歌词",
             text:
-                "点中间栏下方的「📝 编辑歌词」标题栏展开。展开后自上而下为：歌名与字号（右侧有收起提示）；接着是「保存」「存为存档」「应用到演示屏」等按钮；下方是大块歌词编辑区（可用空行或 [page] 分段）。编辑区会浮在页面画廊之上，可向上拖动顶边加高。"
+                "点中间栏下方的「📝 编辑歌词」标题栏展开。展开后自上而下为：歌名与字号（右侧有收起提示）；接着是「保存并应用」「存为存档」等按钮；下方是大块歌词编辑区（可用空行或 [page] 分段）。编辑时画廊与投屏会实时预览；顶边金色条可向上拖高。"
         },
         {
             selector: "#song-library",
@@ -2822,13 +2839,13 @@
             selector: "#layout-page-gallery",
             title: "第 4 步：预览页面画廊",
             text:
-                "卡片区即分页预览，每张对应投屏一页。其上方同一行里：蓝色说明条介绍画廊操作，旁边有「使用帮助」「使用引导」（以及可用的「安装 App」）；再往上是征集中提示。确认分页与歌词显示无误后，再继续同步投屏。"
+                "卡片区即分页预览，每张对应投屏一页。上方工具栏有「帮助」菜单（使用说明 / 分步引导 / 快捷键）与画廊缩放。确认分页与歌词显示无误后，再继续同步投屏。"
         },
         {
-            selector: "#apply-to-display",
-            title: "第 5 步：同步到演示屏",
+            selector: "#save-song-btn",
+            title: "第 5 步：保存并应用到投屏",
             text:
-                "在已展开的「编辑歌词」底部工具栏点「应用到演示屏」，把当前歌词与样式同步到会众投屏窗口和主领视图。（每次改词或样式后务必再点一次，会众画面才会更新。）"
+                "在已展开的「编辑歌词」底部工具栏点「保存并应用」：写入诗歌库，并同步到会众投屏与页面画廊。编辑过程中画廊与已开启的投屏也会实时预览修改。"
         },
         {
             selector: "#open-display-btn",
@@ -3087,7 +3104,7 @@
                 "<button type=\"button\" class=\"shortcuts-panel__close\" aria-label=\"关闭\">✕</button>" +
                 "<h3 id=\"shortcuts-panel-title\">⌨️ 快捷键</h3>" +
                 "<dl>" +
-                "<dt>保存歌词</dt><dd>Ctrl+S（Windows）或 ⌘+S（Mac），等同点「保存」</dd>" +
+                "<dt>保存并应用</dt><dd>Ctrl+S（Windows）或 ⌘+S（Mac），等同点「保存并应用」</dd>" +
                 "<dt>翻页</dt><dd>← → 或空格；焦点在输入框/滑块时可 Alt+←/→/空格，或 Ctrl+Shift+←/→</dd>" +
                 "<dt>全屏</dt><dd>F 键</dd>" +
                 "<dt>黑屏 / 白屏</dt><dd>B 键 / W 键</dd>" +
@@ -3245,7 +3262,7 @@
             `<button type="button" class="lyric-template-save-modal-close" data-save-hint-close aria-label="关闭">✕</button>` +
             `</div>` +
             `<div class="lyric-template-save-modal-body">` +
-            `<p class="lyric-template-save-modal-desc">您编辑的内容已写入本机<strong>诗歌库</strong>，系统已将该诗歌存为可随时套用的<strong>歌词模板</strong>（与当前歌名对应）。</p>` +
+            `<p class="lyric-template-save-modal-desc">您编辑的内容已写入本机<strong>诗歌库</strong>，并已同步到<strong>页面画廊</strong>与已开启的<strong>会众投屏</strong>。</p>` +
             `<p class="lyric-template-save-modal-desc">之后请在左侧诗歌库上方的「<b>搜索我的诗歌</b>」中输入歌名或歌词片段即可找到；下次再使用<strong>同一首诗歌</strong>时，就<strong>不必重复编辑</strong>。</p>` +
             `<div class="lyric-template-save-actions">` +
             `<button type="button" class="lyric-template-save-btn lyric-template-save-btn--secondary" id="save-lyrics-hint-search">前往搜索</button>` +
@@ -3297,7 +3314,7 @@
         const el = ensureSaveLyricsLibraryHintModal();
         const h3 = el.querySelector("#save-lyrics-hint-title");
         const t = String(songTitle || "").trim();
-        if (h3) h3.textContent = t ? `「${t}」已保存` : "歌词已保存";
+        if (h3) h3.textContent = t ? `「${t}」已保存并应用` : "已保存并应用";
         el.classList.add("is-open");
     }
 
@@ -3544,7 +3561,7 @@
         {
             title: "5. 与会众投屏",
             text:
-                "本页只做主领编辑，<b>不替代</b>会众投影。会众画面以主控台「开启投屏」为准；主控台改词后须点「应用到演示屏」。"
+                "本页只做主领编辑，<b>不替代</b>会众投影。会众画面以主控台「开启投屏」为准；主控台改词后点「保存并应用」，编辑过程中已开投屏时会实时预览。"
         }
     ];
 
@@ -3674,7 +3691,7 @@
             "</ul>",
             "<h3>四、与会众投屏</h3>",
             "<ul>",
-            "<li>会众画面以主控台「开启投屏」为准；主控台改词后须点「应用到演示屏」。</li>",
+            "<li>会众画面以主控台「开启投屏」为准；主控台改词后点「保存并应用」，编辑过程中已开投屏时会实时预览。</li>",
             "<li>主控台与本页同时打开时，可通过频道同步 LIVE 数据。</li>",
             "</ul>"
         ].join("");
@@ -5947,6 +5964,213 @@
         );
     }
 
+    /** 与「保存」按钮对齐的基准：用于未保存标记与换歌确认 */
+    let editorPersistBaseline = null;
+
+    function captureEditorPersistBaseline() {
+        editorPersistBaseline = {
+            songId: String(state.currentSongId || ""),
+            title: String($("song-title-input")?.value ?? ""),
+            lyrics: String($("lyric-editor-large")?.value ?? "")
+        };
+        updateEditorUnsavedIndicator();
+    }
+
+    function isEditorDirty() {
+        return getEditorDirtyState().any;
+    }
+
+    function getEditorDirtyState() {
+        const none = { any: false, title: false, lyrics: false };
+        if (isDisplay || isLeader) return none;
+        if (!editorPersistBaseline) return none;
+        if (editorPersistBaseline.songId !== String(state.currentSongId || "")) return none;
+        const title = String($("song-title-input")?.value ?? "").trim();
+        const lyrics = String($("lyric-editor-large")?.value ?? "");
+        const baseTitle = String(editorPersistBaseline.title ?? "").trim();
+        const baseLyrics = String(editorPersistBaseline.lyrics ?? "");
+        const titleDirty = title !== baseTitle;
+        const lyricsDirty = lyrics !== baseLyrics;
+        return {
+            any: titleDirty || lyricsDirty,
+            title: titleDirty,
+            lyrics: lyricsDirty
+        };
+    }
+
+    function updateEditorUnsavedIndicator() {
+        const badge = $("editor-unsaved-badge");
+        if (!badge) return;
+        const dirty = getEditorDirtyState();
+        badge.hidden = !dirty.any;
+        badge.setAttribute("aria-hidden", dirty.any ? "false" : "true");
+        if (!dirty.any) {
+            badge.textContent = "未保存";
+            return;
+        }
+        if (dirty.title && dirty.lyrics) badge.textContent = "未保存 · 歌名与歌词";
+        else if (dirty.title) badge.textContent = "未保存 · 歌名";
+        else badge.textContent = "未保存 · 歌词";
+    }
+
+    function openLyricEditorDrawer() {
+        const drawer = $("editor-lyrics-drawer");
+        if (!drawer) return;
+        drawer.open = true;
+        syncLyricDrawerOverlayClass();
+        scheduleFitLyricEditorFont();
+        try {
+            $("lyric-editor-large")?.focus({ preventScroll: true });
+        } catch (_e) {
+            $("lyric-editor-large")?.focus();
+        }
+    }
+
+    function revertEditorToPersistBaseline() {
+        if (!editorPersistBaseline || editorPersistBaseline.songId !== String(state.currentSongId || "")) return;
+        const song = currentSong();
+        if (!song) return;
+        song.title = String(editorPersistBaseline.title ?? "").trim() || "未命名";
+        song.lyrics = String(editorPersistBaseline.lyrics ?? "");
+        syncSongToEditor();
+        saveSongs();
+        clearLyricDraft();
+        captureEditorPersistBaseline();
+        updateSpeakerCards();
+        renderMiniPreview();
+        renderPageGallery();
+    }
+
+    function ensureUnsavedSwitchDialog() {
+        let modal = $("unsaved-switch-modal");
+        if (modal) return modal;
+        modal = document.createElement("div");
+        modal.id = "unsaved-switch-modal";
+        modal.className = "unsaved-switch-modal";
+        modal.hidden = true;
+        modal.setAttribute("role", "dialog");
+        modal.setAttribute("aria-modal", "true");
+        modal.setAttribute("aria-labelledby", "unsaved-switch-modal-title");
+        modal.innerHTML =
+            '<div class="unsaved-switch-modal__panel">' +
+            '<p id="unsaved-switch-modal-title" class="unsaved-switch-modal__title">当前诗歌有未保存的修改</p>' +
+            '<p class="unsaved-switch-modal__text">要先保存到诗歌库，还是放弃修改并切换？</p>' +
+            '<div class="unsaved-switch-modal__actions">' +
+            '<button type="button" class="small-btn" data-unsaved-action="save">保存并切换</button>' +
+            '<button type="button" class="small-btn" data-unsaved-action="discard">放弃修改</button>' +
+            '<button type="button" class="small-btn" data-unsaved-action="cancel">继续编辑</button>' +
+            "</div></div>";
+        document.body.appendChild(modal);
+        modal.addEventListener("click", (e) => {
+            if (e.target === modal) hideUnsavedSwitchDialog("cancel");
+        });
+        return modal;
+    }
+
+    let unsavedSwitchDialogResolver = null;
+
+    function hideUnsavedSwitchDialog(result) {
+        const modal = $("unsaved-switch-modal");
+        if (modal) modal.hidden = true;
+        const resolve = unsavedSwitchDialogResolver;
+        unsavedSwitchDialogResolver = null;
+        if (resolve) resolve(result || "cancel");
+    }
+
+    function promptUnsavedBeforeSwitch() {
+        return new Promise((resolve) => {
+            const modal = ensureUnsavedSwitchDialog();
+            unsavedSwitchDialogResolver = resolve;
+            modal.hidden = false;
+            const saveBtn = modal.querySelector('[data-unsaved-action="save"]');
+            try {
+                saveBtn?.focus({ preventScroll: true });
+            } catch (_e) {
+                saveBtn?.focus();
+            }
+        });
+    }
+
+    function installUnsavedSwitchDialogActions() {
+        const modal = ensureUnsavedSwitchDialog();
+        if (modal.dataset.bound) return;
+        modal.dataset.bound = "1";
+        modal.querySelectorAll("[data-unsaved-action]").forEach((btn) => {
+            btn.addEventListener("click", () => {
+                hideUnsavedSwitchDialog(btn.getAttribute("data-unsaved-action"));
+            });
+        });
+        document.addEventListener("keydown", (e) => {
+            const m = $("unsaved-switch-modal");
+            if (e.key === "Escape" && m && !m.hidden) hideUnsavedSwitchDialog("cancel");
+        });
+    }
+
+    function buildGalleryPlaylistEmptyHtml() {
+        return (
+            '<div class="gallery-playlist-empty" role="status">' +
+            '<p class="gallery-playlist-empty__title">还没有诗歌在播放列表里</p>' +
+            '<ol class="gallery-playlist-empty__steps">' +
+            "<li>在左侧诗歌库点 <strong>+</strong> 加入播放列表</li>" +
+            "<li>点 <strong>▶ 开始播放</strong></li>" +
+            "<li>在这里预览每一页分页卡片</li>" +
+            "</ol>" +
+            '<button type="button" class="small-btn gallery-playlist-empty__btn" data-open-lyric-editor>展开编辑歌词</button>' +
+            "</div>"
+        );
+    }
+
+    function bindGalleryPlaylistEmptyActions(container) {
+        container.querySelector("[data-open-lyric-editor]")?.addEventListener("click", (e) => {
+            e.preventDefault();
+            openLyricEditorDrawer();
+        });
+    }
+
+    function setHelpMenuOpen(open) {
+        const wrap = $("help-menu-wrap");
+        const btn = $("help-menu-btn");
+        const menu = $("help-menu-dropdown");
+        if (!wrap || !btn || !menu) return;
+        wrap.classList.toggle("help-menu-wrap--open", !!open);
+        btn.setAttribute("aria-expanded", open ? "true" : "false");
+        menu.hidden = !open;
+    }
+
+    function closeHelpMenu() {
+        setHelpMenuOpen(false);
+    }
+
+    function installHelpMenu() {
+        const wrap = $("help-menu-wrap");
+        const btn = $("help-menu-btn");
+        const menu = $("help-menu-dropdown");
+        if (!wrap || !btn || !menu || installHelpMenu._bound) return;
+        installHelpMenu._bound = true;
+        btn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            setHelpMenuOpen(menu.hidden);
+        });
+        menu.querySelectorAll("[data-help-action]").forEach((item) => {
+            item.addEventListener("click", (e) => {
+                e.stopPropagation();
+                const action = item.getAttribute("data-help-action");
+                closeHelpMenu();
+                if (action === "docs") openHelpModal();
+                else if (action === "guide") replayNewUserArrowGuideFromToolbar();
+                else if (action === "shortcuts") openShortcutsPanel();
+            });
+        });
+        document.addEventListener("mousedown", (e) => {
+            if (menu.hidden) return;
+            if (e.target instanceof Element && e.target.closest("#help-menu-wrap")) return;
+            closeHelpMenu();
+        });
+        document.addEventListener("keydown", (e) => {
+            if (e.key === "Escape") closeHelpMenu();
+        });
+    }
+
     function syncSongToEditor() {
         const song = currentSong();
         if (!song) return;
@@ -5965,10 +6189,14 @@
         if (!song) return;
         song.title = ($("song-title-input")?.value || "").trim() || "未命名";
         song.lyrics = $("lyric-editor-large")?.value || "";
-        song.key = ($("song-key")?.value || "").trim();
-        song.tempo = ($("song-tempo")?.value || "").trim();
-        song.notes = ($("song-notes")?.value || "").trim();
-        song.tags = ($("song-tags")?.value || "").trim();
+        const keyEl = $("song-key");
+        if (keyEl) song.key = keyEl.value.trim();
+        const tempoEl = $("song-tempo");
+        if (tempoEl) song.tempo = tempoEl.value.trim();
+        const notesEl = $("song-notes");
+        if (notesEl) song.notes = notesEl.value.trim();
+        const tagsEl = $("song-tags");
+        if (tagsEl) song.tags = tagsEl.value.trim();
         song.overlayOpacityPct = clamp(Number(state.ui.overlayOpacityPct), 0, 80);
         song.fontOpacityPct = clamp(Number(state.ui.fontOpacityPct), 20, 100);
     }
@@ -6810,7 +7038,8 @@
             return;
         }
         if (!state.songs || !state.songs.length || !state.currentSongId) {
-            gal.innerHTML = "";
+            gal.innerHTML = buildGalleryPlaylistEmptyHtml();
+            bindGalleryPlaylistEmptyActions(gal);
             delete gal.dataset.galleryStructSig;
             const globalMeta = document.querySelector(".speaker-view-page-meta");
             if (globalMeta) globalMeta.hidden = false;
@@ -6820,7 +7049,8 @@
 
         const songIdsOrdered = getPlaylistSongIdsOrderedForGallery();
         if (!songIdsOrdered.length) {
-            gal.innerHTML = "";
+            gal.innerHTML = buildGalleryPlaylistEmptyHtml();
+            bindGalleryPlaylistEmptyActions(gal);
             delete gal.dataset.galleryStructSig;
             const globalMeta = document.querySelector(".speaker-view-page-meta");
             if (globalMeta) globalMeta.hidden = false;
@@ -9376,6 +9606,24 @@ ${deleteBtnHtml}
 
     let _liveStylePushRaf = 0;
     let _liveStyleOverrides = null;
+    let _editorLivePushTimer = 0;
+
+    /** 编辑歌词/歌名时：防抖推送至监视窗、页面画廊动效与真实投屏（不写库，须点「保存并应用」持久化） */
+    function scheduleEditorLiveProjectionPush() {
+        if (isDisplay || isLeader) return;
+        if (_editorLivePushTimer) clearTimeout(_editorLivePushTimer);
+        _editorLivePushTimer = window.setTimeout(() => {
+            _editorLivePushTimer = 0;
+            try {
+                const snap = buildLiveState();
+                refreshMonitorContent(undefined, snap, { persist: false });
+                const gal = $("layout-page-gallery");
+                if (gal) runGalleryCardSwitchAnimation(gal);
+            } catch (_e) {
+                /* ignore */
+            }
+        }, 140);
+    }
 
     /** 合并同一帧内的多次滑块 input，轻量推送到真实投屏窗口 */
     function scheduleLiveStyleProjectionPush(overrides) {
@@ -10140,6 +10388,32 @@ ${deleteBtnHtml}
 
     function switchSong(songId, opts) {
         if (!state.songs.some((s) => s.id === songId)) return;
+        if (String(songId) === String(state.currentSongId)) {
+            if (opts && opts.page != null && Number.isFinite(Number(opts.page))) {
+                switchSongCore(songId, opts);
+            }
+            return;
+        }
+        if (!isDisplay && !isLeader && !(opts && opts.skipUnsavedCheck) && isEditorDirty()) {
+            promptUnsavedBeforeSwitch().then((action) => {
+                if (action === "cancel") return;
+                if (action === "save") {
+                    saveCurrentLyrics({ silent: true });
+                    switchSongCore(songId, { ...(opts || {}), skipUnsavedCheck: true });
+                    return;
+                }
+                if (action === "discard") {
+                    revertEditorToPersistBaseline();
+                    switchSongCore(songId, { ...(opts || {}), skipUnsavedCheck: true });
+                }
+            });
+            return;
+        }
+        switchSongCore(songId, opts);
+    }
+
+    function switchSongCore(songId, opts) {
+        if (!state.songs.some((s) => s.id === songId)) return;
         libraryPendingDeleteId = "";
         if (!isDisplay && !isLeader) {
             syncEditorToSong();
@@ -10154,6 +10428,7 @@ ${deleteBtnHtml}
         syncOverlayFontOpacityFromCurrentSong();
         updateUIFromState();
         syncSongToEditor();
+        captureEditorPersistBaseline();
         const pages = splitPages(getStablePagingLyricsForPageSplit(), state.ui.defaultLines);
         const wantPage = opts && opts.page != null && Number.isFinite(Number(opts.page)) ? Math.floor(Number(opts.page)) : 0;
         state.currentPage = clamp(wantPage, 0, Math.max(0, pages.length - 1));
@@ -10452,6 +10727,7 @@ ${deleteBtnHtml}
             hideLyricDraftBanner();
             clearLyricDraft();
             syncEditorToSong();
+            updateEditorUnsavedIndicator();
             state.currentPage = 0;
             updateSpeakerCards();
             renderMiniPreview();
@@ -10738,9 +11014,11 @@ ${deleteBtnHtml}
         renderMiniPreview();
         broadcastState();
         clearLyricDraft();
+        captureEditorPersistBaseline();
         if (!silent) {
             const st = currentSong();
             openSaveLyricsLibraryHintModal(st?.title || "");
+            showToast("✅ 已保存并应用", $("save-song-btn"), { variant: "success" });
         }
     }
 
@@ -12907,6 +13185,7 @@ ${deleteBtnHtml}
             attachProjectionDisplayWindow(newWin);
             noteProjectionDisplayAlive();
             hideRestoreProjectionBanner();
+            hideProjectionPopupBlockedHint();
             syncProjectionPanelControls();
             return;
         }
@@ -13334,23 +13613,14 @@ ${deleteBtnHtml}
             updateGalleryZoom();
         });
         on("publish-song-btn", "click", publishSong);
-        on("apply-to-display", "click", (e) => {
-            saveCurrentLyrics({ silent: true });
-            broadcastState();
-            showToast("✅ 已应用", e.currentTarget, { variant: "success" });
-        });
         on("reset-current-song", "click", () => {
             setLyricEditorValueProgrammatically(DEFAULT_LYRICS);
             saveCurrentLyrics();
             updateCloudUploadBtnState();
         });
         on("ocr-btn", "click", () => $("ocr-file-input")?.click());
-        on("help-btn", "click", openHelpModal);
-        on("usage-guide-btn", "click", () => {
-            const hm = $("help-modal");
-            if (hm) hm.style.display = "none";
-            replayNewUserArrowGuideFromToolbar();
-        });
+        installHelpMenu();
+        installUnsavedSwitchDialogActions();
         on("ocr-file-input", "change", async (e) => {
             const input = e.target;
             const file = input?.files?.[0];
@@ -13813,17 +14083,18 @@ ${deleteBtnHtml}
         on("lyric-editor-large", "input", () => {
             if (_lyricEditorProgrammaticWrite) return;
             syncEditorToSong();
+            updateEditorUnsavedIndicator();
             const nPages = splitPages(getLyricsSourceStringForPaging(), state.ui.defaultLines).length;
             const maxIdx = Math.max(0, nPages - 1);
             if (state.currentPage > maxIdx) state.currentPage = maxIdx;
             updateSpeakerCards({ linesOnly: isMainVideoBackground() });
             renderMiniPreview({ linesOnly: isMainVideoBackground() });
-            refreshMonitorContent();
             updateCloudUploadBtnState();
             scheduleLyricDraftSave();
             scheduleAutoSaveSongs();
             renderPageGallery();
             scheduleFitLyricEditorFont();
+            scheduleEditorLiveProjectionPush();
         });
         on("lyric-editor-large", "paste", (e) => {
             if (_lyricEditorProgrammaticWrite) return;
@@ -13852,30 +14123,13 @@ ${deleteBtnHtml}
         on("editor-font-decrease", "click", () => bumpLyricEditorUserFont(-1));
         on("song-title-input", "input", () => {
             syncEditorToSong();
+            updateEditorUnsavedIndicator();
             renderSongList();
+            renderPageGallery();
             updateCloudUploadBtnState();
             scheduleLyricDraftSave();
             scheduleAutoSaveSongs();
-        });
-        on("song-key", "input", () => {
-            syncEditorToSong();
-            scheduleLyricDraftSave();
-            scheduleAutoSaveSongs();
-        });
-        on("song-tempo", "input", () => {
-            syncEditorToSong();
-            scheduleLyricDraftSave();
-            scheduleAutoSaveSongs();
-        });
-        on("song-notes", "input", () => {
-            syncEditorToSong();
-            scheduleLyricDraftSave();
-            scheduleAutoSaveSongs();
-        });
-        on("song-tags", "input", () => {
-            syncEditorToSong();
-            scheduleLyricDraftSave();
-            scheduleAutoSaveSongs();
+            scheduleEditorLiveProjectionPush();
         });
 
         on("adv-lyric-overlay-opacity", "input", () => {
@@ -13978,8 +14232,13 @@ ${deleteBtnHtml}
             popupBlockedClose.dataset.boundPopup = "1";
             popupBlockedClose.addEventListener("click", () => {
                 if (popupBlockedBanner) popupBlockedBanner.hidden = true;
+                hideProjectionPopupBlockedHint();
             });
         }
+        const projectionPopupHint = $("projection-popup-blocked-hint");
+        projectionPopupHint?.querySelector(".projection-popup-blocked-hint__close")?.addEventListener("click", () => {
+            hideProjectionPopupBlockedHint();
+        });
 
         document.addEventListener("keydown", (e) => {
             const t = e.target;
@@ -18991,6 +19250,7 @@ const linesHtml = rawLines
             syncOverlayFontOpacityFromCurrentSong();
             updateUIFromState();
             syncSongToEditor();
+            captureEditorPersistBaseline();
             renderSongList();
             updateSpeakerCards();
             renderMiniPreview();

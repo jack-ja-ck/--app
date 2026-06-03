@@ -122,12 +122,16 @@ const UI = {
     },
 
     applyToDisplay() {
-        UI.saveCurrentLyrics();
         const g = typeof globalThis !== "undefined" ? globalThis : window;
+        if (typeof g.saveCurrentLyrics === "function") {
+            g.saveCurrentLyrics();
+            return;
+        }
+        UI.saveCurrentLyrics();
         const R = g.AppRouter;
         if (R && typeof R.init === "function") R.init();
         if (R && typeof R.broadcastState === "function") R.broadcastState();
-        UI.showToast("已同步到演示", document.getElementById("apply-to-display"));
+        UI.showToast("已保存并应用", document.getElementById("save-song-btn"));
     },
 
     resetCurrentSong() {

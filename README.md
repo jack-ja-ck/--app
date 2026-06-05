@@ -22,24 +22,10 @@
 
 ## 开源协议
 
-本项目基于 MIT 许可证开源。
-
-Copyright (c) 2026 敬拜投屏工具
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+许可证
+本项目基于 GNU Affero General Public License v3 (AGPL-3.0) 发布。
+您使用本软件时，请务必遵守 AGPL-3.0 的条款。核心要求如下：
+• 可以自由使用：用于个人、教会或非营利组织。
+• 禁止修改后闭源：任何对软件的修改并部署为网络服务，必须将整个修改后的源码以 AGPL-3.0 许可证开源。
+• 商业限制：此许可证禁止将本软件或修改版本作为闭源商业软件的一部分进行销售。
+详细完整条款请参阅根目录下的 LICENSE 文件。

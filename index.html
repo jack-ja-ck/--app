@@ -6,16 +6,33 @@
     <script>
     (function () {
         try {
+            var DESIGN_W = 1920;
+            var DESIGN_H = 1080;
+            var MIN = 0.4;
+            var MAX = 1.3;
             var override = localStorage.getItem("worship_ui_zoom_user_override") === "1";
             var level;
             if (override) {
                 level = parseFloat(localStorage.getItem("worship_ui_zoom_level"));
+                if (Number.isFinite(level)) level = Math.max(MIN, Math.min(MAX, level));
             } else {
-                var w = Math.max(320, window.innerWidth || 1536);
-                level = 0.8 * (w / 1536);
-                level = Math.max(0.72, Math.min(0.95, level));
+                var w = Math.max(320, window.innerWidth || DESIGN_W);
+                var h = Math.max(480, window.innerHeight || DESIGN_H);
+                level = Math.min(w / DESIGN_W, h / DESIGN_H);
+                level = Math.max(MIN, Math.min(MAX, level));
             }
-            if (Number.isFinite(level)) document.documentElement.style.zoom = String(level);
+            if (Number.isFinite(level)) {
+                document.documentElement.style.zoom = String(level);
+                if (Math.abs(level - 1) > 0.001) {
+                    var compensator = "calc(100vh / " + level + ")";
+                    document.addEventListener("DOMContentLoaded", function () {
+                        document.body.style.height = compensator;
+                        document.body.style.minHeight = compensator;
+                        var app = document.getElementById("app");
+                        if (app) app.style.minHeight = compensator;
+                    });
+                }
+            }
         } catch (_e) { /* ignore */ }
     })();
     </script>
@@ -304,8 +321,8 @@
                             <div class="gallery-toolbar-zoom ui-toolbar-zoom" role="group" aria-label="控制台界面缩放">
                                 <span class="gallery-toolbar-zoom-label">界面</span>
                                 <button type="button" id="ui-zoom-out" class="gallery-toolbar-zoom-btn" title="缩小整页控制台">−</button>
-                                <span id="ui-zoom-val" class="gallery-toolbar-zoom-val" title="按窗口宽度自动适应">80% · 自动</span>
-                                <button type="button" id="ui-zoom-reset" class="gallery-toolbar-zoom-btn gallery-toolbar-zoom-btn--icon" title="恢复自动适应">↺</button>
+                                <span id="ui-zoom-val" class="gallery-toolbar-zoom-val" title="按窗口宽高自动适配">80% · 自动</span>
+                                <button type="button" id="ui-zoom-reset" class="gallery-toolbar-zoom-btn gallery-toolbar-zoom-btn--icon" title="恢复整窗自动适配">↺</button>
                                 <button type="button" id="ui-zoom-in" class="gallery-toolbar-zoom-btn" title="放大整页控制台">+</button>
                             </div>
                         </div>
@@ -683,13 +700,13 @@
                                     </select>
                                     <div class="ui-zoom-adv-block">
                                         <label class="adv-drawer-field-label">界面缩放</label>
-                                        <p class="adv-console-theme-scope-hint ui-zoom-adv-hint">整页控制台缩放（投屏窗口不受影响）。未手动调节时按窗口宽度自动适应。</p>
-                                        <p id="ui-zoom-mode-adv" class="ui-zoom-adv-mode">当前：自动适应</p>
+                                        <p class="adv-console-theme-scope-hint ui-zoom-adv-hint">整页控制台缩放（投屏窗口不受影响）。未手动调节时按窗口宽高自动适配；建议浏览器缩放保持 100%。手动范围 40%～130%。</p>
+                                        <p id="ui-zoom-mode-adv" class="ui-zoom-adv-mode">当前：整窗自动适配</p>
                                         <div class="gallery-toolbar-zoom ui-zoom-adv-controls" role="group" aria-label="界面缩放">
                                             <button type="button" id="ui-zoom-out-adv" class="gallery-toolbar-zoom-btn" title="缩小整页控制台">−</button>
                                             <span id="ui-zoom-val-adv" class="gallery-toolbar-zoom-val">80%</span>
                                             <button type="button" id="ui-zoom-in-adv" class="gallery-toolbar-zoom-btn" title="放大整页控制台">+</button>
-                                            <button type="button" id="ui-zoom-restore-auto" class="btn-outline ui-zoom-restore-auto-btn">↺ 恢复自动适应</button>
+                                            <button type="button" id="ui-zoom-restore-auto" class="btn-outline ui-zoom-restore-auto-btn">↺ 恢复整窗自动适配</button>
                                         </div>
                                     </div>
                                     <div style="display:flex;gap:8px;width:100%;box-sizing:border-box;flex-wrap:wrap;">

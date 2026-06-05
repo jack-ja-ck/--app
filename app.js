@@ -1214,23 +1214,42 @@
         scheduleGalleryLyricPadRelayout();
     }
 
-    /** 控制台整页界面缩放（非投屏/领唱窗；参考 1920@125% ≈ 1536 CSS 宽时 80%） */
+    /** 控制台整页界面缩放：整窗等比适配（设计画布 1920×1080 ≈ 1536×864 逻辑区域 @80%） */
     const UI_ZOOM_LS = "worship_ui_zoom_level";
     const UI_ZOOM_OVERRIDE_LS = "worship_ui_zoom_user_override";
-    const UI_ZOOM_REF_WIDTH = 1536;
-    const UI_ZOOM_BASE = 0.8;
-    const UI_ZOOM_AUTO_MIN = 0.72;
-    const UI_ZOOM_AUTO_MAX = 0.95;
-    const UI_ZOOM_MANUAL_MIN = 0.65;
-    const UI_ZOOM_MANUAL_MAX = 1.1;
+    const UI_ZOOM_DESIGN_W = 1920;
+    const UI_ZOOM_DESIGN_H = 1080;
+    const UI_ZOOM_MANUAL_MIN = 0.4;
+    const UI_ZOOM_MANUAL_MAX = 1.3;
     const UI_ZOOM_STEP = 0.05;
-    let uiZoomLevel = UI_ZOOM_BASE;
+    let uiZoomLevel = 0.8;
     let uiZoomUserOverride = false;
     let uiZoomResizeTimer = 0;
 
     function computeAutoUiZoom() {
-        const w = Math.max(320, window.innerWidth || UI_ZOOM_REF_WIDTH);
-        return clamp(UI_ZOOM_BASE * (w / UI_ZOOM_REF_WIDTH), UI_ZOOM_AUTO_MIN, UI_ZOOM_AUTO_MAX);
+        const w = Math.max(320, window.innerWidth || UI_ZOOM_DESIGN_W);
+        const h = Math.max(480, window.innerHeight || UI_ZOOM_DESIGN_H);
+        const fit = Math.min(w / UI_ZOOM_DESIGN_W, h / UI_ZOOM_DESIGN_H);
+        return clamp(fit, UI_ZOOM_MANUAL_MIN, UI_ZOOM_MANUAL_MAX);
+    }
+
+    function clearUiZoomLayoutCompensation() {
+        document.body.style.height = "";
+        document.body.style.minHeight = "";
+        const app = $("app");
+        if (app) app.style.minHeight = "";
+    }
+
+    function applyUiZoomLayoutCompensation(z) {
+        if (!Number.isFinite(z) || Math.abs(z - 1) < 0.001) {
+            clearUiZoomLayoutCompensation();
+            return;
+        }
+        const compensator = `calc(100vh / ${z})`;
+        document.body.style.height = compensator;
+        document.body.style.minHeight = compensator;
+        const app = $("app");
+        if (app) app.style.minHeight = compensator;
     }
 
     function loadUiZoomState() {
@@ -1270,15 +1289,15 @@
             toolbarVal.textContent = uiZoomUserOverride ? pct : `${pct} · 自动`;
             toolbarVal.title = uiZoomUserOverride
                 ? "当前为手动设置的界面缩放"
-                : "按窗口宽度自动适应（1536 宽 ≈ 80%）";
+                : "按窗口宽高自动适配整页（建议浏览器缩放保持 100%）";
         }
         const advVal = $("ui-zoom-val-adv");
         if (advVal) advVal.textContent = pct;
         const advMode = $("ui-zoom-mode-adv");
-        if (advMode) advMode.textContent = uiZoomUserOverride ? "当前：手动" : "当前：自动适应";
+        if (advMode) advMode.textContent = uiZoomUserOverride ? "当前：手动" : "当前：整窗自动适配";
         const resetBtn = $("ui-zoom-reset");
         if (resetBtn) {
-            resetBtn.title = uiZoomUserOverride ? "恢复自动适应" : "重新按窗口宽度计算";
+            resetBtn.title = uiZoomUserOverride ? "恢复整窗自动适配" : "重新按当前窗口计算";
         }
         const restoreAdv = $("ui-zoom-restore-auto");
         if (restoreAdv) restoreAdv.disabled = !uiZoomUserOverride;
@@ -1288,12 +1307,13 @@
         if (isDisplay || isLeader) return;
         uiZoomLevel = uiZoomUserOverride
             ? clamp(uiZoomLevel, UI_ZOOM_MANUAL_MIN, UI_ZOOM_MANUAL_MAX)
-            : clamp(computeAutoUiZoom(), UI_ZOOM_AUTO_MIN, UI_ZOOM_AUTO_MAX);
+            : clamp(computeAutoUiZoom(), UI_ZOOM_MANUAL_MIN, UI_ZOOM_MANUAL_MAX);
         try {
             document.documentElement.style.zoom = String(uiZoomLevel);
         } catch (_e) {
             /* ignore */
         }
+        applyUiZoomLayoutCompensation(uiZoomLevel);
         syncUiZoomControlLabels();
     }
 

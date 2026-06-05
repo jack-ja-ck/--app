@@ -1214,6 +1214,123 @@
         scheduleGalleryLyricPadRelayout();
     }
 
+    /** 控制台整页界面缩放（非投屏/领唱窗；参考 1920@125% ≈ 1536 CSS 宽时 80%） */
+    const UI_ZOOM_LS = "worship_ui_zoom_level";
+    const UI_ZOOM_OVERRIDE_LS = "worship_ui_zoom_user_override";
+    const UI_ZOOM_REF_WIDTH = 1536;
+    const UI_ZOOM_BASE = 0.8;
+    const UI_ZOOM_AUTO_MIN = 0.72;
+    const UI_ZOOM_AUTO_MAX = 0.95;
+    const UI_ZOOM_MANUAL_MIN = 0.65;
+    const UI_ZOOM_MANUAL_MAX = 1.1;
+    const UI_ZOOM_STEP = 0.05;
+    let uiZoomLevel = UI_ZOOM_BASE;
+    let uiZoomUserOverride = false;
+    let uiZoomResizeTimer = 0;
+
+    function computeAutoUiZoom() {
+        const w = Math.max(320, window.innerWidth || UI_ZOOM_REF_WIDTH);
+        return clamp(UI_ZOOM_BASE * (w / UI_ZOOM_REF_WIDTH), UI_ZOOM_AUTO_MIN, UI_ZOOM_AUTO_MAX);
+    }
+
+    function loadUiZoomState() {
+        try {
+            uiZoomUserOverride = localStorage.getItem(UI_ZOOM_OVERRIDE_LS) === "1";
+            if (uiZoomUserOverride) {
+                const v = parseFloat(localStorage.getItem(UI_ZOOM_LS));
+                uiZoomLevel = Number.isFinite(v)
+                    ? clamp(v, UI_ZOOM_MANUAL_MIN, UI_ZOOM_MANUAL_MAX)
+                    : computeAutoUiZoom();
+            } else {
+                uiZoomLevel = computeAutoUiZoom();
+            }
+        } catch (_e) {
+            uiZoomLevel = computeAutoUiZoom();
+            uiZoomUserOverride = false;
+        }
+    }
+
+    function persistUiZoomState() {
+        try {
+            localStorage.setItem(UI_ZOOM_LS, String(uiZoomLevel));
+            localStorage.setItem(UI_ZOOM_OVERRIDE_LS, uiZoomUserOverride ? "1" : "0");
+        } catch (_e) {
+            /* ignore */
+        }
+    }
+
+    function formatUiZoomPct(level) {
+        return `${Math.round(clamp(level, UI_ZOOM_MANUAL_MIN, UI_ZOOM_MANUAL_MAX) * 100)}%`;
+    }
+
+    function syncUiZoomControlLabels() {
+        const pct = formatUiZoomPct(uiZoomLevel);
+        const toolbarVal = $("ui-zoom-val");
+        if (toolbarVal) {
+            toolbarVal.textContent = uiZoomUserOverride ? pct : `${pct} · 自动`;
+            toolbarVal.title = uiZoomUserOverride
+                ? "当前为手动设置的界面缩放"
+                : "按窗口宽度自动适应（1536 宽 ≈ 80%）";
+        }
+        const advVal = $("ui-zoom-val-adv");
+        if (advVal) advVal.textContent = pct;
+        const advMode = $("ui-zoom-mode-adv");
+        if (advMode) advMode.textContent = uiZoomUserOverride ? "当前：手动" : "当前：自动适应";
+        const resetBtn = $("ui-zoom-reset");
+        if (resetBtn) {
+            resetBtn.title = uiZoomUserOverride ? "恢复自动适应" : "重新按窗口宽度计算";
+        }
+        const restoreAdv = $("ui-zoom-restore-auto");
+        if (restoreAdv) restoreAdv.disabled = !uiZoomUserOverride;
+    }
+
+    function applyUiZoom() {
+        if (isDisplay || isLeader) return;
+        uiZoomLevel = uiZoomUserOverride
+            ? clamp(uiZoomLevel, UI_ZOOM_MANUAL_MIN, UI_ZOOM_MANUAL_MAX)
+            : clamp(computeAutoUiZoom(), UI_ZOOM_AUTO_MIN, UI_ZOOM_AUTO_MAX);
+        try {
+            document.documentElement.style.zoom = String(uiZoomLevel);
+        } catch (_e) {
+            /* ignore */
+        }
+        syncUiZoomControlLabels();
+    }
+
+    function setUiZoomManualLevel(next) {
+        uiZoomUserOverride = true;
+        uiZoomLevel = clamp(Math.round(next * 100) / 100, UI_ZOOM_MANUAL_MIN, UI_ZOOM_MANUAL_MAX);
+        persistUiZoomState();
+        applyUiZoom();
+    }
+
+    function nudgeUiZoom(delta) {
+        const base = uiZoomUserOverride ? uiZoomLevel : computeAutoUiZoom();
+        setUiZoomManualLevel(base + delta);
+    }
+
+    function restoreUiZoomAuto() {
+        uiZoomUserOverride = false;
+        uiZoomLevel = computeAutoUiZoom();
+        persistUiZoomState();
+        applyUiZoom();
+    }
+
+    function initUiZoom() {
+        if (isDisplay || isLeader) return;
+        loadUiZoomState();
+        applyUiZoom();
+        window.addEventListener("resize", () => {
+            if (uiZoomUserOverride) return;
+            if (uiZoomResizeTimer) clearTimeout(uiZoomResizeTimer);
+            uiZoomResizeTimer = window.setTimeout(() => {
+                uiZoomResizeTimer = 0;
+                uiZoomLevel = computeAutoUiZoom();
+                applyUiZoom();
+            }, 120);
+        });
+    }
+
     function getLyricFontSliderMax() {
         const mega = $("font-mega-mode");
         return mega && mega.checked ? 500 : 300;
@@ -6556,7 +6673,7 @@
             const cp = isCurrent ? clamp(state.currentPage, 0, Math.max(0, pages.length - 1)) : 0;
 
             const wrapI = meta.querySelector('[data-gallery-page-mode="interactive"]');
-            const wrapS = meta.querySelector('[data-gallery-page-mode="static"]');
+            const wrapR = meta.querySelector('[data-gallery-page-mode="readonly"]');
             if (wrapI) {
                 wrapI.hidden = !isCurrent;
                 const inp = wrapI.querySelector(".gallery-section-page-input");
@@ -6568,10 +6685,12 @@
                     inp.value = String(clamp(cp + 1, 1, pn));
                 }
             }
-            if (wrapS) {
-                wrapS.hidden = isCurrent;
-                const sum = wrapS.querySelector(".gallery-section-page-summary");
-                if (sum) sum.textContent = `共 ${pn} 页`;
+            if (wrapR) {
+                wrapR.hidden = isCurrent;
+                const val = wrapR.querySelector(".page-indicator-readonly-val");
+                const tot = wrapR.querySelector(".page-indicator-total");
+                if (val) val.textContent = String(clamp(cp + 1, 1, pn));
+                if (tot) tot.textContent = `/${pn}`;
             }
         });
     }
@@ -6803,9 +6922,9 @@
             const pageMetaEl = sec.querySelector(".gallery-song-section-page-meta");
             if (pageMetaEl) {
                 const wrapI = pageMetaEl.querySelector('[data-gallery-page-mode="interactive"]');
-                const wrapS = pageMetaEl.querySelector('[data-gallery-page-mode="static"]');
+                const wrapR = pageMetaEl.querySelector('[data-gallery-page-mode="readonly"]');
                 if (wrapI) wrapI.hidden = !isCurrent;
-                if (wrapS) wrapS.hidden = isCurrent;
+                if (wrapR) wrapR.hidden = isCurrent;
             }
             const lyricsSrc = isCurrent ? getStablePagingLyricsForPageSplit() : String(plSong.lyrics ?? "");
             const pages = splitPages(lyricsSrc, state.ui.defaultLines);
@@ -7123,18 +7242,23 @@
             wrapInteractive.appendChild(inpPg);
             wrapInteractive.appendChild(totI);
 
-            const wrapStatic = document.createElement("span");
-            wrapStatic.className = "page-indicator-wrap gallery-section-page-wrap-static";
-            wrapStatic.setAttribute("data-gallery-page-mode", "static");
-            wrapStatic.title = "当前未选中本首；翻页请先在上方卡片选中本首诗歌";
-            wrapStatic.hidden = isCurrent;
-            const sumSpan = document.createElement("span");
-            sumSpan.className = "gallery-section-page-summary";
-            sumSpan.textContent = `共 ${Math.max(1, pages.length)} 页`;
-            wrapStatic.appendChild(sumSpan);
+            const wrapReadonly = document.createElement("span");
+            wrapReadonly.className = "page-indicator-wrap gallery-section-page-wrap-readonly";
+            wrapReadonly.setAttribute("data-gallery-page-mode", "readonly");
+            wrapReadonly.title = "当前未选中本首；选中后可输入页码跳转";
+            wrapReadonly.hidden = isCurrent;
+            wrapReadonly.setAttribute("aria-hidden", isCurrent ? "true" : "false");
+            const valRo = document.createElement("span");
+            valRo.className = "page-indicator-readonly-val";
+            valRo.textContent = String(clamp(cp + 1, 1, Math.max(1, pages.length)));
+            const totRo = document.createElement("span");
+            totRo.className = "page-indicator-total";
+            totRo.textContent = `/${Math.max(1, pages.length)}`;
+            wrapReadonly.appendChild(valRo);
+            wrapReadonly.appendChild(totRo);
 
             pageMeta.appendChild(wrapInteractive);
-            pageMeta.appendChild(wrapStatic);
+            pageMeta.appendChild(wrapReadonly);
             head.appendChild(pageMeta);
             section.appendChild(head);
 
@@ -13612,6 +13736,12 @@ ${deleteBtnHtml}
             persistGalleryZoomLevel();
             updateGalleryZoom();
         });
+        on("ui-zoom-out", "click", () => nudgeUiZoom(-UI_ZOOM_STEP));
+        on("ui-zoom-in", "click", () => nudgeUiZoom(UI_ZOOM_STEP));
+        on("ui-zoom-out-adv", "click", () => nudgeUiZoom(-UI_ZOOM_STEP));
+        on("ui-zoom-in-adv", "click", () => nudgeUiZoom(UI_ZOOM_STEP));
+        on("ui-zoom-reset", "click", () => restoreUiZoomAuto());
+        on("ui-zoom-restore-auto", "click", () => restoreUiZoomAuto());
         on("publish-song-btn", "click", publishSong);
         on("reset-current-song", "click", () => {
             setLyricEditorValueProgrammatically(DEFAULT_LYRICS);
@@ -19256,6 +19386,7 @@ const linesHtml = rawLines
             renderMiniPreview();
             renderPlaylist();
             bindEvents();
+            initUiZoom();
             startProjectionDisplayWindowWatch();
             installLyricEditorDrawerResize();
             initProjectionPreviewMonitor();

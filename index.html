@@ -3,6 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <script>
+    (function () {
+        try {
+            var override = localStorage.getItem("worship_ui_zoom_user_override") === "1";
+            var level;
+            if (override) {
+                level = parseFloat(localStorage.getItem("worship_ui_zoom_level"));
+            } else {
+                var w = Math.max(320, window.innerWidth || 1536);
+                level = 0.8 * (w / 1536);
+                level = Math.max(0.72, Math.min(0.95, level));
+            }
+            if (Number.isFinite(level)) document.documentElement.style.zoom = String(level);
+        } catch (_e) { /* ignore */ }
+    })();
+    </script>
     <title>敬拜投屏 · 专业版</title>
     <link rel="stylesheet" href="style.css">
     <style id="leader-panel-modal-styles">
@@ -278,11 +294,19 @@
                                 </div>
                             </div>
                             <button type="button" id="pwa-install-btn" class="editor-action-bar-btn pwa-install-btn gallery-status-utility-btn" style="display:none" title="把网站固定到桌面（非应用商店 App，点击后会说明）"><span class="editor-action-bar-btn__icon" aria-hidden="true">📲</span><span class="editor-action-bar-btn__text">安装App</span></button>
-                            <div class="gallery-toolbar-zoom" role="group" aria-label="页面画廊缩放">
+                            <div class="gallery-toolbar-zoom gallery-toolbar-zoom--cards" role="group" aria-label="页面画廊缩放">
+                                <span class="gallery-toolbar-zoom-label">画廊</span>
                                 <button type="button" id="gallery-zoom-out" class="gallery-toolbar-zoom-btn" title="缩小页面画廊">−</button>
                                 <span id="gallery-zoom-val" class="gallery-toolbar-zoom-val">100%</span>
                                 <button type="button" id="gallery-zoom-reset" class="gallery-toolbar-zoom-btn gallery-toolbar-zoom-btn--icon" title="重置为 100%">↺</button>
                                 <button type="button" id="gallery-zoom-in" class="gallery-toolbar-zoom-btn" title="放大页面画廊">+</button>
+                            </div>
+                            <div class="gallery-toolbar-zoom ui-toolbar-zoom" role="group" aria-label="控制台界面缩放">
+                                <span class="gallery-toolbar-zoom-label">界面</span>
+                                <button type="button" id="ui-zoom-out" class="gallery-toolbar-zoom-btn" title="缩小整页控制台">−</button>
+                                <span id="ui-zoom-val" class="gallery-toolbar-zoom-val" title="按窗口宽度自动适应">80% · 自动</span>
+                                <button type="button" id="ui-zoom-reset" class="gallery-toolbar-zoom-btn gallery-toolbar-zoom-btn--icon" title="恢复自动适应">↺</button>
+                                <button type="button" id="ui-zoom-in" class="gallery-toolbar-zoom-btn" title="放大整页控制台">+</button>
                             </div>
                         </div>
                     </div>
@@ -657,6 +681,17 @@
                                         <option value="warm">暖色</option>
                                         <option value="high-contrast">高对比</option>
                                     </select>
+                                    <div class="ui-zoom-adv-block">
+                                        <label class="adv-drawer-field-label">界面缩放</label>
+                                        <p class="adv-console-theme-scope-hint ui-zoom-adv-hint">整页控制台缩放（投屏窗口不受影响）。未手动调节时按窗口宽度自动适应。</p>
+                                        <p id="ui-zoom-mode-adv" class="ui-zoom-adv-mode">当前：自动适应</p>
+                                        <div class="gallery-toolbar-zoom ui-zoom-adv-controls" role="group" aria-label="界面缩放">
+                                            <button type="button" id="ui-zoom-out-adv" class="gallery-toolbar-zoom-btn" title="缩小整页控制台">−</button>
+                                            <span id="ui-zoom-val-adv" class="gallery-toolbar-zoom-val">80%</span>
+                                            <button type="button" id="ui-zoom-in-adv" class="gallery-toolbar-zoom-btn" title="放大整页控制台">+</button>
+                                            <button type="button" id="ui-zoom-restore-auto" class="btn-outline ui-zoom-restore-auto-btn">↺ 恢复自动适应</button>
+                                        </div>
+                                    </div>
                                     <div style="display:flex;gap:8px;width:100%;box-sizing:border-box;flex-wrap:wrap;">
                                         <button type="button" id="worship-console-wallpaper-upload-btn" class="btn-outline adv-console-wallpaper-upload-btn" style="flex:1 1 120px;min-width:0;">📷 上传壁纸</button>
                                         <button type="button" id="worship-console-theme-video-upload-btn" class="btn-outline adv-console-wallpaper-upload-btn" style="flex:1 1 120px;min-width:0;">🎬 上传视频</button>

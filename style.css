@@ -2309,6 +2309,79 @@ body.worship-audience-projection #popup-blocked-banner {
     font-weight: 600;
     color: rgba(220, 226, 245, 0.82);
 }
+.editor-gallery-preface-actions .gallery-toolbar-zoom-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: rgba(220, 226, 245, 0.58);
+    margin-right: 2px;
+    user-select: none;
+}
+.editor-gallery-preface-actions .ui-toolbar-zoom .gallery-toolbar-zoom-val {
+    min-width: 52px;
+}
+
+.ui-zoom-adv-block {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.ui-zoom-adv-hint {
+    margin-top: 4px !important;
+}
+.ui-zoom-adv-mode {
+    margin: 6px 0 8px;
+    font-size: 12px;
+    font-weight: 600;
+    color: rgba(212, 175, 55, 0.85);
+}
+.ui-zoom-adv-controls {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-left: 0 !important;
+    padding-left: 0 !important;
+    border-left: none !important;
+}
+.ui-zoom-adv-controls .gallery-toolbar-zoom-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(236, 240, 252, 0.92);
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    box-sizing: border-box;
+    line-height: 1;
+}
+.ui-zoom-adv-controls .gallery-toolbar-zoom-btn:hover {
+    background: rgba(255, 255, 255, 0.14);
+    border-color: rgba(255, 255, 255, 0.42);
+}
+.ui-zoom-adv-controls .gallery-toolbar-zoom-val {
+    min-width: 42px;
+    text-align: center;
+    font-size: 13px;
+    font-weight: 700;
+    color: rgba(220, 226, 245, 0.88);
+}
+.ui-zoom-restore-auto-btn {
+    margin-left: 4px;
+    padding: 6px 10px !important;
+    font-size: 12px !important;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+.ui-zoom-restore-auto-btn:disabled {
+    opacity: 0.45;
+    cursor: default;
+}
 
 #gallery-status-bar .cloud-upload-history-panel {
     left: auto;
@@ -8775,18 +8848,33 @@ body.leader-note-modal-open {
 #layout-page-gallery:not(.layout-page-gallery--multi-strip) .gallery-song-section-page-meta {
     display: none !important;
 }
-.gallery-section-page-wrap-static {
+.gallery-section-page-wrap-readonly {
     display: inline-flex;
     align-items: center;
-    gap: 0;
+    gap: 2px;
     white-space: nowrap;
-}
-.gallery-section-page-wrap-static .gallery-section-page-summary {
-    display: inline-block;
-    font-size: 0.86rem;
-    font-weight: 600;
-    color: rgba(255, 255, 255, 0.55);
+    opacity: 0.82;
+    cursor: default;
     user-select: none;
+}
+.gallery-section-page-wrap-readonly[hidden] {
+    display: none !important;
+}
+.page-indicator-readonly-val {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.6rem;
+    width: 2.1rem;
+    padding: 2px 4px;
+    text-align: center;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 8px;
+    box-sizing: border-box;
 }
 .gallery-song-section-index {
     font-size: 0.82rem;

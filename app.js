@@ -1150,9 +1150,78 @@
     let defaultSongPosY = 45;
     const SUPABASE_URL = "https://yetcpiorfvtysqmfsdso.supabase.co";
     const SUPABASE_ANON_KEY = "sb_publishable__jbNKXA82g1YoNcOOVDUFg_eO618zti";
-    const supabase = (window.supabase && typeof window.supabase.createClient === "function")
-        ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
-        : null;
+    const SUPABASE_JS_URL = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2";
+    const TESSERACT_JS_URL = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
+    let supabaseClient = null;
+    let supabaseLoadPromise = null;
+    let tesseractLoadPromise = null;
+
+    function loadExternalScript(url, id) {
+        const existing = id ? document.getElementById(id) : null;
+        if (existing) {
+            return existing.dataset.loaded === "1"
+                ? Promise.resolve()
+                : new Promise((resolve, reject) => {
+                      existing.addEventListener("load", () => resolve(), { once: true });
+                      existing.addEventListener("error", () => reject(new Error("script load failed")), { once: true });
+                  });
+        }
+        return new Promise((resolve, reject) => {
+            const s = document.createElement("script");
+            if (id) s.id = id;
+            s.src = url;
+            s.async = true;
+            s.onload = () => {
+                s.dataset.loaded = "1";
+                resolve();
+            };
+            s.onerror = () => reject(new Error("script load failed: " + url));
+            document.head.appendChild(s);
+        });
+    }
+
+    async function ensureSupabaseClient() {
+        if (supabaseClient) return supabaseClient;
+        if (!supabaseLoadPromise) {
+            supabaseLoadPromise = (async () => {
+                if (!(window.supabase && typeof window.supabase.createClient === "function")) {
+                    await loadExternalScript(SUPABASE_JS_URL, "worship-supabase-js");
+                }
+                if (!(window.supabase && typeof window.supabase.createClient === "function")) {
+                    throw new Error("Supabase unavailable");
+                }
+                supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+                return supabaseClient;
+            })().catch((err) => {
+                supabaseLoadPromise = null;
+                throw err;
+            });
+        }
+        try {
+            return await supabaseLoadPromise;
+        } catch (_e) {
+            return null;
+        }
+    }
+
+    function ensureTesseractLoaded() {
+        if (typeof Tesseract !== "undefined") return Promise.resolve(true);
+        if (!tesseractLoadPromise) {
+            tesseractLoadPromise = loadExternalScript(TESSERACT_JS_URL, "worship-tesseract-js")
+                .then(() => typeof Tesseract !== "undefined")
+                .catch((err) => {
+                    tesseractLoadPromise = null;
+                    throw err;
+                });
+        }
+        return tesseractLoadPromise;
+    }
+
+    function scheduleEnsureLyricWebFonts(fontFamily) {
+        const loader = globalThis.WorshipFontLoader;
+        if (!loader || typeof loader.ensureFontsForFamily !== "function") return;
+        loader.ensureFontsForFamily(fontFamily).catch(() => {});
+    }
 
     function $(id) {
         return document.getElementById(id);
@@ -5323,6 +5392,12 @@
         }
         const agreed = await confirmShareMyBackgroundModal();
         if (!agreed) return;
+        let supabase;
+        try {
+            supabase = await ensureSupabaseClient();
+        } catch (_e) {
+            supabase = null;
+        }
         if (!supabase) {
             showToast("Supabase 未初始化，无法共享", triggerEl);
             return;
@@ -5352,11 +5427,17 @@
     async function loadSharedBackgrounds() {
         const root = $("shared-backgrounds-container");
         if (!root) return;
+        root.innerHTML = '<div class="hint-text" style="grid-column:1/-1;">加载中…</div>';
+        let supabase;
+        try {
+            supabase = await ensureSupabaseClient();
+        } catch (_e) {
+            supabase = null;
+        }
         if (!supabase) {
             root.innerHTML = '<div class="hint-text" style="grid-column:1/-1;">Supabase 未初始化</div>';
             return;
         }
-        root.innerHTML = '<div class="hint-text" style="grid-column:1/-1;">加载中…</div>';
         const { data, error } = await supabase
             .from("backgrounds")
             .select("*")
@@ -9345,6 +9426,7 @@ ${deleteBtnHtml}
         } catch (_e) {
             /* ignore */
         }
+        scheduleEnsureLyricWebFonts(state.ui.fontFamily);
         if ($("theme-selector")) $("theme-selector").value = state.ui.theme;
         const fontSel = $("font-family-selector");
         if (fontSel && globalThis.WorshipFontData && typeof globalThis.WorshipFontData.syncFontFamilySelectToState === "function") {
@@ -13768,42 +13850,27 @@ ${deleteBtnHtml}
             saveCurrentLyrics();
             updateCloudUploadBtnState();
         });
-        on("ocr-btn", "click", () => $("ocr-file-input")?.click());
+        on("ocr-btn", "click", () => {
+            ensureTesseractLoaded().catch(() => {});
+            $("ocr-file-input")?.click();
+        });
         installHelpMenu();
         installUnsavedSwitchDialogActions();
         on("ocr-file-input", "change", async (e) => {
             const input = e.target;
             const file = input?.files?.[0];
             if (!file) return;
-            const waitTesseractReady = () =>
-                new Promise((resolve) => {
-                    if (typeof Tesseract !== "undefined") {
-                        resolve(true);
-                        return;
-                    }
-                    const t0 = Date.now();
-                    const maxMs = 45000;
-                    const step = () => {
-                        if (typeof Tesseract !== "undefined") {
-                            resolve(true);
-                            return;
-                        }
-                        if (Date.now() - t0 >= maxMs) {
-                            resolve(false);
-                            return;
-                        }
-                        window.setTimeout(step, 150);
-                    };
-                    step();
-                });
-            if (typeof Tesseract === "undefined") {
-                showToast("Tesseract.js 正在加载，请稍候…", $("ocr-btn"));
-                const ok = await waitTesseractReady();
-                if (!ok) {
-                    showToast("OCR 尚未就绪，请刷新页面或稍后再试", $("ocr-btn"));
-                    input.value = "";
-                    return;
-                }
+            showToast("正在加载 OCR 组件…", $("ocr-btn"));
+            let ocrReady = false;
+            try {
+                ocrReady = await ensureTesseractLoaded();
+            } catch (_e) {
+                ocrReady = false;
+            }
+            if (!ocrReady) {
+                showToast("OCR 加载失败，请检查网络后重试", $("ocr-btn"));
+                input.value = "";
+                return;
             }
             showToast("OCR 识别中…", $("ocr-btn"));
             try {
@@ -19433,7 +19500,6 @@ const linesHtml = rawLines
             migrateLegacyUploadedBackgrounds();
             seedUploadedBackgroundsFromState();
             renderUploadedBackgrounds();
-            loadSharedBackgrounds();
 
             if (channel) {
                 channel.onmessage = (e) => {

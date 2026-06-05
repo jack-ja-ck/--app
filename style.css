@@ -42,32 +42,6 @@
     --editor-bg: #111; --editor-border: #ffff00; --slider-track: #ffff00;
 }
 
-/* 歌词用 Web 字体（SIL OFL / 官方免费商用，详见 max32002、bakudaifont、masafont、阿里巴巴、ZeoSeven 等发行说明） */
-@font-face {
-    font-family: "Bakudai";
-    font-style: normal;
-    font-weight: 400;
-    font-display: swap;
-    src: url("https://cdn.jsdelivr.net/gh/max32002/bakudaifont@master/webfont/Bakudai-Regular.woff2")
-        format("woff2");
-}
-@font-face {
-    font-family: "MasaFont";
-    font-style: normal;
-    font-weight: 400;
-    font-display: swap;
-    src: url("https://cdn.jsdelivr.net/gh/max32002/masafont@master/webfont/MasaFont-Regular.woff2")
-        format("woff2");
-}
-@font-face {
-    font-family: "Alibaba PuHuiTi";
-    font-style: normal;
-    font-weight: 400;
-    font-display: swap;
-    src: url("https://cdn.jsdelivr.net/npm/alibabapuhuiti-3-55-regular@1.0.0/AlibabaPuHuiTi-3-55-Regular.woff2")
-        format("woff2");
-}
-
 * { margin:0; padding:0; box-sizing:border-box; }
 body {
     font-family: var(--worship-app-font-family);
@@ -3511,6 +3485,9 @@ body.worship-audience-projection #popup-blocked-banner {
     gap: 2px;
     margin-left: 6px;
     vertical-align: middle;
+}
+.page-indicator-wrap[hidden] {
+    display: none !important;
 }
 .page-indicator-input {
     width: 2.1rem;

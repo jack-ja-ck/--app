@@ -1,4 +1,4 @@
-const CACHE_NAME = "worship-app-v7";
+const CACHE_NAME = "worship-app-v8";
 const NETWORK_FIRST_PATHS = [
   "/index.html",
   "/app.js",
@@ -34,7 +34,8 @@ const ASSETS = [
   "js/ui.js",
   "js/data.js",
   "js/actions.js",
-  "js/fonts.js"
+  "js/fonts.js",
+  "js/font-loader.js"
 ];
 
 self.addEventListener("install", (event) => {

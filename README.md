@@ -22,8 +22,6 @@
 
 ## 开源协议
 
-### 开源协议
-
 本项目基于 **GNU Affero General Public License v3 (AGPL-3.0)** 发布。
 
 您使用本软件时，请务必遵守 AGPL-3.0 的条款。核心要求如下：

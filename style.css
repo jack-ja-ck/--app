@@ -8640,6 +8640,178 @@ body.leader-note-modal-open {
     #layout-page-gallery .gallery-page-card.gallery-card-switch-pulse {
         animation: none;
     }
+    #layout-page-gallery .gallery-page-card.gallery-page-card--copy-pop {
+        animation: none;
+    }
+}
+
+/* 页面画廊 · 播放顺序：右键菜单 */
+#gallery-playback-context-menu {
+    position: fixed;
+    z-index: 100080;
+    min-width: 204px;
+    max-width: min(260px, calc(100vw - 16px));
+    padding: 8px;
+    margin: 0;
+    border-radius: 14px;
+    border: 1px solid rgba(212, 175, 55, 0.28);
+    background: linear-gradient(165deg, rgba(22, 24, 36, 0.98) 0%, rgba(10, 12, 20, 0.98) 100%);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    box-shadow:
+        0 20px 52px rgba(0, 0, 0, 0.55),
+        0 0 0 1px rgba(255, 255, 255, 0.05),
+        inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    list-style: none;
+    font-size: 0.84rem;
+    color: rgba(240, 242, 248, 0.94);
+}
+#gallery-playback-context-menu[hidden] {
+    display: none !important;
+}
+#gallery-playback-context-menu > li {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+.gallery-playback-menu-head {
+    padding: 2px 10px 10px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: rgba(212, 175, 55, 0.88);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+    margin-bottom: 6px;
+    user-select: none;
+}
+.gallery-playback-menu-divider {
+    height: 1px;
+    margin: 6px 8px;
+    background: rgba(255, 255, 255, 0.08);
+}
+.gallery-playback-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 9px 10px;
+    border: none;
+    border-radius: 9px;
+    background: transparent;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+    font: inherit;
+    line-height: 1.25;
+    transition: background 0.14s ease, color 0.14s ease, transform 0.12s ease;
+}
+.gallery-playback-menu-item:hover:not(:disabled),
+.gallery-playback-menu-item:focus-visible {
+    background: rgba(212, 175, 55, 0.14);
+    outline: none;
+}
+.gallery-playback-menu-item:active:not(:disabled) {
+    transform: scale(0.98);
+}
+.gallery-playback-menu-item:disabled {
+    opacity: 0.38;
+    cursor: not-allowed;
+}
+.gallery-playback-menu-item--danger {
+    color: rgba(255, 168, 168, 0.95);
+}
+.gallery-playback-menu-item--danger:hover:not(:disabled),
+.gallery-playback-menu-item--danger:focus-visible {
+    background: rgba(200, 72, 72, 0.22);
+    color: #ffd0d0;
+}
+.gallery-playback-menu-icon {
+    flex: 0 0 1.35em;
+    text-align: center;
+    font-size: 0.95em;
+    opacity: 0.88;
+}
+.gallery-playback-menu-label {
+    flex: 1 1 auto;
+}
+
+/* 页面画廊 · 播放顺序：拖拽与复制动效 */
+#layout-page-gallery .gallery-page-card.gallery-page-card--dragging {
+    opacity: 0.55;
+    transform: scale(0.965);
+    cursor: grabbing;
+    z-index: 8;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45) !important;
+}
+#layout-page-gallery .gallery-page-card.gallery-page-card--drop-before,
+#layout-page-gallery .gallery-page-card.gallery-page-card--drop-after {
+    z-index: 7;
+}
+#layout-page-gallery .gallery-page-card.gallery-page-card--drop-before::before,
+#layout-page-gallery .gallery-page-card.gallery-page-card--drop-after::after {
+    content: "";
+    position: absolute;
+    top: 6%;
+    bottom: 6%;
+    width: 6px;
+    border-radius: 4px;
+    background: linear-gradient(180deg, #ffeaa0 0%, #d4af37 45%, #b8922a 100%);
+    box-shadow:
+        0 0 0 2px rgba(212, 175, 55, 0.45),
+        0 0 18px rgba(212, 175, 55, 0.85),
+        0 0 36px rgba(212, 175, 55, 0.4);
+    z-index: 25;
+    pointer-events: none;
+    animation: galleryPlaybackDropGlow 0.85s ease-in-out infinite alternate;
+}
+#layout-page-gallery .gallery-page-card.gallery-page-card--drop-before::before {
+    left: -8px;
+}
+#layout-page-gallery .gallery-page-card.gallery-page-card--drop-after::after {
+    right: -8px;
+}
+.layout-page-gallery-pages.gallery-pages--playback-drag {
+    overflow: visible !important;
+}
+.layout-page-gallery-pages.gallery-pages--playback-drag .gallery-page-card {
+    overflow: visible !important;
+}
+.layout-page-gallery-pages-scale-shell:has(.gallery-pages--playback-drag) {
+    overflow: visible !important;
+}
+@keyframes galleryPlaybackDropGlow {
+    from {
+        opacity: 0.82;
+        filter: brightness(1);
+    }
+    to {
+        opacity: 1;
+        filter: brightness(1.15);
+    }
+}
+@keyframes galleryPlaybackCopyPop {
+    0% {
+        transform: scale(0.92);
+        opacity: 0.65;
+    }
+    55% {
+        transform: scale(1.03);
+    }
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+#layout-page-gallery .gallery-page-card.gallery-page-card--copy-pop {
+    animation: galleryPlaybackCopyPop 0.38s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    #layout-page-gallery .gallery-page-card.gallery-page-card--drop-before::before,
+    #layout-page-gallery .gallery-page-card.gallery-page-card--drop-after::after {
+        animation: none;
+    }
 }
 
 #layout-page-gallery .gallery-page-card .gallery-card-line {

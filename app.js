@@ -3045,7 +3045,7 @@
             selector: "#layout-page-gallery",
             title: "第 4 步：预览页面画廊",
             text:
-                "卡片区即分页预览，每张对应投屏一页。上方工具栏有「帮助」菜单（使用说明 / 分步引导 / 快捷键）与画廊缩放。确认分页与歌词显示无误后，再继续同步投屏。"
+                "卡片区即分页预览，每张对应投屏一页；可点击卡片或按 ← → / 空格翻页。右键卡片可「复制 / 删除 / 撤销 / 恢复为歌词顺序」；按住卡片拖动可在同一首歌内调整播放顺序（不改歌词）。上方工具栏有「帮助」与画廊缩放。"
         },
         {
             selector: "#save-song-btn",
@@ -3312,6 +3312,7 @@
                 "<dl>" +
                 "<dt>保存并应用</dt><dd>Ctrl+S（Windows）或 ⌘+S（Mac），等同点「保存并应用」</dd>" +
                 "<dt>翻页</dt><dd>← → 或空格；焦点在输入框/滑块时可 Alt+←/→/空格，或 Ctrl+Shift+←/→</dd>" +
+                "<dt>播放顺序撤销</dt><dd>页面画廊内 Ctrl+Z / ⌘+Z（焦点不在输入框时）</dd>" +
                 "<dt>全屏</dt><dd>F 键</dd>" +
                 "<dt>黑屏 / 白屏</dt><dd>B 键 / W 键</dd>" +
                 "<dt>结束投屏</dt><dd>Ctrl+Shift+E（主控台关闭会众窗口，无需切到副屏）</dd>" +
@@ -4205,6 +4206,460 @@
         return globalThis.parsePages(lyrics, linesPerPage);
     }
     const splitPages = parsePages;
+
+    /** ---------- 页面画廊 · 播放顺序（复制 / 删除 / 拖动 / 撤销） ---------- */
+    const PLAYBACK_UNDO_MAX = 24;
+    const playbackUndoStacks = Object.create(null);
+    let galleryPlaybackContextTarget = null;
+    let galleryPlaybackDrag = null;
+    let galleryPlaybackSuppressClickUntil = 0;
+
+    function newPlaybackStepId() {
+        return "pbs_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 9);
+    }
+
+    function getLyricsTextForSongPaging(song, isCurrent) {
+        if (!song) return "";
+        if (isCurrent && String(song.id) === String(state.currentSongId || "")) {
+            try {
+                return getStablePagingLyricsForPageSplit();
+            } catch (_e) {
+                return String(song.lyrics ?? "");
+            }
+        }
+        return String(song.lyrics ?? "");
+    }
+
+    function getSourcePagesForSong(song, isCurrent) {
+        return splitPages(getLyricsTextForSongPaging(song, isCurrent), state.ui.defaultLines);
+    }
+
+    function defaultPlaybackSequence(sourcePageCount) {
+        const n = Math.max(1, Number(sourcePageCount) || 1);
+        const seq = [];
+        for (let i = 0; i < n; i++) seq.push({ id: newPlaybackStepId(), sourcePage: i });
+        return seq;
+    }
+
+    function clonePlaybackSequence(seq) {
+        return (Array.isArray(seq) ? seq : []).map((s) => ({
+            id: String(s?.id || newPlaybackStepId()),
+            sourcePage: clamp(Number(s?.sourcePage) | 0, 0, 9999)
+        }));
+    }
+
+    function normalizePlaybackSequenceCoverage(seq, sourcePageCount) {
+        const n = Math.max(1, Number(sourcePageCount) || 1);
+        let out = clonePlaybackSequence(seq).filter(
+            (s) => s.sourcePage >= 0 && s.sourcePage < n
+        );
+        if (!out.length) out = defaultPlaybackSequence(n);
+        const counts = Object.create(null);
+        out.forEach((s) => {
+            counts[s.sourcePage] = (counts[s.sourcePage] || 0) + 1;
+        });
+        for (let p = 0; p < n; p++) {
+            if (!counts[p]) out.push({ id: newPlaybackStepId(), sourcePage: p });
+        }
+        return out;
+    }
+
+    function getPlaybackSequenceForSong(song, isCurrent) {
+        const n = Math.max(1, getSourcePagesForSong(song, isCurrent).length);
+        const raw = song && Array.isArray(song.pagePlaybackSequence) ? song.pagePlaybackSequence : null;
+        if (!raw || !raw.length) return defaultPlaybackSequence(n);
+        return normalizePlaybackSequenceCoverage(raw, n);
+    }
+
+    function persistPlaybackSequenceOnSong(song, seq) {
+        if (!song) return;
+        song.pagePlaybackSequence = clonePlaybackSequence(seq);
+    }
+
+    function getFlattenedPagesForSong(song, isCurrent) {
+        const sourcePages = getSourcePagesForSong(song, isCurrent);
+        const seq = getPlaybackSequenceForSong(song, isCurrent);
+        return seq.map((step) => {
+            const sp = clamp(step.sourcePage, 0, Math.max(0, sourcePages.length - 1));
+            const lines = sourcePages[sp];
+            return Array.isArray(lines) && lines.length ? lines : ["…"];
+        });
+    }
+
+    function playbackSequenceSignature(seq) {
+        return (Array.isArray(seq) ? seq : [])
+            .map((s) => `${s.sourcePage}:${String(s.id || "").slice(-4)}`)
+            .join(",");
+    }
+
+    function pushPlaybackUndo(song) {
+        if (!song || !song.id) return;
+        const key = String(song.id);
+        if (!playbackUndoStacks[key]) playbackUndoStacks[key] = [];
+        const stack = playbackUndoStacks[key];
+        stack.push(clonePlaybackSequence(getPlaybackSequenceForSong(song, String(song.id) === String(state.currentSongId))));
+        if (stack.length > PLAYBACK_UNDO_MAX) stack.shift();
+    }
+
+    function canUndoPlaybackSequence(song) {
+        if (!song || !song.id) return false;
+        const stack = playbackUndoStacks[String(song.id)];
+        return !!(stack && stack.length);
+    }
+
+    function undoPlaybackSequence(song) {
+        if (!song || !song.id) return false;
+        const key = String(song.id);
+        const stack = playbackUndoStacks[key];
+        if (!stack || !stack.length) return false;
+        const prev = stack.pop();
+        const n = Math.max(1, getSourcePagesForSong(song, String(song.id) === String(state.currentSongId)).length);
+        const next = normalizePlaybackSequenceCoverage(prev, n);
+        persistPlaybackSequenceOnSong(song, next);
+        if (String(song.id) === String(state.currentSongId || "")) {
+            state.currentPage = clamp(state.currentPage, 0, Math.max(0, next.length - 1));
+        }
+        saveSongs();
+        return true;
+    }
+
+    function canDeletePlaybackStep(song, stepIndex, isCurrent) {
+        const seq = getPlaybackSequenceForSong(song, isCurrent);
+        if (seq.length <= 1) return false;
+        const si = clamp(Number(stepIndex) | 0, 0, seq.length - 1);
+        const n = Math.max(1, getSourcePagesForSong(song, isCurrent).length);
+        const after = seq.filter((_, i) => i !== si);
+        const counts = Object.create(null);
+        after.forEach((s) => {
+            counts[s.sourcePage] = (counts[s.sourcePage] || 0) + 1;
+        });
+        for (let p = 0; p < n; p++) {
+            if (!counts[p]) return false;
+        }
+        return true;
+    }
+
+    function reconcilePlaybackSequenceAfterLyricsChange(song, opts) {
+        if (!song) return;
+        const isCur = String(song.id) === String(state.currentSongId || "");
+        const n = Math.max(1, getSourcePagesForSong(song, isCur).length);
+        const prev = getPlaybackSequenceForSong(song, isCur);
+        const next = normalizePlaybackSequenceCoverage(prev, n);
+        const changed = playbackSequenceSignature(prev) !== playbackSequenceSignature(next);
+        persistPlaybackSequenceOnSong(song, next);
+        if (isCur) {
+            state.currentPage = clamp(state.currentPage, 0, Math.max(0, next.length - 1));
+        }
+        if (changed && opts && opts.toast) {
+            showToast("歌词已更新，播放顺序已自动调整；可右键「恢复为歌词顺序」", null, { variant: "info" });
+        }
+    }
+
+    function commitPlaybackSequenceChange(song, newSeq, opts) {
+        if (!song) return;
+        pushPlaybackUndo(song);
+        const n = Math.max(1, getSourcePagesForSong(song, String(song.id) === String(state.currentSongId)).length);
+        const normalized = normalizePlaybackSequenceCoverage(newSeq, n);
+        persistPlaybackSequenceOnSong(song, normalized);
+        const isCur = String(song.id) === String(state.currentSongId || "");
+        if (isCur) {
+            let cp = state.currentPage;
+            if (opts && Number.isFinite(opts.currentPage)) cp = opts.currentPage;
+            else if (opts && opts.deletedStepIndex != null && cp > opts.deletedStepIndex) cp = cp - 1;
+            state.currentPage = clamp(cp, 0, Math.max(0, normalized.length - 1));
+        }
+        saveSongs();
+        const galEl = $("layout-page-gallery");
+        if (galEl) delete galEl.dataset.galleryStructSig;
+        updateAll({ linesOnly: isMainVideoBackground() });
+        if (opts && opts.animateCopy) {
+            requestAnimationFrame(() => {
+                const gal = $("layout-page-gallery");
+                const card = gal && opts.copyStepId
+                    ? gal.querySelector(`[data-playback-step-id="${opts.copyStepId}"]`)
+                    : null;
+                if (card) {
+                    card.classList.remove("gallery-page-card--copy-pop");
+                    void card.offsetWidth;
+                    card.classList.add("gallery-page-card--copy-pop");
+                    card.addEventListener(
+                        "animationend",
+                        () => card.classList.remove("gallery-page-card--copy-pop"),
+                        { once: true }
+                    );
+                }
+                scheduleGalleryCardSwitchAnimation();
+            });
+        } else {
+            scheduleGalleryCardSwitchAnimation();
+        }
+    }
+
+    function copyGalleryPlaybackStep(song, stepIndex) {
+        const seq = clonePlaybackSequence(getPlaybackSequenceForSong(song, String(song.id) === String(state.currentSongId)));
+        const si = clamp(Number(stepIndex) | 0, 0, seq.length - 1);
+        const copy = { id: newPlaybackStepId(), sourcePage: seq[si].sourcePage };
+        seq.splice(si + 1, 0, copy);
+        commitPlaybackSequenceChange(song, seq, {
+            currentPage: si + 1,
+            animateCopy: true,
+            copyStepId: copy.id
+        });
+    }
+
+    function deleteGalleryPlaybackStep(song, stepIndex) {
+        if (!canDeletePlaybackStep(song, stepIndex, String(song.id) === String(state.currentSongId))) return;
+        const seq = clonePlaybackSequence(getPlaybackSequenceForSong(song, String(song.id) === String(state.currentSongId)));
+        const si = clamp(Number(stepIndex) | 0, 0, seq.length - 1);
+        seq.splice(si, 1);
+        commitPlaybackSequenceChange(song, seq, { deletedStepIndex: si });
+    }
+
+    function restoreGalleryPlaybackLyricOrder(song) {
+        if (!song) return;
+        const n = Math.max(1, getSourcePagesForSong(song, String(song.id) === String(state.currentSongId)).length);
+        commitPlaybackSequenceChange(song, defaultPlaybackSequence(n), { currentPage: 0 });
+    }
+
+    function getCurrentSongPlaybackStepCount() {
+        const song = currentSong();
+        if (!song) return 1;
+        return Math.max(1, getPlaybackSequenceForSong(song, true).length);
+    }
+
+    function installGalleryPlaybackStyles() {
+        const old = document.getElementById("gallery-playback-ui-style");
+        if (old) old.remove();
+    }
+
+    function galleryPlaybackContextMenuHtml() {
+        return (
+            '<li class="gallery-playback-menu-head" aria-hidden="true">播放顺序</li>' +
+            '<li><button type="button" class="gallery-playback-menu-item" data-playback-action="copy" role="menuitem">' +
+            '<span class="gallery-playback-menu-icon" aria-hidden="true">⧉</span><span class="gallery-playback-menu-label">复制卡片</span></button></li>' +
+            '<li><button type="button" class="gallery-playback-menu-item gallery-playback-menu-item--danger" data-playback-action="delete" role="menuitem">' +
+            '<span class="gallery-playback-menu-icon" aria-hidden="true">✕</span><span class="gallery-playback-menu-label">删除卡片</span></button></li>' +
+            '<li class="gallery-playback-menu-divider" aria-hidden="true"></li>' +
+            '<li><button type="button" class="gallery-playback-menu-item" data-playback-action="undo" role="menuitem">' +
+            '<span class="gallery-playback-menu-icon" aria-hidden="true">↶</span><span class="gallery-playback-menu-label">撤销</span></button></li>' +
+            '<li><button type="button" class="gallery-playback-menu-item" data-playback-action="restore" role="menuitem">' +
+            '<span class="gallery-playback-menu-icon" aria-hidden="true">⇅</span><span class="gallery-playback-menu-label">恢复为歌词顺序</span></button></li>'
+        );
+    }
+
+    function bindGalleryPlaybackContextMenuEvents(menu) {
+        if (!menu || menu.dataset.playbackMenuBound === "1") return;
+        menu.dataset.playbackMenuBound = "1";
+        menu.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const btn = e.target.closest("[data-playback-action]");
+            if (!btn || btn.disabled) return;
+            const action = btn.getAttribute("data-playback-action");
+            const songId = menu.dataset.ctxSongId || galleryPlaybackContextTarget?.songId;
+            const stepIndex = Number(menu.dataset.ctxStepIndex ?? galleryPlaybackContextTarget?.stepIndex);
+            hideGalleryPlaybackContextMenu();
+            if (!songId || !Number.isFinite(stepIndex)) return;
+            const song = state.songs.find((s) => String(s.id) === String(songId));
+            if (!song) return;
+            if (action === "copy") {
+                copyGalleryPlaybackStep(song, stepIndex);
+                showToast("已复制卡片", null, { variant: "success" });
+            } else if (action === "delete") {
+                deleteGalleryPlaybackStep(song, stepIndex);
+            } else if (action === "undo") {
+                if (undoPlaybackSequence(song)) {
+                    updateAll({ linesOnly: isMainVideoBackground() });
+                    showToast("已撤销播放顺序", null, { variant: "info" });
+                }
+            } else if (action === "restore") {
+                restoreGalleryPlaybackLyricOrder(song);
+                showToast("已恢复为歌词顺序", null, { variant: "info" });
+            }
+        });
+        document.addEventListener(
+            "click",
+            (e) => {
+                if (e.target instanceof Element && e.target.closest("#gallery-playback-context-menu")) return;
+                hideGalleryPlaybackContextMenu();
+            },
+            true
+        );
+        document.addEventListener("keydown", (e) => {
+            if (e.key === "Escape") hideGalleryPlaybackContextMenu();
+        });
+    }
+
+    function ensureGalleryPlaybackContextMenu() {
+        let menu = $("gallery-playback-context-menu");
+        if (!menu) {
+            menu = document.createElement("ul");
+            menu.id = "gallery-playback-context-menu";
+            menu.setAttribute("role", "menu");
+            menu.setAttribute("aria-label", "播放顺序");
+            menu.hidden = true;
+            document.body.appendChild(menu);
+        }
+        if (!menu.querySelector(".gallery-playback-menu-head")) {
+            menu.innerHTML = galleryPlaybackContextMenuHtml();
+            delete menu.dataset.playbackMenuBound;
+        }
+        bindGalleryPlaybackContextMenuEvents(menu);
+        return menu;
+    }
+
+    function hideGalleryPlaybackContextMenu() {
+        const menu = $("gallery-playback-context-menu");
+        if (menu) {
+            menu.hidden = true;
+            delete menu.dataset.ctxSongId;
+            delete menu.dataset.ctxStepIndex;
+        }
+        galleryPlaybackContextTarget = null;
+    }
+
+    function showGalleryPlaybackContextMenu(x, y, songId, stepIndex) {
+        const menu = ensureGalleryPlaybackContextMenu();
+        const song = state.songs.find((s) => String(s.id) === String(songId));
+        if (!song) return;
+        const si = clamp(Number(stepIndex) | 0, 0, 9999);
+        galleryPlaybackContextTarget = { songId: String(songId), stepIndex: si };
+        menu.dataset.ctxSongId = String(songId);
+        menu.dataset.ctxStepIndex = String(si);
+        const isCur = String(songId) === String(state.currentSongId || "");
+        const delBtn = menu.querySelector('[data-playback-action="delete"]');
+        const undoBtn = menu.querySelector('[data-playback-action="undo"]');
+        if (delBtn) delBtn.disabled = !canDeletePlaybackStep(song, si, isCur);
+        if (undoBtn) undoBtn.disabled = !canUndoPlaybackSequence(song);
+        menu.hidden = false;
+        menu.style.visibility = "hidden";
+        menu.style.left = "0px";
+        menu.style.top = "0px";
+        const mw = menu.offsetWidth;
+        const mh = menu.offsetHeight;
+        menu.style.left = Math.max(8, Math.min(x, window.innerWidth - mw - 8)) + "px";
+        menu.style.top = Math.max(8, Math.min(y, window.innerHeight - mh - 8)) + "px";
+        menu.style.visibility = "visible";
+    }
+
+    function bindGalleryPlaybackCardEl(card, song, stepIndex) {
+        if (!card || card.dataset.playbackBound === "1") return;
+        card.dataset.playbackBound = "1";
+        card.addEventListener("contextmenu", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const sid = card.getAttribute("data-song-id");
+            const si = clamp(Number(card.getAttribute("data-playback-step-idx")) | 0, 0, 9999);
+            showGalleryPlaybackContextMenu(e.clientX, e.clientY, sid, si);
+        });
+        let dragStart = null;
+        card.addEventListener("pointerdown", (e) => {
+            if (e.button !== 0) return;
+            if (e.target.closest("#gallery-playback-context-menu")) return;
+            dragStart = { x: e.clientX, y: e.clientY, pid: e.pointerId, moved: false };
+            card.setPointerCapture?.(e.pointerId);
+        });
+        card.addEventListener("pointermove", (e) => {
+            if (!dragStart || dragStart.pid !== e.pointerId) return;
+            const dx = e.clientX - dragStart.x;
+            const dy = e.clientY - dragStart.y;
+            if (!dragStart.moved && Math.hypot(dx, dy) < 6) return;
+            if (!dragStart.moved) {
+                dragStart.moved = true;
+                hideGalleryPlaybackContextMenu();
+                galleryPlaybackDrag = {
+                    songId: String(song.id),
+                    fromIndex: stepIndex,
+                    card,
+                    pointerId: e.pointerId
+                };
+                card.classList.add("gallery-page-card--dragging");
+                const rowDrag = card.closest(".layout-page-gallery-pages");
+                if (rowDrag) rowDrag.classList.add("gallery-pages--playback-drag");
+            }
+            if (!galleryPlaybackDrag) return;
+            const row = card.closest(".layout-page-gallery-pages");
+            if (!row) return;
+            row.querySelectorAll(".gallery-page-card--drop-before,.gallery-page-card--drop-after").forEach((el) => {
+                el.classList.remove("gallery-page-card--drop-before", "gallery-page-card--drop-after");
+            });
+            const target = document.elementFromPoint(e.clientX, e.clientY);
+            const over = target && target.closest ? target.closest(".gallery-page-card[data-gallery-card]") : null;
+            if (over && over.closest(".gallery-song-section")?.getAttribute("data-song-id") === String(song.id) && over !== card) {
+                const rect = over.getBoundingClientRect();
+                const after = e.clientX > rect.left + rect.width / 2;
+                over.classList.add(after ? "gallery-page-card--drop-after" : "gallery-page-card--drop-before");
+                galleryPlaybackDrag.overIndex = clamp(Number(over.getAttribute("data-playback-step-idx")) | 0, 0, 9999);
+                galleryPlaybackDrag.dropAfter = after;
+            } else {
+                galleryPlaybackDrag.overIndex = null;
+            }
+        });
+        const finishDrag = (e) => {
+            if (!dragStart || dragStart.pid !== e.pointerId) return;
+            card.releasePointerCapture?.(e.pointerId);
+            card.classList.remove("gallery-page-card--dragging");
+            const row = card.closest(".layout-page-gallery-pages");
+            if (row) {
+                row.classList.remove("gallery-pages--playback-drag");
+                row.querySelectorAll(".gallery-page-card--drop-before,.gallery-page-card--drop-after").forEach((el) => {
+                    el.classList.remove("gallery-page-card--drop-before", "gallery-page-card--drop-after");
+                });
+            }
+            if (dragStart.moved && galleryPlaybackDrag && galleryPlaybackDrag.songId === String(song.id)) {
+                galleryPlaybackSuppressClickUntil = Date.now() + 320;
+                const from = galleryPlaybackDrag.fromIndex;
+                let to = galleryPlaybackDrag.overIndex;
+                if (to != null) {
+                    if (galleryPlaybackDrag.dropAfter) to += 1;
+                    const seq = clonePlaybackSequence(getPlaybackSequenceForSong(song, String(song.id) === String(state.currentSongId)));
+                    const [item] = seq.splice(from, 1);
+                    if (to > from) to -= 1;
+                    to = clamp(to, 0, seq.length);
+                    seq.splice(to, 0, item);
+                    let cp = state.currentPage;
+                    if (String(song.id) === String(state.currentSongId || "")) {
+                        if (cp === from) cp = to;
+                        else if (from < cp && to >= cp) cp -= 1;
+                        else if (from > cp && to <= cp) cp += 1;
+                    }
+                    commitPlaybackSequenceChange(song, seq, { currentPage: cp });
+                }
+            }
+            dragStart = null;
+            galleryPlaybackDrag = null;
+        };
+        card.addEventListener("pointerup", finishDrag);
+        card.addEventListener("pointercancel", finishDrag);
+    }
+
+    function installGalleryPlaybackInteractions() {
+        installGalleryPlaybackStyles();
+        ensureGalleryPlaybackContextMenu();
+        if (installGalleryPlaybackInteractions._bound) return;
+        installGalleryPlaybackInteractions._bound = true;
+        document.addEventListener("keydown", (e) => {
+            if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== "z" || e.shiftKey) return;
+            const ae = document.activeElement;
+            if (ae && (ae.tagName === "TEXTAREA" || ae.tagName === "INPUT" || ae.isContentEditable)) return;
+            const song = currentSong();
+            if (!song || !canUndoPlaybackSequence(song)) return;
+            e.preventDefault();
+            if (undoPlaybackSequence(song)) {
+                updateAll({ linesOnly: isMainVideoBackground() });
+                showToast("已撤销播放顺序", null, { variant: "info" });
+            }
+        });
+    }
+
+    function bindGalleryPlaybackCardsInGal(gal) {
+        if (!gal) return;
+        gal.querySelectorAll(".gallery-page-card[data-gallery-card]").forEach((card) => {
+            const sid = card.getAttribute("data-song-id");
+            const si = clamp(Number(card.getAttribute("data-playback-step-idx")) | 0, 0, 9999);
+            const song = state.songs.find((s) => String(s.id) === String(sid));
+            if (song) bindGalleryPlaybackCardEl(card, song, si);
+        });
+    }
 
     /**
      * 粘贴较长歌词后：按每页最大行数略调字号，并把垂直位置设在「略偏上」（非画面正中央），
@@ -6601,31 +7056,33 @@
 
     function updateSpeakerCards(options = {}) {
         const container = $("card-container");
+        const song = currentSong();
+        const sourcePages = song ? splitPages(lyricsForPaginationSplit(), state.ui.defaultLines) : [];
+        const flatPages = song ? getFlattenedPagesForSong(song, true) : sourcePages;
+        const seq = song ? getPlaybackSequenceForSong(song, true) : [];
+        const stepCount = Math.max(1, flatPages.length);
+
         if (!container) {
-            const song = currentSong();
-            const pages = song ? splitPages(lyricsForPaginationSplit(), state.ui.defaultLines) : [];
-            syncPageIndicatorFromState(pages.length);
-            renderAllPagesThumbnails(pages);
+            syncPageIndicatorFromState(stepCount);
+            renderAllPagesThumbnails(flatPages);
             renderPageGallery();
             return;
         }
-        const song = currentSong();
-        const pages = splitPages(lyricsForPaginationSplit(), state.ui.defaultLines);
-        state.currentPage = clamp(state.currentPage, 0, pages.length - 1);
+        state.currentPage = clamp(state.currentPage, 0, Math.max(0, stepCount - 1));
 
         if (options.linesOnly && isMainVideoBackground()) {
             const cards = container.querySelectorAll(".card");
-            if (cards.length === pages.length && pages.length > 0) {
+            if (cards.length === flatPages.length && flatPages.length > 0) {
                 let lineCountsMatch = true;
                 cards.forEach((card, idx) => {
-                    const pl = pages[idx] || [];
+                    const pl = flatPages[idx] || [];
                     const rows = card.querySelectorAll(".card-line");
                     if (rows.length !== pl.length) lineCountsMatch = false;
                 });
                 if (lineCountsMatch) {
                     cards.forEach((card, idx) => {
                         card.classList.toggle("active", idx === state.currentPage);
-                        const pl = pages[idx] || [];
+                        const pl = flatPages[idx] || [];
                         const rows = card.querySelectorAll(".card-line");
                         rows.forEach((row, i) => {
                             populateLyricRowElement(row, pl[i] || "", {
@@ -6637,8 +7094,8 @@
                             });
                         });
                     });
-                    syncPageIndicatorFromState(pages.length);
-                    renderAllPagesThumbnails(pages);
+                    syncPageIndicatorFromState(stepCount);
+                    renderAllPagesThumbnails(flatPages);
                     renderPageGallery();
                     requestAnimationFrame(() => {
                         requestAnimationFrame(scrollSpeakerPreviewCardIntoView);
@@ -6654,19 +7111,21 @@
 
         const commitPageLineReorder = (fromIndex, toIndex) => {
             if (!song || fromIndex === toIndex) return;
-            const pageIndex = clamp(state.currentPage, 0, Math.max(0, pages.length - 1));
-            const pageLines = Array.isArray(pages[pageIndex]) ? [...pages[pageIndex]] : [];
+            const stepIndex = clamp(state.currentPage, 0, Math.max(0, seq.length - 1));
+            const sourcePageIndex = clamp(seq[stepIndex]?.sourcePage ?? stepIndex, 0, Math.max(0, sourcePages.length - 1));
+            const pageLines = Array.isArray(sourcePages[sourcePageIndex]) ? [...sourcePages[sourcePageIndex]] : [];
             if (!pageLines.length) return;
             if (fromIndex < 0 || toIndex < 0 || fromIndex >= pageLines.length || toIndex >= pageLines.length) return;
             const [moved] = pageLines.splice(fromIndex, 1);
             pageLines.splice(toIndex, 0, moved);
-            pages[pageIndex] = pageLines;
-            song.lyrics = pages.map((p) => (p || []).join("\n")).join("\n\n");
+            sourcePages[sourcePageIndex] = pageLines;
+            song.lyrics = sourcePages.map((p) => (p || []).join("\n")).join("\n\n");
             saveSongs();
+            reconcilePlaybackSequenceAfterLyricsChange(song, { toast: false });
             updateAll({ linesOnly: isMainVideoBackground() });
         };
 
-        pages.forEach((lines, idx) => {
+        flatPages.forEach((lines, idx) => {
             const card = document.createElement("div");
             card.className = "card" + (idx === state.currentPage ? " active" : "");
             applyCardBackground(card);
@@ -6729,8 +7188,8 @@
             container.appendChild(card);
         });
 
-        syncPageIndicatorFromState(pages.length);
-        renderAllPagesThumbnails(pages);
+        syncPageIndicatorFromState(stepCount);
+        renderAllPagesThumbnails(flatPages);
         requestAnimationFrame(() => {
             requestAnimationFrame(scrollSpeakerPreviewCardIntoView);
         });
@@ -6770,8 +7229,9 @@
             const isCurrent = String(sid) === curSid;
             const lyricsSrc = isCurrent ? getStablePagingLyricsForPageSplit() : String(plSong.lyrics ?? "");
             const pages = splitPages(lyricsSrc, state.ui.defaultLines);
-            const pn = Math.max(1, pages.length);
-            const cp = isCurrent ? clamp(state.currentPage, 0, Math.max(0, pages.length - 1)) : 0;
+            const seq = getPlaybackSequenceForSong(plSong, isCurrent);
+            const pn = Math.max(1, seq.length);
+            const cp = isCurrent ? clamp(state.currentPage, 0, Math.max(0, seq.length - 1)) : 0;
 
             const wrapI = meta.querySelector('[data-gallery-page-mode="interactive"]');
             const wrapR = meta.querySelector('[data-gallery-page-mode="readonly"]');
@@ -6985,8 +7445,9 @@
             const isCurrent = String(sid) === curSid;
             const lyricsSrc = isCurrent ? getStablePagingLyricsForPageSplit() : String(plSong.lyrics ?? "");
             const pages = splitPages(lyricsSrc, state.ui.defaultLines);
+            const seq = getPlaybackSequenceForSong(plSong, isCurrent);
             const eff = effectiveSongBackground(plSong);
-            parts.push(`${sid}:${pages.length}:${pageGalleryBackgroundIdentityKey(eff)}`);
+            parts.push(`${sid}:${pages.length}:${playbackSequenceSignature(seq)}:${pageGalleryBackgroundIdentityKey(eff)}`);
         });
         return parts.join("\x1e");
     }
@@ -7029,7 +7490,8 @@
             }
             const lyricsSrc = isCurrent ? getStablePagingLyricsForPageSplit() : String(plSong.lyrics ?? "");
             const pages = splitPages(lyricsSrc, state.ui.defaultLines);
-            const cp = isCurrent ? clamp(state.currentPage, 0, Math.max(0, pages.length - 1)) : -1;
+            const seq = getPlaybackSequenceForSong(plSong, isCurrent);
+            const cp = isCurrent ? clamp(state.currentPage, 0, Math.max(0, seq.length - 1)) : -1;
 
             const effStrip = effectiveSongBackground(plSong);
             const galleryLiveVideoBgThis =
@@ -7042,13 +7504,20 @@
                 : sec.querySelector(":scope > .layout-page-gallery-pages");
             if (!scrollRow) return false;
             const cards = scrollRow.querySelectorAll(":scope > .gallery-page-card[data-gallery-card]");
-            if (cards.length !== pages.length) return false;
+            if (cards.length !== seq.length) return false;
 
-            for (let pi = 0; pi < pages.length; pi++) {
-                const card = cards[pi];
-                if (card.getAttribute("data-song-id") !== sid || card.getAttribute("data-page-idx") !== String(pi))
+            for (let si = 0; si < seq.length; si++) {
+                const step = seq[si];
+                const pi = step.sourcePage;
+                const card = cards[si];
+                if (card.getAttribute("data-song-id") !== sid || card.getAttribute("data-playback-step-idx") !== String(si))
                     return false;
-                const act = isCurrent && pi === cp;
+                if (card.getAttribute("data-page-idx") !== String(pi)) return false;
+                const stepId = String(step.id || "");
+                if (card.getAttribute("data-playback-step-id") !== stepId) {
+                    card.setAttribute("data-playback-step-id", stepId);
+                }
+                const act = isCurrent && si === cp;
                 card.className = "gallery-page-card" + (act ? " is-active" : "");
                 const borderCol = act ? "#d4af37" : "rgba(255,255,255,0.12)";
                 card.style.border = "2px solid " + borderCol;
@@ -7230,7 +7699,8 @@
             linesSrc = String(song.lyrics ?? "");
         }
         const pages = splitPages(linesSrc, state.ui.defaultLines);
-        const total = Math.max(1, pages.length);
+        const seq = song ? getPlaybackSequenceForSong(song, true) : [];
+        const total = Math.max(1, seq.length);
         const y = clamp(state.currentPage, 0, total - 1) + 1;
         pageEl.textContent = `第${y}/${total}页`;
     }
@@ -7287,6 +7757,7 @@
             scrollGalleryActiveIntoView(gal);
             scheduleGalleryCardSwitchAnimation();
             refreshGallerySectionPageIndicators();
+            bindGalleryPlaybackCardsInGal(gal);
             ensureGalleryLayoutResizeObserver();
             requestAnimationFrame(() => relayoutGalleryLyricVerticalPads());
             finishGalleryChrome();
@@ -7322,7 +7793,8 @@
             const isCurrent = String(sid) === String(state.currentSongId);
             const lyricsSrc = isCurrent ? getStablePagingLyricsForPageSplit() : String(plSong.lyrics ?? "");
             const pages = splitPages(lyricsSrc, state.ui.defaultLines);
-            const cp = clamp(state.currentPage, 0, Math.max(0, pages.length - 1));
+            const seq = getPlaybackSequenceForSong(plSong, isCurrent);
+            const cp = clamp(state.currentPage, 0, Math.max(0, isCurrent ? seq.length - 1 : 0));
 
             const pageMeta = document.createElement("div");
             pageMeta.className = "gallery-song-section-page-meta";
@@ -7339,7 +7811,7 @@
             inpPg.setAttribute("aria-label", `「${plSong.title || "诗歌"}」当前页码`);
             const totI = document.createElement("span");
             totI.className = "page-indicator-total";
-            totI.textContent = `/${Math.max(1, pages.length)}`;
+            totI.textContent = `/${Math.max(1, seq.length)}`;
             wrapInteractive.appendChild(inpPg);
             wrapInteractive.appendChild(totI);
 
@@ -7351,10 +7823,10 @@
             wrapReadonly.setAttribute("aria-hidden", isCurrent ? "true" : "false");
             const valRo = document.createElement("span");
             valRo.className = "page-indicator-readonly-val";
-            valRo.textContent = String(clamp(cp + 1, 1, Math.max(1, pages.length)));
+            valRo.textContent = String(isCurrent ? clamp(cp + 1, 1, seq.length) : 1);
             const totRo = document.createElement("span");
             totRo.className = "page-indicator-total";
-            totRo.textContent = `/${Math.max(1, pages.length)}`;
+            totRo.textContent = `/${Math.max(1, seq.length)}`;
             wrapReadonly.appendChild(valRo);
             wrapReadonly.appendChild(totRo);
 
@@ -7374,12 +7846,15 @@
             const galleryLiveVideoBgThis =
                 effStrip.bgType === "image" && effStrip.bgMediaType === "video" && !!effStrip.bgImage;
 
-            pages.forEach((lines, pi) => {
-                const act = isCurrent && pi === cp;
+            seq.forEach((step, si) => {
+                const pi = step.sourcePage;
+                const act = isCurrent && si === cp;
                 const card = document.createElement("div");
                 card.setAttribute("data-gallery-card", "1");
                 card.setAttribute("data-song-id", String(sid));
                 card.setAttribute("data-page-idx", String(pi));
+                card.setAttribute("data-playback-step-idx", String(si));
+                card.setAttribute("data-playback-step-id", String(step.id || ""));
                 card.className = "gallery-page-card" + (act ? " is-active" : "");
                 card.setAttribute("role", "listitem");
                 card.style.cssText =
@@ -7403,6 +7878,7 @@
                 lyricAnim.style.cssText =
                     "position:relative;z-index:2;width:100%;transform-origin:center center;display:flex;flex-direction:column;align-items:center;";
                 card.appendChild(lyricAnim);
+                const lines = pages[pi] || [];
                 let lineList = Array.isArray(lines)
                     ? lines.map((x) => String(x ?? "").trim()).filter((s) => s.length > 0)
                     : [];
@@ -7423,14 +7899,16 @@
                     lyricAnim.appendChild(row);
                 });
                 applyGalleryCardLyricVerticalLayout(card, lyricAnim, plSong);
-                card.addEventListener("click", () => {
+                card.addEventListener("click", (e) => {
+                    if (galleryPlaybackDrag || Date.now() < galleryPlaybackSuppressClickUntil) return;
                     if (String(sid) === String(state.currentSongId)) {
-                        jumpToPage(pi);
+                        jumpToPage(si);
                     } else {
-                        switchSong(sid, { page: pi });
+                        switchSong(sid, { page: si });
                         broadcastState();
                     }
                 });
+                bindGalleryPlaybackCardEl(card, plSong, si);
                 scrollRow.appendChild(card);
             });
 
@@ -7443,6 +7921,7 @@
         scrollGalleryActiveIntoView(gal);
         scheduleGalleryCardSwitchAnimation();
         refreshGallerySectionPageIndicators();
+        bindGalleryPlaybackCardsInGal(gal);
         ensureGalleryLayoutResizeObserver();
         requestAnimationFrame(() => {
             relayoutGalleryLyricVerticalPads();
@@ -8600,8 +9079,8 @@ ${deleteBtnHtml}
         const mini = $("mini-preview");
         if (!mini) return;
         const song = currentSong();
-        const pages = splitPages(lyricsForPaginationSplit(), state.ui.defaultLines);
-        const lines = pages[state.currentPage] || [];
+        const flatPages = song ? getFlattenedPagesForSong(song, true) : splitPages(lyricsForPaginationSplit(), state.ui.defaultLines);
+        const lines = flatPages[state.currentPage] || [];
 
         if (options && options.linesOnly && isMainVideoBackground()) {
             const transLo = isAnimatablePageTransition(state.ui.pageTransition)
@@ -9571,11 +10050,13 @@ ${deleteBtnHtml}
         const preLyrics = getLyricsSourceStringForPaging();
         syncEditorToSong();
         const song = currentSong();
-        const pages = splitPages(
-            mergeLyricsPagingSnapshot(preLyrics, getLyricsSourceStringForPaging()),
-            state.ui.defaultLines
-        );
-        state.currentPage = clamp(state.currentPage, 0, pages.length - 1);
+        const pages = song
+            ? getFlattenedPagesForSong(song, true)
+            : splitPages(
+                  mergeLyricsPagingSnapshot(preLyrics, getLyricsSourceStringForPaging()),
+                  state.ui.defaultLines
+              );
+        state.currentPage = clamp(state.currentPage, 0, Math.max(0, pages.length - 1));
         const fadeNow = !!state.playlist.fadeNext;
         state.playlist.fadeNext = false;
         const overlayPct = clamp(Number(state.ui.overlayOpacityPct), 0, 80);
@@ -10655,9 +11136,10 @@ ${deleteBtnHtml}
         updateUIFromState();
         syncSongToEditor();
         captureEditorPersistBaseline();
-        const pages = splitPages(getStablePagingLyricsForPageSplit(), state.ui.defaultLines);
+        const song = state.songs.find((s) => String(s.id) === String(songId));
+        const stepCount = song ? Math.max(1, getPlaybackSequenceForSong(song, true).length) : 1;
         const wantPage = opts && opts.page != null && Number.isFinite(Number(opts.page)) ? Math.floor(Number(opts.page)) : 0;
-        state.currentPage = clamp(wantPage, 0, Math.max(0, pages.length - 1));
+        state.currentPage = clamp(wantPage, 0, Math.max(0, stepCount - 1));
         renderSongList();
         updateSpeakerCards();
         renderMiniPreview();
@@ -11234,6 +11716,8 @@ ${deleteBtnHtml}
             }
         }
         syncEditorToSong();
+        const song = currentSong();
+        if (song) reconcilePlaybackSequenceAfterLyricsChange(song, { toast: true });
         saveSongs();
         renderSongList();
         updateSpeakerCards();
@@ -13252,9 +13736,9 @@ ${deleteBtnHtml}
         const interval = seconds * 1000;
         state.autoplay.running = true;
         state.autoplay.timer = setInterval(() => {
-            const pages = splitPages(getStablePagingLyricsForPageSplit(), state.ui.defaultLines);
-            if (!pages.length) return;
-            state.currentPage = (state.currentPage + 1) % pages.length;
+            const stepCount = getCurrentSongPlaybackStepCount();
+            if (stepCount <= 0) return;
+            state.currentPage = (state.currentPage + 1) % stepCount;
             updateAll();
             state.autoplay.elapsed = 0;
         }, interval);
@@ -13797,8 +14281,7 @@ ${deleteBtnHtml}
                 pageInd.addEventListener("keydown", (e) => {
                     if (e.key !== "Enter") return;
                     e.preventDefault();
-                    const pages = splitPages(getStablePagingLyricsForPageSplit(), state.ui.defaultLines);
-                    const maxP = Math.max(1, pages.length);
+                    const maxP = Math.max(1, getCurrentSongPlaybackStepCount());
                     const raw = String(pageInd.value || "").trim();
                     const n = parseInt(raw, 10);
                     const v = clamp(Number.isFinite(n) ? n : state.currentPage + 1, 1, maxP);
@@ -13814,8 +14297,7 @@ ${deleteBtnHtml}
                 const t = e.target;
                 if (!(t instanceof Element) || !t.classList.contains("gallery-section-page-input")) return;
                 e.preventDefault();
-                const pages = splitPages(getStablePagingLyricsForPageSplit(), state.ui.defaultLines);
-                const maxP = Math.max(1, pages.length);
+                const maxP = Math.max(1, getCurrentSongPlaybackStepCount());
                 const raw = String(t.value || "").trim();
                 const n = parseInt(raw, 10);
                 const v = clamp(Number.isFinite(n) ? n : state.currentPage + 1, 1, maxP);
@@ -14301,8 +14783,9 @@ ${deleteBtnHtml}
             if (_lyricEditorProgrammaticWrite) return;
             syncEditorToSong();
             updateEditorUnsavedIndicator();
-            const nPages = splitPages(getLyricsSourceStringForPaging(), state.ui.defaultLines).length;
-            const maxIdx = Math.max(0, nPages - 1);
+            const songLive = currentSong();
+            const flatLen = songLive ? Math.max(1, getFlattenedPagesForSong(songLive, true).length) : 1;
+            const maxIdx = Math.max(0, flatLen - 1);
             if (state.currentPage > maxIdx) state.currentPage = maxIdx;
             updateSpeakerCards({ linesOnly: isMainVideoBackground() });
             renderMiniPreview({ linesOnly: isMainVideoBackground() });
@@ -19208,8 +19691,7 @@ const linesHtml = rawLines
 
     function changePage(delta) {
         projectionDisplayOverlay = null;
-        const pages = splitPages(getStablePagingLyricsForPageSplit(), state.ui.defaultLines);
-        const maxIdx = Math.max(0, pages.length - 1);
+        const maxIdx = Math.max(0, getCurrentSongPlaybackStepCount() - 1);
         state.currentPage = clamp(state.currentPage, 0, maxIdx);
         const cur = state.currentPage;
         const d = Number(delta);
@@ -19274,8 +19756,8 @@ const linesHtml = rawLines
 
     function jumpToPage(pageIndex) {
         projectionDisplayOverlay = null;
-        const pages = splitPages(getStablePagingLyricsForPageSplit(), state.ui.defaultLines);
-        state.currentPage = clamp(Number(pageIndex) || 0, 0, Math.max(0, pages.length - 1));
+        const maxIdx = Math.max(0, getCurrentSongPlaybackStepCount() - 1);
+        state.currentPage = clamp(Number(pageIndex) || 0, 0, maxIdx);
         updateAll({ linesOnly: isMainVideoBackground() });
     }
 
@@ -19473,6 +19955,7 @@ const linesHtml = rawLines
             renderMiniPreview();
             renderPlaylist();
             bindEvents();
+            installGalleryPlaybackInteractions();
             initUiZoom();
             startProjectionDisplayWindowWatch();
             installLyricEditorDrawerResize();

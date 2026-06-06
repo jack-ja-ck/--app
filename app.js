@@ -68,6 +68,10 @@
     const UPLOADED_BACKGROUNDS_STORAGE = "uploaded_backgrounds";
     /** 「我的背景」本地槽位上限；超出时丢弃最旧（按 timestamp） */
     const UPLOADED_BACKGROUNDS_MAX = 4;
+    /** 上传背景时超过此大小则提示用户（仍允许上传） */
+    const BG_UPLOAD_WARN_IMAGE_BYTES = 8 * 1024 * 1024;
+    const BG_UPLOAD_WARN_VIDEO_BYTES = 40 * 1024 * 1024;
+    const FREE_BG_MODAL_VERSION = "2";
 
     function appendWorshipErrorLogEntry(info) {
         try {
@@ -3024,37 +3028,45 @@
     /** 首次访问：箭头式分步指引（与 worship_visited 共用，完成后不再显示）——按实际操作顺序 */
     const NEW_USER_ARROW_GUIDE_STEPS = [
         {
-            selector: "#editor-lyrics-drawer-summary",
+            selector: "#editor-lyrics-drawer",
+            expandDrawer: true,
+            pad: 6,
             title: "第 1 步：编辑歌词",
             text:
-                "点中间栏下方的「📝 编辑歌词」标题栏展开。展开后自上而下为：歌名与字号（右侧有收起提示）；接着是「保存并应用」「存为存档」等按钮；下方是大块歌词编辑区（可用空行或 [page] 分段）。编辑时画廊与投屏会实时预览；顶边金色条可向上拖高。"
+                "中间栏下方「📝 编辑歌词」已为你展开。填写歌名，在大块歌词编辑区粘贴或修改（一行一句；空行或 [page] 分段）。右侧可调整编辑区字号；顶边金色条可向上拖高。编辑时画廊与已开投屏会实时预览。"
         },
         {
-            selector: "#song-library",
+            selector: "#playlist-panel",
+            pad: 10,
             title: "第 2 步：加入播放列表",
             text:
                 "在左侧「诗歌库」里选中要唱的诗歌，点该行右侧「+」，加入下方的「播放列表（敬拜顺序）」；可多首并拖拽排序。列表下方「💾 保存歌单」与「📋 我的歌单」并排，用于命名保存或打开本机已存歌单。（「在线搜索诗歌」当前为占位。）"
         },
         {
             selector: "#playlist-start-btn",
+            pad: 10,
             title: "第 3 步：开始播放",
             text:
                 "顺序排好后点「▶ 开始播放」。之后用中间「页面画廊」里的分页卡片翻页：可点击卡片，或使用键盘 ← → / 空格。"
         },
         {
-            selector: "#layout-page-gallery",
+            selector: "#gallery-wrapper",
+            pad: 8,
             title: "第 4 步：预览页面画廊",
             text:
                 "卡片区即分页预览，每张对应投屏一页；可点击卡片或按 ← → / 空格翻页。右键卡片可「复制 / 删除 / 撤销 / 恢复为歌词顺序」；按住卡片拖动可在同一首歌内调整播放顺序（不改歌词）。上方工具栏有「帮助」与画廊缩放。"
         },
         {
-            selector: "#save-song-btn",
+            selector: "#editor-inline-actions",
+            expandDrawer: true,
+            pad: 8,
             title: "第 5 步：保存并应用到投屏",
             text:
-                "在已展开的「编辑歌词」底部工具栏点「保存并应用」：写入诗歌库，并同步到会众投屏与页面画廊。编辑过程中画廊与已开启的投屏也会实时预览修改。"
+                "改好歌词后点「💾 保存并应用」（或 Ctrl+S / ⌘+S）：写入诗歌库，并同步到会众投屏与页面画廊。「存为存档」可把当前歌词与样式存到本机，便于下次套用。"
         },
         {
             selector: "#open-display-btn",
+            pad: 10,
             title: "第 6 步：开启与结束投屏",
             text:
                 "右侧「投屏控制」有「开启投屏」「主领视角」等入口；开启投屏后会众窗打开，同一按钮变为「关闭投屏」，或按 Ctrl+Shift+E 关闭。「主领视角」可选平板/手机传数据（二维码）或在电脑打开。会众窗按 F 全屏；绿色按钮右上角 ? 可看投屏帮助。投屏时中间金色状态栏另有「结束投屏」与「分享云端」等。"
@@ -3063,6 +3075,29 @@
 
     let newUserArrowGuideIndex = 0;
     let newUserArrowGuideRelayoutTimer = 0;
+    /** 引导开始前编辑抽屉是否已展开；引导结束后恢复此状态 */
+    let newUserArrowGuideDrawerWasOpen = null;
+    let newUserArrowGuideActive = false;
+
+    function syncNewUserArrowGuideDrawerForStep(step, drawerDeferred) {
+        const drawer = $("editor-lyrics-drawer");
+        if (!drawer || newUserArrowGuideDrawerWasOpen === null) return false;
+        const wantOpen = !!(step && step.expandDrawer);
+        if (wantOpen) {
+            if (!drawer.open) {
+                drawer.open = true;
+                syncLyricDrawerOverlayClass();
+                return !drawerDeferred;
+            }
+            return false;
+        }
+        if (drawer.open && !newUserArrowGuideDrawerWasOpen) {
+            drawer.open = false;
+            syncLyricDrawerOverlayClass();
+            return !drawerDeferred;
+        }
+        return false;
+    }
 
     function teardownNewUserArrowGuide() {
         const root = $("new-user-arrow-guide");
@@ -3080,11 +3115,55 @@
             window.removeEventListener("scroll", fn, true);
             teardownNewUserArrowGuide._onRelayout = null;
         }
+        const drawer = $("editor-lyrics-drawer");
+        if (drawer && newUserArrowGuideDrawerWasOpen !== null) {
+            drawer.open = newUserArrowGuideDrawerWasOpen;
+            syncLyricDrawerOverlayClass();
+        }
+        newUserArrowGuideDrawerWasOpen = null;
+        newUserArrowGuideActive = false;
+    }
+
+    function bindNewUserArrowGuideActionHandlers(root) {
+        if (!root) return;
+        const skip = root.querySelector("#new-user-arrow-guide-skip");
+        if (skip && skip.dataset.bound !== "1") {
+            skip.dataset.bound = "1";
+            skip.addEventListener("click", () => dismissFirstVisitOnboarding());
+        }
+        const prev = root.querySelector("#new-user-arrow-guide-prev");
+        if (prev && prev.dataset.bound !== "1") {
+            prev.dataset.bound = "1";
+            prev.addEventListener("click", () => {
+                if (newUserArrowGuideIndex <= 0) return;
+                newUserArrowGuideIndex -= 1;
+                layoutNewUserArrowGuideStep();
+            });
+        }
+        const next = root.querySelector("#new-user-arrow-guide-next");
+        if (next && next.dataset.bound !== "1") {
+            next.dataset.bound = "1";
+            next.addEventListener("click", () => {
+                newUserArrowGuideIndex += 1;
+                if (newUserArrowGuideIndex >= NEW_USER_ARROW_GUIDE_STEPS.length) {
+                    dismissFirstVisitOnboarding();
+                    return;
+                }
+                layoutNewUserArrowGuideStep();
+            });
+        }
     }
 
     function ensureNewUserArrowGuideDom() {
         let root = $("new-user-arrow-guide");
-        if (root) return root;
+        if (root && !root.querySelector("#new-user-arrow-guide-prev")) {
+            root.remove();
+            root = null;
+        }
+        if (root) {
+            bindNewUserArrowGuideActionHandlers(root);
+            return root;
+        }
         root = document.createElement("div");
         root.id = "new-user-arrow-guide";
         root.className = "new-user-arrow-guide";
@@ -3101,22 +3180,12 @@
             '<p class="new-user-arrow-guide__text" id="new-user-arrow-guide-text"></p>' +
             '<div class="new-user-arrow-guide__actions">' +
             '<button type="button" class="new-user-arrow-guide__skip" id="new-user-arrow-guide-skip">跳过</button>' +
+            '<div class="new-user-arrow-guide__nav">' +
+            '<button type="button" class="new-user-arrow-guide__prev" id="new-user-arrow-guide-prev">上一步</button>' +
             '<button type="button" class="new-user-arrow-guide__next" id="new-user-arrow-guide-next">下一步</button>' +
-            "</div></div>";
+            "</div></div></div>";
         document.body.appendChild(root);
-        const onSkip = () => {
-            dismissFirstVisitOnboarding();
-        };
-        const onNext = () => {
-            newUserArrowGuideIndex += 1;
-            if (newUserArrowGuideIndex >= NEW_USER_ARROW_GUIDE_STEPS.length) {
-                dismissFirstVisitOnboarding();
-                return;
-            }
-            layoutNewUserArrowGuideStep();
-        };
-        root.querySelector("#new-user-arrow-guide-skip")?.addEventListener("click", onSkip);
-        root.querySelector("#new-user-arrow-guide-next")?.addEventListener("click", onNext);
+        bindNewUserArrowGuideActionHandlers(root);
         if (!teardownNewUserArrowGuide._escBound) {
             teardownNewUserArrowGuide._escBound = true;
             document.addEventListener(
@@ -3134,7 +3203,7 @@
         return root;
     }
 
-    function layoutNewUserArrowGuideStep() {
+    function layoutNewUserArrowGuideStep(drawerLayoutReady) {
         const root = $("new-user-arrow-guide");
         if (!root || root.hidden) return;
         const step = NEW_USER_ARROW_GUIDE_STEPS[newUserArrowGuideIndex];
@@ -3144,8 +3213,16 @@
         const meta = $("new-user-arrow-guide-meta");
         const titleEl = $("new-user-arrow-guide-title");
         const textEl = $("new-user-arrow-guide-text");
+        const prevBtn = $("new-user-arrow-guide-prev");
         const nextBtn = $("new-user-arrow-guide-next");
         if (!step || !ring || !shaft || !bubble || !meta || !titleEl || !textEl || !nextBtn) return;
+
+        if (!drawerLayoutReady && syncNewUserArrowGuideDrawerForStep(step, false)) {
+            requestAnimationFrame(() =>
+                requestAnimationFrame(() => layoutNewUserArrowGuideStep(true))
+            );
+            return;
+        }
 
         let target = document.querySelector(step.selector);
         if (!target) {
@@ -3167,7 +3244,7 @@
         }
 
         const r = target.getBoundingClientRect();
-        const pad = 8;
+        const pad = Number.isFinite(step.pad) ? step.pad : 8;
         const rx = r.left - pad;
         const ry = r.top - pad;
         const rw = r.width + pad * 2;
@@ -3183,7 +3260,12 @@
         titleEl.textContent = step.title;
         textEl.textContent = step.text;
         const last = newUserArrowGuideIndex >= NEW_USER_ARROW_GUIDE_STEPS.length - 1;
+        const isFirst = newUserArrowGuideIndex <= 0;
         nextBtn.textContent = last ? "完成" : "下一步";
+        if (prevBtn) {
+            prevBtn.hidden = isFirst;
+            prevBtn.disabled = isFirst;
+        }
 
         bubble.style.visibility = "hidden";
         bubble.style.left = "0px";
@@ -3262,6 +3344,9 @@
             newUserArrowGuideRelayoutTimer = 0;
         }
         newUserArrowGuideIndex = 0;
+        const drawer = $("editor-lyrics-drawer");
+        newUserArrowGuideDrawerWasOpen = drawer ? !!drawer.open : false;
+        newUserArrowGuideActive = true;
         root.hidden = false;
         root.setAttribute("aria-hidden", "false");
         const fn = () => scheduleNewUserArrowGuideRelayout();
@@ -3696,38 +3781,58 @@
         return tpl ? tpl.innerHTML.trim() : "";
     }
 
-    function openHelpModal() {
-        let modal = $("help-modal");
+    let helpModalBackdropEl = null;
+
+    function closeHelpModal() {
+        const modal = helpModalBackdropEl || $("help-modal");
+        if (!modal) return;
+        modal.classList.remove("is-open");
+        modal.style.display = "";
+    }
+
+    function ensureHelpModalDom() {
         const html = getHelpModalInnerHtml();
+        let modal = helpModalBackdropEl || $("help-modal");
+        if (modal && !modal.querySelector(".help-modal__close")) {
+            modal.remove();
+            modal = null;
+            helpModalBackdropEl = null;
+        }
         if (!modal) {
             modal = document.createElement("div");
             modal.id = "help-modal";
-            modal.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:2500;display:flex;align-items:center;justify-content:center;";
-            const panel = document.createElement("div");
-            panel.style.cssText = "width:min(700px,92vw);max-height:80vh;overflow-y:auto;background:var(--bg-secondary);border-radius:20px;padding:30px;position:relative;color:var(--text-primary);";
-            const closeBtn = document.createElement("button");
-            closeBtn.type = "button";
-            closeBtn.id = "help-modal-close";
-            closeBtn.textContent = "✕";
-            closeBtn.style.cssText = "position:absolute;right:14px;top:10px;border:none;background:transparent;color:var(--text-secondary);font-size:18px;cursor:pointer;";
-            closeBtn.addEventListener("click", () => {
-                modal.style.display = "none";
-            });
-            panel.appendChild(closeBtn);
-            const content = document.createElement("div");
-            content.className = "help-modal-body";
-            content.innerHTML = html;
-            panel.appendChild(content);
-            modal.appendChild(panel);
+            modal.className = "help-modal-backdrop";
+            modal.innerHTML =
+                '<div class="help-modal-panel" role="dialog" aria-modal="true" aria-labelledby="help-modal-title">' +
+                '<button type="button" class="help-modal__close" id="help-modal-close" aria-label="关闭">✕</button>' +
+                '<div class="help-modal-body"></div></div>';
             modal.addEventListener("click", (e) => {
-                if (e.target === modal) modal.style.display = "none";
+                if (e.target === modal) closeHelpModal();
             });
+            modal.querySelector(".help-modal-panel")?.addEventListener("click", (e) => e.stopPropagation());
+            modal.querySelector(".help-modal__close")?.addEventListener("click", () => closeHelpModal());
             document.body.appendChild(modal);
-        } else if (html) {
-            const bodyEl = modal.querySelector(".help-modal-body");
-            if (bodyEl) bodyEl.innerHTML = html;
+            if (!modal.dataset.escBound) {
+                modal.dataset.escBound = "1";
+                document.addEventListener("keydown", (e) => {
+                    if (e.key !== "Escape") return;
+                    const m = helpModalBackdropEl || $("help-modal");
+                    if (!m || !m.classList.contains("is-open")) return;
+                    closeHelpModal();
+                });
+            }
+            helpModalBackdropEl = modal;
         }
-        modal.style.display = "flex";
+        const bodyEl = modal.querySelector(".help-modal-body");
+        if (bodyEl && html) bodyEl.innerHTML = html;
+        const titleEl = bodyEl?.querySelector("h2");
+        if (titleEl && !titleEl.id) titleEl.id = "help-modal-title";
+        return modal;
+    }
+
+    function openHelpModal() {
+        const modal = ensureHelpModalDom();
+        modal.classList.add("is-open");
     }
 
     function escapeHtml(text) {
@@ -5975,74 +6080,258 @@
         }
     }
 
+    function closeFreeBgMaterialsPanel() {
+        const modal = $("free-bg-materials-modal");
+        if (!modal) return;
+        modal.classList.remove("is-open");
+        document.body.classList.remove("free-bg-modal-open");
+    }
+
+    function buildFreeBgSiteCard(site) {
+        const card = document.createElement("button");
+        card.type = "button";
+        const featured = site.featured ? " free-bg-card--featured" : "";
+        card.className = `free-bg-card${featured}`;
+        const badgeCls =
+            site.badgeType === "warn"
+                ? "free-bg-card-badge--warn"
+                : site.badgeType === "gold"
+                  ? "free-bg-card-badge--gold"
+                  : "free-bg-card-badge--ok";
+        card.innerHTML = `<div class="free-bg-card-top">
+                <div class="free-bg-card-name">${escapeHtml(site.name)}</div>
+                <span class="free-bg-card-badge ${badgeCls}">${escapeHtml(site.badge)}</span>
+            </div>
+            <div class="free-bg-card-desc">${escapeHtml(site.desc)}</div>
+            <div class="free-bg-card-kw">${escapeHtml(site.kw)}</div>`;
+        card.addEventListener("click", () => window.open(site.url, "_blank", "noopener,noreferrer"));
+        return card;
+    }
+
+    function buildFreeBgToolCard(tool) {
+        const card = document.createElement("button");
+        card.type = "button";
+        card.className = "free-bg-tool-card";
+        card.innerHTML = `<div class="free-bg-tool-name">${escapeHtml(tool.name)}</div>
+            <div class="free-bg-tool-desc">${escapeHtml(tool.desc)}</div>
+            <span class="free-bg-tool-tag">${escapeHtml(tool.tag)}</span>`;
+        card.addEventListener("click", () => window.open(tool.url, "_blank", "noopener,noreferrer"));
+        return card;
+    }
+
     function openFreeBgMaterialsPanel() {
         let modal = $("free-bg-materials-modal");
+        if (modal && modal.dataset.version !== FREE_BG_MODAL_VERSION) {
+            modal.remove();
+            modal = null;
+        }
         if (modal) {
-            modal.style.display = "flex";
+            modal.classList.add("is-open");
+            document.body.classList.add("free-bg-modal-open");
+            modal.querySelector(".free-bg-modal-body")?.scrollTo(0, 0);
             return;
         }
-        modal = document.createElement("div");
-        modal.id = "free-bg-materials-modal";
-        modal.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:3600;display:flex;align-items:center;justify-content:center;padding:16px;";
-        const sites = [
+
+        const materialSites = [
+            {
+                name: "FreeWorshipBackgrounds",
+                desc: "敬拜投屏专用背景，垂直主题更贴合教会场景",
+                kw: "推荐搜索：worship background, church stage, cross, ambient loop",
+                badge: "敬拜专区 · 推荐",
+                badgeType: "gold",
+                featured: true,
+                url: "https://freeworshipbackgrounds.com/"
+            },
             {
                 name: "Pixabay",
                 desc: "动态视频 / 静态图 / 粒子效果",
-                kw: "推荐搜索：中文可试 敬拜、十字架、祈祷、光效｜英文 worship background, church motion, particles loop, light rays, golden glow",
-                badge: "免费可商用",
+                kw: "敬拜、十字架、光效｜worship background, particles loop, light rays",
+                badge: "官网下载一般无水印",
+                badgeType: "ok",
                 url: "https://pixabay.com/"
             },
             {
                 name: "Pexels",
                 desc: "高质量视频 / 自然风景",
-                kw: "推荐搜索：中文可试 敬拜、十字架、祈祷、云彩｜英文 worship, church, cross, clouds, sunset, ocean",
-                badge: "免费可商用",
+                kw: "敬拜、云彩、日落｜worship, church, cross, sunset, ocean",
+                badge: "官网下载一般无水印",
+                badgeType: "ok",
                 url: "https://www.pexels.com/"
             },
             {
                 name: "Coverr",
                 desc: "专门免费视频背景",
-                kw: "推荐搜索：中文可试 敬拜、祈祷、抽象、自然｜英文 faith, spiritual, abstract, nature, ambient",
-                badge: "免费可商用",
+                kw: "敬拜、抽象、自然｜faith, spiritual, ambient, nature loop",
+                badge: "官网下载一般无水印",
+                badgeType: "ok",
                 url: "https://coverr.co/"
             },
             {
                 name: "Canva",
-                desc: "设计感强 / 宗教主题",
-                kw: "推荐搜索：敬拜、十字架、祈祷、教会｜worship background, Christian, church stage",
-                badge: "免费版可用，部分需署名",
+                desc: "设计感强 / 宗教主题模板",
+                kw: "敬拜、十字架、教会｜worship background, Christian, church stage",
+                badge: "免费版导出常有水印",
+                badgeType: "warn",
                 url: "https://www.canva.com/"
             }
         ];
-        const inner = document.createElement("div");
-        inner.style.cssText = "background:var(--bg-secondary);border-radius:16px;padding:20px 22px;max-width:560px;width:100%;max-height:90vh;overflow-y:auto;border:1px solid var(--border-color);position:relative;";
-        inner.innerHTML = `<button type="button" id="free-bg-modal-close" style="position:absolute;right:12px;top:10px;border:none;background:transparent;color:var(--text-secondary);cursor:pointer;font-size:1.1rem;">✕</button>
-            <h3 class="free-bg-modal-title" style="margin:0 0 4px;color:var(--text-primary);font-size:1.05rem;display:flex;align-items:center;gap:8px;"><span class="ui-icon ui-icon--resources" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M14 17h7M17.5 14v7" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/></svg></span>免费背景素材</h3>
-            <p class="hint-text" style="margin-top:6px;">点击卡片在新标签页打开网站</p>
-            <p class="hint-text" style="margin-top:10px;line-height:1.55;color:rgba(245,230,200,0.9);">在各站搜索框可中英文混合尝试，例如中文：<b>敬拜</b>、<b>十字架</b>、<b>祈祷</b>、教会、赞美、信仰、光效、粒子；英文如 <b>worship</b>、<b>cross</b>、<b>prayer</b>、church、faith、bokeh、particles、ambient 等，多换几个词组合更易找到合适背景。</p>
-            <div class="free-bg-modal-grid" id="free-bg-modal-grid"></div>
-            <p class="free-bg-modal-foot">下载后回到本页，用「上传背景图片」即可使用</p>`;
-        const grid = inner.querySelector("#free-bg-modal-grid");
-        sites.forEach((s) => {
-            const card = document.createElement("button");
-            card.type = "button";
-            card.className = "free-bg-card";
-            card.innerHTML = `<div class="free-bg-card-name">${escapeHtml(s.name)}</div>
-                <div class="free-bg-card-desc">${escapeHtml(s.desc)}</div>
-                <div class="free-bg-card-kw">${escapeHtml(s.kw)}</div>
-                <div class="free-bg-card-badge">${escapeHtml(s.badge)}</div>`;
-            card.addEventListener("click", () => window.open(s.url, "_blank", "noopener,noreferrer"));
-            grid.appendChild(card);
+
+        const watermarkTools = [
+            {
+                name: "WatermarkRemover",
+                desc: "在线去除图片水印，操作简单",
+                tag: "图片",
+                url: "https://watermarkremover.com/"
+            },
+            {
+                name: "Inpaint",
+                desc: "智能修复图片局部，适合小面积水印",
+                tag: "图片",
+                url: "https://inpaint.com/"
+            },
+            {
+                name: "美图秀秀网页版",
+                desc: "裁剪、缩放、遮角，适合角落水印",
+                tag: "图片",
+                url: "https://xiuxiu.web.meitu.com/"
+            },
+            {
+                name: "剪映",
+                desc: "裁剪画面、放大遮角，适合视频角落水印",
+                tag: "视频",
+                url: "https://capcut.cn/"
+            },
+            {
+                name: "RemoveWatermark.video",
+                desc: "在线处理视频水印",
+                tag: "视频",
+                url: "https://removewatermark.video/"
+            }
+        ];
+
+        modal = document.createElement("div");
+        modal.id = "free-bg-materials-modal";
+        modal.className = "free-bg-materials-overlay";
+        modal.dataset.version = FREE_BG_MODAL_VERSION;
+        modal.setAttribute("role", "dialog");
+        modal.setAttribute("aria-modal", "true");
+        modal.setAttribute("aria-labelledby", "free-bg-modal-title");
+
+        const backdrop = document.createElement("div");
+        backdrop.className = "free-bg-materials-overlay__backdrop";
+        backdrop.addEventListener("click", () => closeFreeBgMaterialsPanel());
+
+        const panel = document.createElement("div");
+        panel.className = "free-bg-modal";
+
+        const head = document.createElement("header");
+        head.className = "free-bg-modal__head";
+        head.innerHTML = `<div>
+                <h3 class="free-bg-modal-title" id="free-bg-modal-title">
+                    <span class="ui-icon ui-icon--resources" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M14 17h7M17.5 14v7" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/></svg></span>
+                    免费背景素材指南
+                </h3>
+                <p class="free-bg-modal-subtitle">三步完成：找素材 → 按需处理 → 上传使用</p>
+            </div>
+            <button type="button" class="free-bg-modal-close" id="free-bg-modal-close" aria-label="关闭">✕</button>`;
+
+        const body = document.createElement("div");
+        body.className = "free-bg-modal-body";
+
+        const notice = document.createElement("div");
+        notice.className = "free-bg-notice";
+        notice.innerHTML =
+            "<b>说明：</b>本站是敬拜投屏工具，<b>无法内置固定背景素材库</b>（版权与存储限制）。请您自行前往下方推荐网站下载免费素材，再上传至「我的背景」使用，敬请谅解。";
+
+        const steps = document.createElement("div");
+        steps.className = "free-bg-steps";
+
+        const step1 = document.createElement("section");
+        step1.className = "free-bg-step";
+        step1.innerHTML = `<div class="free-bg-step-head"><span class="free-bg-step-num">1</span> 下载免费素材</div>
+            <p class="free-bg-step-intro">点击卡片在新标签页打开网站，在站内搜索并下载。请优先选择<b>官网直接下载</b>，避免截图或预览页（易带水印）。</p>`;
+        const kwHint = document.createElement("p");
+        kwHint.className = "free-bg-kw-hint";
+        kwHint.innerHTML =
+            "推荐关键词：中文 <b>敬拜</b>、<b>十字架</b>、<b>祈祷</b>、教会、光效、粒子；英文 <b>worship</b>、<b>cross</b>、<b>prayer</b>、church、faith、bokeh、particles、ambient loop 等，多换词组合更易找到合适背景。";
+        step1.appendChild(kwHint);
+        const siteGrid = document.createElement("div");
+        siteGrid.className = "free-bg-modal-grid";
+        materialSites.forEach((s) => siteGrid.appendChild(buildFreeBgSiteCard(s)));
+        step1.appendChild(siteGrid);
+
+        const step2 = document.createElement("details");
+        step2.className = "free-bg-step free-bg-step--optional";
+        step2.innerHTML = `<summary><span class="free-bg-step-head" style="margin:0;display:inline-flex;"><span class="free-bg-step-num">2</span> 素材仍有水印？（可选）</span></summary>`;
+        const step2Inner = document.createElement("div");
+        step2Inner.className = "free-bg-step-inner";
+        step2Inner.innerHTML = `<p class="free-bg-step-intro">若第一步下载的文件仍带水印，可尝试下方工具。上传至第三方网站前请注意隐私；优先确认素材授权是否允许此类处理。</p>`;
+        const toolGrid = document.createElement("div");
+        toolGrid.className = "free-bg-tool-grid";
+        watermarkTools.forEach((t) => toolGrid.appendChild(buildFreeBgToolCard(t)));
+        step2Inner.appendChild(toolGrid);
+        const legal = document.createElement("p");
+        legal.className = "free-bg-legal";
+        legal.textContent =
+            "水印常表示使用限制或未授权版本。请优先选用无水印下载方式；若使用去水印工具，请自行确认符合素材站条款及教会使用规范。在线工具需上传文件，请勿上传含隐私内容的素材。";
+        step2Inner.appendChild(legal);
+        step2.appendChild(step2Inner);
+
+        const step3 = document.createElement("section");
+        step3.className = "free-bg-step";
+        step3.innerHTML = `<div class="free-bg-step-head"><span class="free-bg-step-num">3</span> 上传回本站</div>
+            <p class="free-bg-step-intro">处理完成后回到本页，上传至「我的背景」即可在投屏与主领视图中使用。</p>`;
+        const formatBox = document.createElement("div");
+        formatBox.className = "free-bg-info-box free-bg-info-box--formats";
+        formatBox.innerHTML =
+            "<b>支持格式：</b>静态图 JPG / PNG / WebP / BMP；动态图 GIF；视频 MP4 / WebM / MOV 等常见格式。内置粒子、光流等动态预设无需上传。";
+        const sizeBox = document.createElement("div");
+        sizeBox.className = "free-bg-info-box free-bg-info-box--size";
+        sizeBox.innerHTML =
+            "<b>文件大小：</b>建议单张图片不超过 8 MB、单个视频不超过 40 MB。过大文件可能导致加载缓慢、投屏卡顿或浏览器存储空间不足而无法保存。";
+        step3.appendChild(formatBox);
+        step3.appendChild(sizeBox);
+        const ctaWrap = document.createElement("div");
+        ctaWrap.className = "free-bg-upload-cta";
+        const uploadBtn = document.createElement("button");
+        uploadBtn.type = "button";
+        uploadBtn.className = "free-bg-upload-btn";
+        uploadBtn.id = "free-bg-modal-upload-btn";
+        uploadBtn.textContent = "立即上传背景";
+        const uploadHint = document.createElement("p");
+        uploadHint.className = "free-bg-upload-hint";
+        uploadHint.textContent = "等同于点击上方「上传背景图片」；上传后可在「我的背景」中切换、排序与共享（共享仅支持图片）。";
+        ctaWrap.appendChild(uploadBtn);
+        ctaWrap.appendChild(uploadHint);
+        step3.appendChild(ctaWrap);
+
+        steps.appendChild(step1);
+        steps.appendChild(step2);
+        steps.appendChild(step3);
+        body.appendChild(notice);
+        body.appendChild(steps);
+
+        panel.appendChild(head);
+        panel.appendChild(body);
+        modal.appendChild(backdrop);
+        modal.appendChild(panel);
+
+        const onKeyDown = (e) => {
+            if (e.key === "Escape") closeFreeBgMaterialsPanel();
+        };
+
+        panel.querySelector("#free-bg-modal-close").addEventListener("click", () => closeFreeBgMaterialsPanel());
+        uploadBtn.addEventListener("click", () => {
+            closeFreeBgMaterialsPanel();
+            ensureBgImageInputAcceptsVideo();
+            $("bg-image-input")?.click();
         });
-        inner.querySelector("#free-bg-modal-close").addEventListener("click", () => {
-            modal.style.display = "none";
-        });
-        modal.appendChild(inner);
-        modal.addEventListener("click", (e) => {
-            if (e.target === modal) modal.style.display = "none";
-        });
+        modal.addEventListener("keydown", onKeyDown);
+
         document.body.appendChild(modal);
-        modal.style.display = "flex";
+        modal.classList.add("is-open");
+        document.body.classList.add("free-bg-modal-open");
+        requestAnimationFrame(() => panel.querySelector("#free-bg-modal-close")?.focus());
     }
 
     function syncGlobalSongStoresFromState() {
@@ -6526,6 +6815,7 @@
             "click",
             (e) => {
                 if (!drawer.open) return;
+                if (newUserArrowGuideActive) return;
                 if (Date.now() < (installLyricEditorDrawerOutsideClose._suppressUntil || 0)) return;
                 const t = e.target;
                 if (!(t instanceof Element)) return;
@@ -14654,6 +14944,21 @@ ${deleteBtnHtml}
             if (!files || !files.length) return;
             const toastAnchor = $("upload-bg-btn") || $("upload-bg-trigger");
             const list = Array.from(files);
+            ensureBgImageInputAcceptsVideo();
+            const largeCount = list.filter((file) => {
+                const name = String(file.name || "").toLowerCase();
+                const isVideo =
+                    String(file.type || "").startsWith("video/") ||
+                    /\.(mp4|webm|mov|m4v|ogv|ogg|mkv|avi)$/i.test(name);
+                const limit = isVideo ? BG_UPLOAD_WARN_VIDEO_BYTES : BG_UPLOAD_WARN_IMAGE_BYTES;
+                return (Number(file.size) || 0) > limit;
+            }).length;
+            if (largeCount) {
+                showToast(
+                    `有 ${largeCount} 个文件偏大，可能影响加载与投屏流畅度，建议压缩后再用`,
+                    toastAnchor
+                );
+            }
             let ok = 0;
             let readFail = 0;
             let saveFail = 0;

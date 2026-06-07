@@ -7539,22 +7539,19 @@
         let startY = 0;
         let startH = 0;
 
-        function onMove(e) {
+        function onMove(clientY) {
             if (!dragging) return;
-            if (Math.abs(e.clientY - startY) >= 2) resizeDragMoved = true;
-            /* 顶边手柄：鼠标上移 → 高度增加（浮层向上盖住画廊） */
-            applyLyricEditorHeight(startH + (startY - e.clientY));
+            if (Math.abs(clientY - startY) >= 2) resizeDragMoved = true;
+            applyLyricEditorHeight(startH + (startY - clientY));
         }
         function onUp() {
             if (!dragging) return;
             const didMove = resizeDragMoved;
             dragging = false;
             resizeDragMoved = false;
-            document.removeEventListener("mousemove", onMove, true);
-            document.removeEventListener("mouseup", onUp, true);
+            document.body.classList.remove("is-lyric-drawer-resizing");
             document.body.style.cursor = "";
             document.body.style.userSelect = "";
-            /* 避免松手在画廊等区域时，紧随的 click 被当成「点外部」而误收起 */
             installLyricEditorDrawerOutsideClose._suppressUntil = Date.now() + 600;
             if (didMove) {
                 const swallow = (e) => {
@@ -7569,18 +7566,33 @@
             }
         }
 
-        handle.addEventListener("mousedown", (e) => {
+        handle.addEventListener("pointerdown", (e) => {
             if (e.button !== 0) return;
             e.preventDefault();
             e.stopPropagation();
+            handle.setPointerCapture(e.pointerId);
             dragging = true;
             resizeDragMoved = false;
             startY = e.clientY;
             startH = ta.getBoundingClientRect().height;
-            document.body.style.cursor = "ns-resize";
+            document.body.classList.add("is-lyric-drawer-resizing");
             document.body.style.userSelect = "none";
-            document.addEventListener("mousemove", onMove, true);
-            document.addEventListener("mouseup", onUp, true);
+
+            const move = (ev) => {
+                if (ev.pointerId !== e.pointerId) return;
+                onMove(ev.clientY);
+            };
+            const up = (ev) => {
+                if (ev.pointerId !== e.pointerId) return;
+                try { handle.releasePointerCapture(e.pointerId); } catch (_err) { /* ignore */ }
+                handle.removeEventListener("pointermove", move);
+                handle.removeEventListener("pointerup", up);
+                handle.removeEventListener("pointercancel", up);
+                onUp();
+            };
+            handle.addEventListener("pointermove", move);
+            handle.addEventListener("pointerup", up);
+            handle.addEventListener("pointercancel", up);
         });
 
         window.addEventListener(
@@ -12729,13 +12741,19 @@ ${deleteBtnHtml}
         }
 
         let drag = null;
-        const onMove = (e) => {
+        let scaleRaf = 0;
+        const scheduleScale = () => {
+            if (scaleRaf) return;
+            scaleRaf = requestAnimationFrame(() => {
+                scaleRaf = 0;
+                layoutMonitorPreviewScale();
+            });
+        };
+        const onMove = (clientX, clientY) => {
             if (!drag) return;
-            const cx = e.touches && e.touches[0] ? e.touches[0].clientX : e.clientX;
-            const cy = e.touches && e.touches[0] ? e.touches[0].clientY : e.clientY;
             if (drag.mode === "move") {
-                const nx = cx - drag.dx;
-                const ny = cy - drag.dy;
+                const nx = clientX - drag.dx;
+                const ny = clientY - drag.dy;
                 el.style.left = `${clamp(nx, 0, Math.max(0, window.innerWidth - 48))}px`;
                 el.style.top = `${clamp(ny, 0, Math.max(0, window.innerHeight - 48))}px`;
                 el.style.right = "auto";
@@ -12744,73 +12762,73 @@ ${deleteBtnHtml}
                 const headerEl = el.querySelector("#monitor-header") || $("monitor-header");
                 const hh = headerEl ? headerEl.offsetHeight : 40;
                 const minNH = Math.max(100, Math.ceil(hh + 90));
-                const nw = clamp(drag.startW + (cx - drag.startX), 160, Math.max(160, window.innerWidth - 16));
-                const nh = clamp(drag.startH + (cy - drag.startY), minNH, Math.max(minNH, window.innerHeight - 16));
+                const nw = clamp(drag.startW + (clientX - drag.startX), 160, Math.max(160, window.innerWidth - 16));
+                const nh = clamp(drag.startH + (clientY - drag.startY), minNH, Math.max(minNH, window.innerHeight - 16));
                 el.style.maxHeight = "";
                 normalizeProjectionMonitorFrame(el, nw, nh);
+                scheduleScale();
             }
         };
         const onUp = () => {
             if (!drag) return;
             drag = null;
             el.classList.remove("is-monitor-dragging", "is-monitor-resizing");
-            window.removeEventListener("mousemove", onMove);
-            window.removeEventListener("mouseup", onUp);
-            window.removeEventListener("touchmove", onMove);
-            window.removeEventListener("touchend", onUp);
-            window.removeEventListener("touchcancel", onUp);
+            document.body.classList.remove("is-monitor-dragging", "is-monitor-resizing");
             persistProjectionMonitorRect();
+            layoutMonitorPreviewScale();
             refreshMonitorContent();
         };
 
-        const startMove = (e) => {
-            if (e.pointerType !== "touch" && e.button != null && e.button !== 0) return;
-            const rect = el.getBoundingClientRect();
-            const cx = e.touches && e.touches[0] ? e.touches[0].clientX : e.clientX;
-            const cy = e.touches && e.touches[0] ? e.touches[0].clientY : e.clientY;
-            el.style.left = `${rect.left}px`;
-            el.style.top = `${rect.top}px`;
-            el.style.right = "auto";
-            el.style.bottom = "auto";
-            drag = { mode: "move", dx: cx - rect.left, dy: cy - rect.top };
-            el.classList.add("is-monitor-dragging");
-            window.addEventListener("mousemove", onMove);
-            window.addEventListener("mouseup", onUp);
-            window.addEventListener("touchmove", onMove, { passive: false });
-            window.addEventListener("touchend", onUp);
-            window.addEventListener("touchcancel", onUp);
-            e.preventDefault();
-        };
-
-        const startSize = (e) => {
-            if (e.pointerType !== "touch" && e.button != null && e.button !== 0) return;
-            e.stopPropagation();
-            const rect = el.getBoundingClientRect();
-            const cx = e.touches && e.touches[0] ? e.touches[0].clientX : e.clientX;
-            const cy = e.touches && e.touches[0] ? e.touches[0].clientY : e.clientY;
-            el.style.left = `${rect.left}px`;
-            el.style.top = `${rect.top}px`;
-            el.style.width = `${rect.width}px`;
-            el.style.height = "auto";
-            el.style.maxHeight = "";
-            el.style.right = "auto";
-            el.style.bottom = "auto";
-            drag = { mode: "size", startX: cx, startY: cy, startW: rect.width, startH: rect.height };
-            el.classList.add("is-monitor-resizing");
-            window.addEventListener("mousemove", onMove);
-            window.addEventListener("mouseup", onUp);
-            window.addEventListener("touchmove", onMove, { passive: false });
-            window.addEventListener("touchend", onUp);
-            window.addEventListener("touchcancel", onUp);
-            e.preventDefault();
+        const bindDrag = (node, mode, stopProp) => {
+            if (!node) return;
+            node.addEventListener("pointerdown", (e) => {
+                if (e.button !== 0) return;
+                if (stopProp) e.stopPropagation();
+                e.preventDefault();
+                node.setPointerCapture(e.pointerId);
+                const rect = el.getBoundingClientRect();
+                if (mode === "move") {
+                    el.style.left = `${rect.left}px`;
+                    el.style.top = `${rect.top}px`;
+                    el.style.right = "auto";
+                    el.style.bottom = "auto";
+                    drag = { mode: "move", dx: e.clientX - rect.left, dy: e.clientY - rect.top };
+                    el.classList.add("is-monitor-dragging");
+                    document.body.classList.add("is-monitor-dragging");
+                } else {
+                    el.style.left = `${rect.left}px`;
+                    el.style.top = `${rect.top}px`;
+                    el.style.width = `${rect.width}px`;
+                    el.style.height = "auto";
+                    el.style.maxHeight = "";
+                    el.style.right = "auto";
+                    el.style.bottom = "auto";
+                    drag = { mode: "size", startX: e.clientX, startY: e.clientY, startW: rect.width, startH: rect.height };
+                    el.classList.add("is-monitor-resizing");
+                    document.body.classList.add("is-monitor-resizing");
+                }
+                const move = (ev) => {
+                    if (ev.pointerId !== e.pointerId) return;
+                    onMove(ev.clientX, ev.clientY);
+                };
+                const up = (ev) => {
+                    if (ev.pointerId !== e.pointerId) return;
+                    try { node.releasePointerCapture(e.pointerId); } catch (_err) { /* ignore */ }
+                    node.removeEventListener("pointermove", move);
+                    node.removeEventListener("pointerup", up);
+                    node.removeEventListener("pointercancel", up);
+                    onUp();
+                };
+                node.addEventListener("pointermove", move);
+                node.addEventListener("pointerup", up);
+                node.addEventListener("pointercancel", up);
+            });
         };
 
         const titleEl = el.querySelector(".monitor-header-title");
         const dragHost = titleEl || header;
-        dragHost.addEventListener("mousedown", startMove);
-        dragHost.addEventListener("touchstart", startMove, { passive: false });
-        handle.addEventListener("mousedown", startSize);
-        handle.addEventListener("touchstart", startSize, { passive: false });
+        bindDrag(dragHost, "move", false);
+        bindDrag(handle, "size", true);
 
         const mc = $("monitor-content");
         if (mc && typeof ResizeObserver !== "undefined" && !initProjectionPreviewMonitor._ro) {
@@ -16027,57 +16045,37 @@ ${deleteBtnHtml}
         const r2 = $("resize2");
         if (!left || !right || !r1 || !r2) return;
         const bind = (handle, target, min, max, invert = false) => {
-            let active = false;
-            let sx = 0;
-            let sw = 0;
             handle.style.cursor = "ew-resize";
             handle.style.touchAction = "none";
-            const start = (clientX) => {
-                active = true;
-                sx = clientX;
-                sw = target.getBoundingClientRect().width;
+            handle.addEventListener("pointerdown", (e) => {
+                if (e.button !== 0) return;
+                e.preventDefault();
+                handle.setPointerCapture(e.pointerId);
+                const sx = e.clientX;
+                const sw = target.getBoundingClientRect().width;
                 handle.classList.add("active");
+                document.body.classList.add("is-panel-resizing");
                 document.body.style.userSelect = "none";
-            };
-            const move = (clientX) => {
-                if (!active) return;
-                const dx = clientX - sx;
-                const w = clamp(sw + (invert ? -dx : dx), min, max);
-                target.style.width = w + "px";
-            };
-            const end = () => {
-                if (!active) return;
-                active = false;
-                handle.classList.remove("active");
-                document.body.style.userSelect = "";
-            };
-            handle.addEventListener("mousedown", (e) => {
-                start(e.clientX);
-                e.preventDefault();
-            });
-            handle.addEventListener("touchstart", (e) => {
-                const t = e.touches?.[0];
-                if (!t) return;
-                start(t.clientX);
-                e.preventDefault();
-            }, { passive: false });
-            window.addEventListener("mousemove", (e) => {
-                move(e.clientX);
-            });
-            window.addEventListener("touchmove", (e) => {
-                const t = e.touches?.[0];
-                if (!t) return;
-                move(t.clientX);
-                if (active) e.preventDefault();
-            }, { passive: false });
-            window.addEventListener("mouseup", () => {
-                end();
-            });
-            window.addEventListener("touchend", () => {
-                end();
-            });
-            window.addEventListener("touchcancel", () => {
-                end();
+
+                const move = (ev) => {
+                    if (ev.pointerId !== e.pointerId) return;
+                    const dx = ev.clientX - sx;
+                    const w = clamp(sw + (invert ? -dx : dx), min, max);
+                    target.style.width = w + "px";
+                };
+                const end = () => {
+                    try { handle.releasePointerCapture(e.pointerId); } catch (_err) { /* ignore */ }
+                    handle.removeEventListener("pointermove", move);
+                    handle.removeEventListener("pointerup", end);
+                    handle.removeEventListener("pointercancel", end);
+                    handle.classList.remove("active");
+                    document.body.classList.remove("is-panel-resizing");
+                    document.body.style.userSelect = "";
+                };
+                handle.addEventListener("pointermove", move);
+                handle.addEventListener("pointerup", end);
+                handle.addEventListener("pointercancel", end);
+                move(e);
             });
         };
         bind(r1, left, 200, 520, false);

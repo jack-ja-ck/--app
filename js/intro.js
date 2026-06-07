@@ -7,6 +7,8 @@
     var CHAR_GAP = 0.05;
     var MIN_SHOW = 4500;
     var HOLD = 350;
+    var CURTAIN_DURATION = 2000;
+    var CURTAIN_EASE = "cubic-bezier(0.22, 1, 0.36, 1)";
     var MAX_BOOT_WAIT = 20000;
     var LERP = 0.11;
     var TEXT = "欢迎使用";
@@ -51,6 +53,7 @@
     var timers = [];
     var rafId = 0;
     var curtainRaf = 0;
+    var curtainAnims = [];
     var doneCallbacks = [];
 
     function buildWordHtml(text, side) {
@@ -103,6 +106,14 @@
         timers = [];
         if (rafId) cancelAnimationFrame(rafId);
         if (curtainRaf) cancelAnimationFrame(curtainRaf);
+        curtainAnims.forEach(function (a) {
+            try {
+                a.cancel();
+            } catch (_e) {
+                /* ignore */
+            }
+        });
+        curtainAnims = [];
         rafId = 0;
         curtainRaf = 0;
     }
@@ -116,12 +127,6 @@
 
     function easeLiquid(t) {
         return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
-    }
-
-    function easeCurtain(t) {
-        if (t < 0.08) return t * t * 6.25 * 0.04;
-        if (t < 0.18) return 0.04 + (t - 0.08) * 0.35;
-        return 0.04 + 0.35 + (1 - Math.pow(1 - (t - 0.18) / 0.82, 2.4)) * 0.61;
     }
 
     function stemFromProgress(p) {
@@ -169,11 +174,86 @@
         setWordSpread(stem);
     }
 
+    function resetCurtainStyles() {
+        if (curtainL) {
+            curtainL.style.transform = "";
+            curtainL.style.transition = "";
+            curtainL.style.willChange = "";
+        }
+        if (curtainR) {
+            curtainR.style.transform = "";
+            curtainR.style.transition = "";
+            curtainR.style.willChange = "";
+        }
+        if (curtainSeam) {
+            curtainSeam.style.opacity = "";
+            curtainSeam.style.transition = "";
+        }
+    }
+
+    function lockCurtainOpen() {
+        if (curtainL) {
+            curtainL.style.transition = "none";
+            curtainL.style.transform = "translate3d(-100%, 0, 0)";
+        }
+        if (curtainR) {
+            curtainR.style.transition = "none";
+            curtainR.style.transform = "translate3d(100%, 0, 0)";
+        }
+        if (curtainSeam) {
+            curtainSeam.style.transition = "none";
+            curtainSeam.style.opacity = "0";
+        }
+    }
+
+    function clearCurtainReveal(keepOpen) {
+        document.body.classList.remove("intro-reveal", "intro-reveal-app", "intro-curtain-animating");
+        if (intro) {
+            intro.classList.remove("intro-reveal", "is-curtain-animating", "is-content-fading");
+        }
+        if (!keepOpen) resetCurtainStyles();
+    }
+
+    function waitFrames(n) {
+        return new Promise(function (resolve) {
+            function step() {
+                if (aborted) {
+                    resolve();
+                    return;
+                }
+                if (--n <= 0) resolve();
+                else rafId = requestAnimationFrame(step);
+            }
+            rafId = requestAnimationFrame(step);
+        });
+    }
+
+    function prepareCurtainReveal() {
+        return waitFrames(0).then(function () {
+            if (aborted) return;
+            document.body.classList.add("intro-reveal-app");
+            var app = document.getElementById("app");
+            if (app) void app.offsetHeight;
+            return waitFrames(2);
+        }).then(function () {
+            if (aborted) return;
+            document.body.classList.add("intro-reveal", "intro-curtain-animating");
+            if (intro) {
+                intro.classList.add("intro-reveal", "is-curtain-animating");
+                intro.classList.remove("is-content-fading");
+            }
+            resetCurtainStyles();
+            if (curtainL) curtainL.style.transform = "translate3d(0, 0, 0)";
+            if (curtainR) curtainR.style.transform = "translate3d(0, 0, 0)";
+            if (curtainSeam) curtainSeam.style.opacity = "1";
+            if (curtainL) void curtainL.offsetHeight;
+            return waitFrames(1);
+        });
+    }
+
     function resetVisuals() {
+        clearCurtainReveal(false);
         applyLoadProgress(0);
-        if (curtainL) curtainL.style.transform = "";
-        if (curtainR) curtainR.style.transform = "";
-        if (curtainSeam) curtainSeam.style.opacity = "";
     }
 
     function setBootProgress(p) {
@@ -230,32 +310,89 @@
                 resolve();
                 return;
             }
-            var start = performance.now();
-            var vw = global.innerWidth;
-            function tick(now) {
-                if (aborted) {
-                    resolve();
-                    return;
-                }
-                var t = Math.min(1, (now - start) / durationMs);
-                var eL = easeCurtain(Math.min(1, t * 1.02));
-                var eR = easeCurtain(Math.max(0, t - 0.06) / 0.94);
-                var droop = Math.sin(t * Math.PI) * 2;
-                curtainL.style.transform =
-                    "translate3d(" + -eL * vw * 0.5 + "px," + droop + "px,0)";
-                curtainR.style.transform =
-                    "translate3d(" + eR * vw * 0.5 + "px," + droop + "px,0)";
-                curtainSeam.style.opacity = String(Math.max(0, 1 - t * 2.5));
-                if (t < 1) curtainRaf = requestAnimationFrame(tick);
-                else resolve();
+            var dur = durationMs || CURTAIN_DURATION;
+            var settled = false;
+
+            function settle() {
+                if (settled || aborted) return;
+                settled = true;
+                curtainAnims.forEach(function (anim) {
+                    try {
+                        if (typeof anim.commitStyles === "function") anim.commitStyles();
+                        anim.cancel();
+                    } catch (_e) {
+                        /* ignore */
+                    }
+                });
+                curtainAnims = [];
+                lockCurtainOpen();
+                document.body.classList.remove("intro-curtain-animating");
+                if (intro) intro.classList.remove("is-curtain-animating");
+                resolve();
             }
-            curtainRaf = requestAnimationFrame(tick);
+
+            if (intro) intro.classList.add("is-content-fading");
+
+            var animOpts = {
+                duration: dur,
+                easing: CURTAIN_EASE,
+                fill: "forwards",
+            };
+
+            if (curtainL && curtainL.animate) {
+                curtainAnims.push(
+                    curtainL.animate(
+                        [
+                            { transform: "translate3d(0, 0, 0)" },
+                            { transform: "translate3d(-100%, 0, 0)" },
+                        ],
+                        animOpts
+                    )
+                );
+            }
+            if (curtainR && curtainR.animate) {
+                curtainAnims.push(
+                    curtainR.animate(
+                        [
+                            { transform: "translate3d(0, 0, 0)" },
+                            { transform: "translate3d(100%, 0, 0)" },
+                        ],
+                        animOpts
+                    )
+                );
+            }
+            if (curtainSeam && curtainSeam.animate) {
+                curtainAnims.push(
+                    curtainSeam.animate(
+                        [{ opacity: 1 }, { opacity: 0 }],
+                        {
+                            duration: Math.round(dur * 0.7),
+                            easing: "ease-out",
+                            fill: "forwards",
+                        }
+                    )
+                );
+            }
+
+            if (!curtainAnims.length) {
+                settle();
+                return;
+            }
+
+            Promise.all(
+                curtainAnims.map(function (anim) {
+                    return anim.finished.catch(function () {});
+                })
+            ).then(settle);
+
+            timers.push(setTimeout(settle, dur + 120));
         });
     }
 
     function fireDone() {
         if (introFinished) return;
         introFinished = true;
+        clearCurtainReveal(true);
         document.body.classList.remove("intro-active");
         doneCallbacks.forEach(function (fn) {
             try {
@@ -286,7 +423,7 @@
         } else if (intro) {
             global.setTimeout(function () {
                 if (intro && intro.parentNode) intro.parentNode.removeChild(intro);
-            }, 400);
+            }, 480);
         }
     }
 
@@ -321,7 +458,9 @@
         if (aborted) return;
         await wait(HOLD);
         if (aborted) return;
-        await animateCurtain(1420);
+        await prepareCurtainReveal();
+        if (aborted) return;
+        await animateCurtain(CURTAIN_DURATION);
         if (!aborted) finishIntro(false);
     }
 

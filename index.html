@@ -52,12 +52,12 @@
     <meta name="twitter:title" content="敬拜投屏 · 专业版">
     <meta name="twitter:description" content="教会敬拜歌词管理、分页编辑与多屏投屏工具。">
     <meta name="twitter:image" content="https://jack-ja-ck.github.io/--app/icons/android-chrome-512x512.png">
-    <link rel="icon" href="./icons/favicon.ico" sizes="any">
-    <link rel="icon" type="image/svg+xml" href="./icons/favicon.svg">
-    <link rel="icon" type="image/png" sizes="16x16" href="./icons/favicon-16x16.png">
-    <link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32x32.png">
-    <link rel="icon" type="image/png" sizes="48x48" href="./icons/favicon-48x48.png">
-    <link rel="apple-touch-icon" sizes="180x180" href="./icons/apple-touch-icon.png">
+    <link rel="icon" href="./icons/favicon.ico?v=4" sizes="any">
+    <link rel="icon" type="image/svg+xml" href="./icons/favicon.svg?v=4">
+    <link rel="icon" type="image/png" sizes="16x16" href="./icons/favicon-16x16.png?v=4">
+    <link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32x32.png?v=4">
+    <link rel="icon" type="image/png" sizes="48x48" href="./icons/favicon-48x48.png?v=4">
+    <link rel="apple-touch-icon" sizes="180x180" href="./icons/apple-touch-icon.png?v=4">
     <link rel="stylesheet" href="style.css">
     <style id="leader-panel-modal-styles">
         #leader-panel-modal,#leader-backup-modal{position:fixed;inset:0;z-index:100050;display:none;align-items:center;justify-content:center;padding:24px;background:rgba(0,0,0,0.62);box-sizing:border-box}
@@ -357,7 +357,7 @@
                                     <button type="button" class="help-menu-item" role="menuitem" data-help-action="shortcuts">⌨️ 快捷键</button>
                                 </div>
                             </div>
-                            <button type="button" id="pwa-install-btn" class="editor-action-bar-btn pwa-install-btn gallery-status-utility-btn" style="display:none" title="把网站固定到桌面（非应用商店 App，点击后会说明）"><span class="editor-action-bar-btn__icon worship-app-mark-wrap" aria-hidden="true"><img class="worship-app-mark worship-app-mark--light" src="./icons/logo.svg" width="20" height="20" alt=""><img class="worship-app-mark worship-app-mark--dark" src="./icons/logo-dark.svg" width="20" height="20" alt="" hidden></span><span class="editor-action-bar-btn__text">安装App</span></button>
+                            <button type="button" id="pwa-install-btn" class="editor-action-bar-btn pwa-install-btn gallery-status-utility-btn" style="display:none" title="把网站固定到桌面（非应用商店 App，点击后会说明）"><span class="editor-action-bar-btn__icon worship-app-mark-wrap" aria-hidden="true"><img class="worship-app-mark worship-app-mark--light" src="./icons/logo.svg?v=4" width="20" height="20" alt=""><img class="worship-app-mark worship-app-mark--dark" src="./icons/logo-dark.svg?v=4" width="20" height="20" alt="" hidden></span><span class="editor-action-bar-btn__text">安装App</span></button>
                             <div class="gallery-toolbar-zoom gallery-toolbar-zoom--cards" role="group" aria-label="页面画廊缩放">
                                 <span class="gallery-toolbar-zoom-label">画廊</span>
                                 <button type="button" id="gallery-zoom-out" class="gallery-toolbar-zoom-btn" title="缩小页面画廊">−</button>
@@ -996,11 +996,8 @@
 
 <script>
 (function () {
-    var SPLIT_KEY = 'worship-editor-split-pct';
     var DRAWER_W_KEY = 'worship-adv-drawer-width-px';
     var root = document.documentElement;
-    var row = document.getElementById('editor-lyric-preview-row');
-    var colResizer = document.getElementById('editor-col-resizer');
     var drawerPanel = document.getElementById('adv-drawer-panel');
     var drawerHandle = document.getElementById('adv-drawer-width-handle');
     var drawerToggle = document.getElementById('adv-drawer-toggle');
@@ -1009,131 +1006,46 @@
         return Math.max(lo, Math.min(hi, n));
     }
 
-    var storedSplit = parseFloat(localStorage.getItem(SPLIT_KEY));
-    if (!isNaN(storedSplit) && storedSplit >= 20 && storedSplit <= 80) {
-        root.style.setProperty('--editor-split-pct', String(storedSplit));
-    }
     var storedDrawerW = parseInt(localStorage.getItem(DRAWER_W_KEY), 10);
     if (!isNaN(storedDrawerW) && storedDrawerW >= 280 && storedDrawerW <= 600) {
         root.style.setProperty('--adv-drawer-user-width', storedDrawerW + 'px');
     }
 
-    var dragEditor = null;
-    var rafEditor = 0;
-    function applyEditorSplit(clientX) {
-        if (!row) return;
-        var rect = row.getBoundingClientRect();
-        var w = rect.width;
-        if (w < 40) return;
-        var pct = ((clientX - rect.left) / w) * 100;
-        pct = clamp(pct, 20, 80);
-        root.style.setProperty('--editor-split-pct', String(pct));
-    }
-    function onEditorMove(e) {
-        if (!dragEditor) return;
-        if (rafEditor) cancelAnimationFrame(rafEditor);
-        var cx = e.clientX;
-        rafEditor = requestAnimationFrame(function () {
-            rafEditor = 0;
-            applyEditorSplit(cx);
-        });
-    }
-    function endEditorDrag() {
-        if (!dragEditor) return;
-        dragEditor = false;
-        document.body.classList.remove('is-col-resizing');
-        window.removeEventListener('mousemove', onEditorMove);
-        window.removeEventListener('mouseup', endEditorDrag);
-        window.removeEventListener('touchmove', onEditorTouchMove);
-        window.removeEventListener('touchend', endEditorDrag);
-        window.removeEventListener('touchcancel', endEditorDrag);
-        var v = parseFloat(getComputedStyle(root).getPropertyValue('--editor-split-pct'));
-        if (!isNaN(v)) localStorage.setItem(SPLIT_KEY, String(Math.round(v * 10) / 10));
-    }
-    function onEditorTouchMove(e) {
-        if (!e.touches || !e.touches[0]) return;
-        onEditorMove(e.touches[0]);
-    }
-    function startEditorDrag(e) {
-        if (!row || window.matchMedia('(max-width: 960px)').matches) return;
-        dragEditor = true;
-        document.body.classList.add('is-col-resizing');
-        if (e.type === 'touchstart') {
-            applyEditorSplit(e.touches[0].clientX);
-            window.addEventListener('touchmove', onEditorTouchMove, { passive: true });
-            window.addEventListener('touchend', endEditorDrag);
-            window.addEventListener('touchcancel', endEditorDrag);
-        } else {
-            applyEditorSplit(e.clientX);
-            window.addEventListener('mousemove', onEditorMove);
-            window.addEventListener('mouseup', endEditorDrag);
-        }
-        e.preventDefault();
-    }
-    if (colResizer) {
-        colResizer.addEventListener('mousedown', startEditorDrag);
-        colResizer.addEventListener('touchstart', startEditorDrag, { passive: false });
-        colResizer.addEventListener('keydown', function (e) {
-            if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
-            var cur = parseFloat(getComputedStyle(root).getPropertyValue('--editor-split-pct'));
-            if (isNaN(cur)) cur = 58;
-            var step = e.shiftKey ? 5 : 1;
-            var next = e.key === 'ArrowLeft' ? cur - step : cur + step;
-            root.style.setProperty('--editor-split-pct', String(clamp(next, 20, 80)));
-            e.preventDefault();
-        });
-    }
-
-    var dragDrawer = null;
-    var rafDrawer = 0;
     function drawerWidthFromClientX(clientX) {
         return clamp(window.innerWidth - clientX, 280, 600);
     }
-    function onDrawerMove(e) {
-        if (!dragDrawer) return;
-        var cx = e.clientX;
-        if (rafDrawer) cancelAnimationFrame(rafDrawer);
-        rafDrawer = requestAnimationFrame(function () {
-            rafDrawer = 0;
-            root.style.setProperty('--adv-drawer-user-width', drawerWidthFromClientX(cx) + 'px');
+
+    function bindDrawerResize(handle) {
+        if (!handle) return;
+        handle.addEventListener('pointerdown', function (e) {
+            if (!drawerToggle || !drawerToggle.checked) return;
+            if (e.button !== 0) return;
+            e.preventDefault();
+            handle.setPointerCapture(e.pointerId);
+            document.body.classList.add('is-adv-drawer-resizing');
+            root.style.setProperty('--adv-drawer-user-width', drawerWidthFromClientX(e.clientX) + 'px');
+
+            function onMove(ev) {
+                if (ev.pointerId !== e.pointerId) return;
+                root.style.setProperty('--adv-drawer-user-width', drawerWidthFromClientX(ev.clientX) + 'px');
+            }
+            function onUp(ev) {
+                if (ev.pointerId !== e.pointerId) return;
+                try { handle.releasePointerCapture(e.pointerId); } catch (_err) { /* ignore */ }
+                handle.removeEventListener('pointermove', onMove);
+                handle.removeEventListener('pointerup', onUp);
+                handle.removeEventListener('pointercancel', onUp);
+                document.body.classList.remove('is-adv-drawer-resizing');
+                var m = getComputedStyle(root).getPropertyValue('--adv-drawer-user-width').match(/([\d.]+)/);
+                if (m) localStorage.setItem(DRAWER_W_KEY, String(Math.round(parseFloat(m[1]))));
+            }
+            handle.addEventListener('pointermove', onMove);
+            handle.addEventListener('pointerup', onUp);
+            handle.addEventListener('pointercancel', onUp);
         });
     }
-    function endDrawerDrag() {
-        if (!dragDrawer) return;
-        dragDrawer = false;
-        document.body.classList.remove('is-adv-drawer-resizing');
-        window.removeEventListener('mousemove', onDrawerMove);
-        window.removeEventListener('mouseup', endDrawerDrag);
-        window.removeEventListener('touchmove', onDrawerTouchMove);
-        window.removeEventListener('touchend', endDrawerDrag);
-        window.removeEventListener('touchcancel', endDrawerDrag);
-        var m = getComputedStyle(root).getPropertyValue('--adv-drawer-user-width').match(/([\d.]+)/);
-        if (m) localStorage.setItem(DRAWER_W_KEY, String(Math.round(parseFloat(m[1]))));
-    }
-    function onDrawerTouchMove(e) {
-        if (!e.touches || !e.touches[0]) return;
-        onDrawerMove(e.touches[0]);
-    }
-    function startDrawerDrag(e) {
-        if (!drawerToggle || !drawerToggle.checked) return;
-        dragDrawer = true;
-        document.body.classList.add('is-adv-drawer-resizing');
-        if (e.type === 'touchstart') {
-            onDrawerMove(e.touches[0]);
-            window.addEventListener('touchmove', onDrawerTouchMove, { passive: true });
-            window.addEventListener('touchend', endDrawerDrag);
-            window.addEventListener('touchcancel', endDrawerDrag);
-        } else {
-            onDrawerMove(e);
-            window.addEventListener('mousemove', onDrawerMove);
-            window.addEventListener('mouseup', endDrawerDrag);
-        }
-        e.preventDefault();
-    }
-    if (drawerHandle) {
-        drawerHandle.addEventListener('mousedown', startDrawerDrag);
-        drawerHandle.addEventListener('touchstart', startDrawerDrag, { passive: false });
-    }
+
+    bindDrawerResize(drawerHandle);
 })();
 </script>
 <script>
@@ -1224,8 +1136,8 @@
         </p>
         <div class="pwa-install-guide__store-card">
             <div class="pwa-install-guide__icon-wrap worship-app-mark-wrap worship-app-mark-wrap--lg">
-                <img class="worship-app-mark worship-app-mark--light" src="./icons/logo.svg" width="56" height="56" alt="" decoding="async">
-                <img class="worship-app-mark worship-app-mark--dark" src="./icons/logo-dark.svg" width="56" height="56" alt="" decoding="async" hidden>
+                <img class="worship-app-mark worship-app-mark--light" src="./icons/logo.svg?v=4" width="56" height="56" alt="" decoding="async">
+                <img class="worship-app-mark worship-app-mark--dark" src="./icons/logo-dark.svg?v=4" width="56" height="56" alt="" decoding="async" hidden>
             </div>
             <div class="pwa-install-guide__store-meta">
                 <p class="pwa-install-guide__app-name">敬拜投屏·专业版</p>

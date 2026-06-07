@@ -14,10 +14,13 @@ SOURCE = os.path.join(ROOT, "icons", "icon-source.png")
 OUT_LIGHT = os.path.join(ROOT, "icons", "logo.svg")
 OUT_DARK = os.path.join(ROOT, "icons", "logo-dark.svg")
 OUT_FAVICON = os.path.join(ROOT, "icons", "favicon.svg")
+OUT_FAVICON_DARK = os.path.join(ROOT, "icons", "favicon-dark.svg")
 REF_LIGHT = os.path.join(ROOT, "icons", "icon-reference-light.png")
 DEBUG_OVERLAY = os.path.join(ROOT, "icons", "trace-overlay-light.png")
 VIEW = 1024
 CORNER_R = 228
+LOGO_SCALE = 1.5
+LOGO_CENTER = VIEW / 2
 
 
 def _squircle_path(size: int, radius: float) -> str:
@@ -164,6 +167,30 @@ def _iou(a: np.ndarray, b: np.ndarray) -> float:
     return float(inter) / float(union) if union else 0.0
 
 
+def _scale_ml_path(d: str, scale: float, cx: float, cy: float) -> str:
+    tokens = re.findall(r"[MLZ]|[-+]?(?:\d*\.\d+|\d+)", d)
+    parts: list[str] = []
+    i = 0
+    cmd = "M"
+    while i < len(tokens):
+        t = tokens[i]
+        if t in ("M", "L", "Z"):
+            cmd = t
+            i += 1
+            if cmd == "Z":
+                parts.append("Z")
+                continue
+            continue
+        if i + 1 >= len(tokens):
+            break
+        x = cx + (float(tokens[i]) - cx) * scale
+        y = cy + (float(tokens[i + 1]) - cy) * scale
+        parts.append(f"{cmd} {x:.2f} {y:.2f}")
+        cmd = "L"
+        i += 2
+    return " ".join(parts)
+
+
 def _write_svg(path: str, bg: str, fg: str, logo_path: str) -> None:
     lines = [
         '<?xml version="1.0" encoding="UTF-8"?>',
@@ -187,9 +214,14 @@ def main() -> None:
     light_path, light_fill, light_iou, light_mask = _trace_logo_path(light_gray, False)
     dark_path, dark_fill, dark_iou, dark_mask = _trace_logo_path(dark_gray, True)
 
+    light_path = _scale_ml_path(light_path, LOGO_SCALE, LOGO_CENTER, LOGO_CENTER)
+    dark_path = _scale_ml_path(dark_path, LOGO_SCALE, LOGO_CENTER, LOGO_CENTER)
+
     _write_svg(OUT_LIGHT, "#FFFFFF", "#000000", light_path)
     _write_svg(OUT_FAVICON, "#FFFFFF", "#000000", light_path)
-    _write_svg(OUT_DARK, "#000000", "#FFFFFF", dark_path)
+    # Dark UI uses the same geometry as light (right half trace is unreliable).
+    _write_svg(OUT_DARK, "#000000", "#FFFFFF", light_path)
+    _write_svg(OUT_FAVICON_DARK, "#000000", "#FFFFFF", light_path)
 
     overlay = np.zeros((VIEW, VIEW, 3), dtype=np.uint8)
     overlay[..., 1] = light_mask
@@ -198,7 +230,8 @@ def main() -> None:
 
     print(f"light IoU={light_iou:.4f}")
     print(f"dark IoU={dark_iou:.4f}")
-    print("wrote:", OUT_LIGHT, OUT_FAVICON, OUT_DARK, REF_LIGHT, DEBUG_OVERLAY)
+    print(f"logo scale={LOGO_SCALE}")
+    print("wrote:", OUT_LIGHT, OUT_FAVICON, OUT_DARK, OUT_FAVICON_DARK, REF_LIGHT, DEBUG_OVERLAY)
 
 
 if __name__ == "__main__":

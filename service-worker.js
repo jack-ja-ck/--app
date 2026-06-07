@@ -1,4 +1,4 @@
-const CACHE_NAME = "worship-app-v16";
+const CACHE_NAME = "worship-app-v21";
 const NETWORK_FIRST_PATHS = [
   "/index.html",
   "/app.js",
@@ -39,7 +39,6 @@ const ASSETS = [
   "icons/apple-touch-icon.png",
   "icons/android-chrome-192x192.png",
   "icons/android-chrome-512x512.png",
-  "icons/mstile-150x150.png",
   "js/utils.js",
   "js/state.js",
   "js/router.js",

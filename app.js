@@ -33,9 +33,7 @@
     const LYRIC_TEMPLATES_KEY = "worship.lyric_templates.v1";
     const THEME_BG_STORAGE = "worship.theme_bg.v1";
     const THEME_BG_OPACITY_STORAGE = "theme_bg_opacity";
-    /** 高级编辑：快速预览叠层 / 行间距（与 state.ui 分离，单独持久化） */
-    const ADV_MINI_OVERLAY_PCT_LS = "worship_adv_mini_overlay_pct_v1";
-    const ADV_MINI_BLUR_PX_LS = "worship_adv_mini_blur_px_v1";
+    /** 高级编辑：行间距（与 state.ui 分离，单独持久化） */
     const ADV_PREVIEW_LINE_HEIGHT_LS = "worship_adv_preview_line_height_v1";
     /** 自定义主题背景：最多保留 4 张缩略图（localStorage JSON），超出丢弃最旧 */
     const THEME_BG_SLOTS_STORAGE = "worship.theme_bg_slots.v1";
@@ -44,6 +42,15 @@
     const WORSHIP_THEME_VIDEO_LS = "worship_theme_video";
     /** 用户命名的已保存播放列表（localStorage JSON 数组） */
     const WORSHIP_SETLISTS_LS = "worship_setlists";
+    /** 本地数据量提醒：上次 Toast 时间与级别（避免频繁打扰） */
+    const LOCAL_DATA_REMIND_LS = "worship.local_data_remind.v1";
+    const LOCAL_DATA_REMIND_SESSION_KEY = "worship.local_data_remind.session";
+    const SETLIST_COUNT_WARN = 10;
+    const SETLIST_COUNT_CRITICAL = 18;
+    const LYRIC_TEMPLATE_COUNT_WARN = 12;
+    const LYRIC_TEMPLATE_COUNT_CRITICAL = 20;
+    const SONG_LIBRARY_COUNT_WARN = 50;
+    const SONG_LIBRARY_COUNT_CRITICAL = 80;
     /** 诗歌「+」加入播放列表后，按钮成功动画的展示时长（毫秒） */
     const SONG_ADD_BTN_FEEDBACK_MS = 1000;
     /** 播放列表移出项淡出动画时长（毫秒） */
@@ -993,6 +1000,35 @@
     }
 
     const CSS_DYNAMIC_BG_TYPES = new Set(["gentle-light", "starry-night", "cross-glow"]);
+    const PRESET_GRADIENT_BG_TYPES = new Set(["gradient", "deep-navy", "dawn-glow"]);
+
+    function presetGradientCss(bgType) {
+        if (bgType === "deep-navy") {
+            return "linear-gradient(135deg,#061018 0%,#143052 50%,#0a1a30 100%)";
+        }
+        if (bgType === "dawn-glow") {
+            return "linear-gradient(135deg,#1a1028 0%,#5a3048 42%,#c87840 100%)";
+        }
+        return "linear-gradient(135deg,#1a2f59,#0a0f1d)";
+    }
+
+    function fillPresetGradientCanvas(ctx, w, h, bgType) {
+        const g = ctx.createLinearGradient(0, 0, w, h);
+        if (bgType === "deep-navy") {
+            g.addColorStop(0, "#061018");
+            g.addColorStop(0.5, "#143052");
+            g.addColorStop(1, "#0a1a30");
+        } else if (bgType === "dawn-glow") {
+            g.addColorStop(0, "#1a1028");
+            g.addColorStop(0.45, "#5a3048");
+            g.addColorStop(1, "#c87840");
+        } else {
+            g.addColorStop(0, "#1a2e59");
+            g.addColorStop(1, "#0a0f1d");
+        }
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, w, h);
+    }
 
     function clearCssDynamicBgClass(el) {
         if (!el) return;
@@ -1152,6 +1188,10 @@
     let publishInFlight = false;
     let publishBlockedBy405 = false;
     let defaultSongPosY = 45;
+    let defaultPageTransition = "none";
+    let defaultPageTransitionSpeed = 0.6;
+    /** 与「保存并应用」对齐的投屏样式基准（背景、位置、转场等 per-song 字段） */
+    let presentationStyleBaseline = null;
     const SUPABASE_URL = "https://yetcpiorfvtysqmfsdso.supabase.co";
     const SUPABASE_ANON_KEY = "sb_publishable__jbNKXA82g1YoNcOOVDUFg_eO618zti";
     const SUPABASE_JS_URL = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2";
@@ -1438,6 +1478,12 @@
     /** 与投屏监视、高级编辑「行间距」滑块同源，保证监视窗与真实投屏行距一致 */
     function getAdvPreviewLineHeightNumber() {
         try {
+            if (isDisplay) {
+                const ls = liveState || globalThis.liveState;
+                if (ls && Number.isFinite(Number(ls.lineHeight))) {
+                    return clamp(Number(ls.lineHeight), 1.2, 2.4);
+                }
+            }
             const lhRaw = getComputedStyle(document.documentElement).getPropertyValue("--adv-preview-line-height");
             return Math.max(1.05, Math.min(3, parseFloat(lhRaw) || 1.65));
         } catch (_e) {
@@ -1496,6 +1542,7 @@
         globalThis.projectionTextTopPctFromLive = projectionTextTopPctFromLive;
         globalThis.clampLyricFontSize = clampLyricFontSize;
         globalThis.syncAdvSliderRecommendedTicks = syncAdvSliderRecommendedTicks;
+        globalThis.applyRadialVignetteToLayer = applyRadialVignetteToLayer;
     } catch (_e) {
         /* ignore */
     }
@@ -1526,6 +1573,86 @@
 
     function isAnimatablePageTransition(trans) {
         return canonicalPageTransition(trans) !== "none";
+    }
+
+    const PAGE_TRANSITION_LABELS = {
+        none: "无过渡",
+        fade: "淡入淡出",
+        "slide-left": "左滑入",
+        "slide-right": "右滑入",
+        "slide-up": "上滑入",
+        "slide-down": "下滑入",
+        "zoom-in": "放大进入",
+        "zoom-out": "缩小进入",
+        "flip-x": "水平翻转",
+        "flip-y": "垂直翻转",
+        "rotate-left": "左侧旋转",
+        "rotate-right": "右侧旋转"
+    };
+
+    function pageTransitionLabel(trans) {
+        const t = canonicalPageTransition(trans);
+        return PAGE_TRANSITION_LABELS[t] || "无过渡";
+    }
+
+    function songHasOwnPageTransition(song) {
+        return !!(song && song.pageTransition != null && String(song.pageTransition).trim() !== "");
+    }
+
+    function getEffectivePageTransition(song) {
+        if (songHasOwnPageTransition(song)) return canonicalPageTransition(song.pageTransition);
+        return canonicalPageTransition(defaultPageTransition);
+    }
+
+    function getEffectivePageTransitionSpeed(song) {
+        if (song && song.pageTransitionSpeed != null && Number.isFinite(Number(song.pageTransitionSpeed))) {
+            return clamp(Math.round(Number(song.pageTransitionSpeed) * 10) / 10, 0.3, 1.5);
+        }
+        return clamp(Math.round(Number(defaultPageTransitionSpeed) * 10) / 10, 0.3, 1.5);
+    }
+
+    function formatPageTransitionSummary(trans, speedSec, opts) {
+        const o = opts && typeof opts === "object" ? opts : {};
+        const label = pageTransitionLabel(trans);
+        const spd = clamp(Math.round(Number(speedSec) * 10) / 10, 0.3, 1.5);
+        const inherit = !!o.inherit;
+        const short = !!o.short;
+        if (inherit) {
+            return short ? `默认·${label}` : `默认 · ${label} · ${spd.toFixed(1)}秒`;
+        }
+        return short ? label : `${label} · ${spd.toFixed(1)}秒`;
+    }
+
+    function syncPageTransitionFromCurrentSong() {
+        const song = currentSong();
+        state.ui.pageTransition = getEffectivePageTransition(song);
+        state.ui.pageTransitionSpeed = getEffectivePageTransitionSpeed(song);
+    }
+
+    function persistPageTransitionFromUi(songId) {
+        if (isDisplay || isLeader) return;
+        const s = state.songs.find((x) => String(x.id) === String(songId || ""));
+        if (!s) return;
+        const trans = canonicalPageTransition($("page-transition-select")?.value ?? state.ui.pageTransition);
+        const raw = parseFloat($("page-transition-speed-slider")?.value ?? String(state.ui.pageTransitionSpeed ?? 0.6));
+        s.pageTransition = trans;
+        s.pageTransitionSpeed = clamp(Math.round((Number.isFinite(raw) ? raw : 0.6) * 10) / 10, 0.3, 1.5);
+    }
+
+    function restoreCurrentSongPageTransitionToDefault() {
+        const song = currentSong();
+        if (!song) return;
+        delete song.pageTransition;
+        delete song.pageTransitionSpeed;
+        syncPageTransitionFromCurrentSong();
+        updatePageTransitionScopeUi();
+        try {
+            saveSongs();
+        } catch (_e) {
+            /* ignore */
+        }
+        updateUIFromState();
+        updateAll();
     }
 
     function readUiLike(u) {
@@ -1578,9 +1705,11 @@
             const tcol = strokeLightBg ? "rgba(0,0,0,0.4)" : "rgba(0,0,0,0.62)";
             row.style.webkitTextStroke = `${w}px ${tcol}`;
             row.style.paintOrder = "stroke fill";
+            row.style.textShadow = "none";
         } else {
             row.style.webkitTextStroke = "";
             row.style.paintOrder = "";
+            row.style.textShadow = "";
         }
     }
 
@@ -1631,6 +1760,111 @@
     /** 投屏歌词使用 translateY(-50%) 配合 top% 做垂直居中，所有转场变换需叠加在此之上 */
     const LYRIC_CENTER_TRANSFORM = "translateY(-50%)";
 
+    /** 零重力 / 水下附着感：离场漂走、入场轻落吸附 */
+    const WORSHIP_FLUID_EASE_EXIT = "cubic-bezier(0.48, 0.04, 0.52, 0.96)";
+    const WORSHIP_FLUID_EASE_ENTER = "cubic-bezier(0.16, 1.05, 0.32, 1)";
+    const WORSHIP_FLUID_EASE_CROSS = "cubic-bezier(0.33, 0, 0.18, 1)";
+    const WORSHIP_SONG_SWITCH_DUR_SEC = 0.78;
+
+    function worshipFluidDurScale(durSec) {
+        return clamp(Number(durSec), 0.3, 1.5);
+    }
+
+    /** 用 transitionend + 兜底定时器结束离场，避免 setTimeout 与真实帧不同步造成卡顿 */
+    function armLyricTransitionEnd(el, durSec, onComplete) {
+        const ms = Math.round(durSec * 1000) + 90;
+        let settled = false;
+        let fallbackId = 0;
+        const finish = () => {
+            if (settled) return;
+            settled = true;
+            el.removeEventListener("transitionend", onTransEnd);
+            if (fallbackId) clearTimeout(fallbackId);
+            onComplete();
+        };
+        const onTransEnd = (ev) => {
+            if (ev.target !== el) return;
+            if (ev.propertyName === "opacity" || ev.propertyName === "transform") finish();
+        };
+        el.addEventListener("transitionend", onTransEnd);
+        fallbackId = window.setTimeout(finish, ms);
+        return { cancel: finish, fallbackId };
+    }
+
+    let galleryLyricExitArm = null;
+    let monitorLyricExitArm = null;
+
+    function cancelGalleryLyricExitArm() {
+        if (galleryLyricExitArm) {
+            galleryLyricExitArm.cancel();
+            galleryLyricExitArm = null;
+        }
+    }
+
+    function cancelMonitorLyricExitArm() {
+        if (monitorLyricExitArm) {
+            monitorLyricExitArm.cancel();
+            monitorLyricExitArm = null;
+        }
+    }
+
+    function beginLyricCssTransition(el) {
+        if (!el) return;
+        el.classList.add("lyric-trans-animating");
+        el.style.willChange = "opacity, transform";
+    }
+
+    function endLyricCssTransition(el) {
+        if (!el) return;
+        el.style.willChange = "";
+        el.classList.remove("lyric-trans-animating");
+    }
+
+    function runLyricCssFadeThen(el, durSec, ease, targetOpacity, targetTransform, onComplete, onArm, opts) {
+        const dur =
+            opts && opts.rawDur
+                ? clamp(Number(durSec), 0.08, 1.5)
+                : worshipFluidDurScale(durSec);
+        beginLyricCssTransition(el);
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                if (!el.isConnected) {
+                    endLyricCssTransition(el);
+                    if (onComplete) onComplete();
+                    return;
+                }
+                el.style.transition = `opacity ${dur}s ${ease}, transform ${dur}s ${ease}`;
+                el.style.opacity = targetOpacity;
+                if (targetTransform != null) el.style.transform = targetTransform;
+                const arm = armLyricTransitionEnd(el, dur, () => {
+                    endLyricCssTransition(el);
+                    if (onComplete) onComplete();
+                });
+                if (onArm) onArm(arm);
+            });
+        });
+    }
+
+    function worshipFluidSongSwitchDurSec() {
+        return WORSHIP_SONG_SWITCH_DUR_SEC;
+    }
+
+    /** 切歌专用：旧歌词上浮漂走 */
+    function fluidSongSwitchExitStyle() {
+        return {
+            opacity: "0",
+            transform: mergeLyricCenterTransform({ transform: "translateY(-22px) scale(0.965)" })
+        };
+    }
+
+    /** 切歌专用：新歌词自下附着到位 */
+    function fluidSongSwitchEnterStartStyle() {
+        return {
+            opacity: "0.04",
+            transform: mergeLyricCenterTransform({ transform: "translateY(26px) scale(1.018)" })
+        };
+    }
+
     /** 将转场 transform 与歌词居中 transform 合并 */
     function mergeLyricCenterTransform(transPreset) {
         if (!transPreset || !transPreset.transform) return LYRIC_CENTER_TRANSFORM;
@@ -1643,27 +1877,36 @@
         const t = canonicalPageTransition(trans);
         switch (t) {
             case "fade":
-                return { opacity: "0", transform: mergeLyricCenterTransform({ transform: "" }) };
+                return {
+                    opacity: "0",
+                    transform: mergeLyricCenterTransform({ transform: "translateY(-14px) scale(0.972)" })
+                };
             case "slide-left":
-                return { opacity: "0.08", transform: mergeLyricCenterTransform({ transform: "translateX(-36px)" }) };
+                return { opacity: "0.05", transform: mergeLyricCenterTransform({ transform: "translateX(-28px) scale(0.985)" }) };
             case "slide-right":
-                return { opacity: "0.08", transform: mergeLyricCenterTransform({ transform: "translateX(36px)" }) };
+                return { opacity: "0.05", transform: mergeLyricCenterTransform({ transform: "translateX(28px) scale(0.985)" }) };
             case "slide-up":
-                return { opacity: "0.08", transform: mergeLyricCenterTransform({ transform: "translateY(-28px)" }) };
+                return { opacity: "0.05", transform: mergeLyricCenterTransform({ transform: "translateY(-22px) scale(0.982)" }) };
             case "slide-down":
-                return { opacity: "0.08", transform: mergeLyricCenterTransform({ transform: "translateY(28px)" }) };
+                return { opacity: "0.05", transform: mergeLyricCenterTransform({ transform: "translateY(22px) scale(0.982)" }) };
             case "zoom-in":
-                return { opacity: "0.12", transform: mergeLyricCenterTransform({ transform: "scale(0.88)" }) };
+                return { opacity: "0.08", transform: mergeLyricCenterTransform({ transform: "scale(0.92)" }) };
             case "zoom-out":
-                return { opacity: "0.12", transform: mergeLyricCenterTransform({ transform: "scale(1.12)" }) };
+                return { opacity: "0.08", transform: mergeLyricCenterTransform({ transform: "scale(1.08)" }) };
             case "flip-x":
-                return { opacity: "0.1", transform: mergeLyricCenterTransform({ transform: "perspective(960px) rotateY(-86deg) scale(0.9)" }) };
+                return {
+                    opacity: "0.08",
+                    transform: mergeLyricCenterTransform({ transform: "perspective(960px) rotateY(-72deg) scale(0.92)" })
+                };
             case "flip-y":
-                return { opacity: "0.1", transform: mergeLyricCenterTransform({ transform: "perspective(960px) rotateX(-86deg) scale(0.9)" }) };
+                return {
+                    opacity: "0.08",
+                    transform: mergeLyricCenterTransform({ transform: "perspective(960px) rotateX(-72deg) scale(0.92)" })
+                };
             case "rotate-left":
-                return { opacity: "0.12", transform: mergeLyricCenterTransform({ transform: "rotate(-16deg) translateY(10px)" }) };
+                return { opacity: "0.1", transform: mergeLyricCenterTransform({ transform: "rotate(-9deg) translateY(12px) scale(0.98)" }) };
             case "rotate-right":
-                return { opacity: "0.12", transform: mergeLyricCenterTransform({ transform: "rotate(16deg) translateY(10px)" }) };
+                return { opacity: "0.1", transform: mergeLyricCenterTransform({ transform: "rotate(9deg) translateY(12px) scale(0.98)" }) };
             default:
                 return null;
         }
@@ -1673,27 +1916,36 @@
         const t = canonicalPageTransition(trans);
         switch (t) {
             case "fade":
-                return { opacity: "0.02", transform: mergeLyricCenterTransform({ transform: "" }) };
+                return {
+                    opacity: "0.04",
+                    transform: mergeLyricCenterTransform({ transform: "translateY(16px) scale(1.016)" })
+                };
             case "slide-left":
-                return { opacity: "0.06", transform: mergeLyricCenterTransform({ transform: "translateX(36px)" }) };
+                return { opacity: "0.06", transform: mergeLyricCenterTransform({ transform: "translateX(28px) scale(1.01)" }) };
             case "slide-right":
-                return { opacity: "0.06", transform: mergeLyricCenterTransform({ transform: "translateX(-36px)" }) };
+                return { opacity: "0.06", transform: mergeLyricCenterTransform({ transform: "translateX(-28px) scale(1.01)" }) };
             case "slide-up":
-                return { opacity: "0.06", transform: mergeLyricCenterTransform({ transform: "translateY(28px)" }) };
+                return { opacity: "0.06", transform: mergeLyricCenterTransform({ transform: "translateY(22px) scale(1.012)" }) };
             case "slide-down":
-                return { opacity: "0.06", transform: mergeLyricCenterTransform({ transform: "translateY(-28px)" }) };
+                return { opacity: "0.06", transform: mergeLyricCenterTransform({ transform: "translateY(-22px) scale(1.012)" }) };
             case "zoom-in":
-                return { opacity: "0.08", transform: mergeLyricCenterTransform({ transform: "scale(1.12)" }) };
+                return { opacity: "0.08", transform: mergeLyricCenterTransform({ transform: "scale(1.08)" }) };
             case "zoom-out":
-                return { opacity: "0.08", transform: mergeLyricCenterTransform({ transform: "scale(0.88)" }) };
+                return { opacity: "0.08", transform: mergeLyricCenterTransform({ transform: "scale(0.92)" }) };
             case "flip-x":
-                return { opacity: "0.08", transform: mergeLyricCenterTransform({ transform: "perspective(960px) rotateY(86deg) scale(0.9)" }) };
+                return {
+                    opacity: "0.08",
+                    transform: mergeLyricCenterTransform({ transform: "perspective(960px) rotateY(72deg) scale(0.92)" })
+                };
             case "flip-y":
-                return { opacity: "0.08", transform: mergeLyricCenterTransform({ transform: "perspective(960px) rotateX(86deg) scale(0.9)" }) };
+                return {
+                    opacity: "0.08",
+                    transform: mergeLyricCenterTransform({ transform: "perspective(960px) rotateX(72deg) scale(0.92)" })
+                };
             case "rotate-left":
-                return { opacity: "0.1", transform: mergeLyricCenterTransform({ transform: "rotate(16deg) translateY(-10px)" }) };
+                return { opacity: "0.1", transform: mergeLyricCenterTransform({ transform: "rotate(9deg) translateY(-12px) scale(1.012)" }) };
             case "rotate-right":
-                return { opacity: "0.1", transform: mergeLyricCenterTransform({ transform: "rotate(-16deg) translateY(-10px)" }) };
+                return { opacity: "0.1", transform: mergeLyricCenterTransform({ transform: "rotate(-9deg) translateY(-12px) scale(1.012)" }) };
             default:
                 return null;
         }
@@ -1713,14 +1965,18 @@
     function runDisplayPageTransitionThenRender(trans, durSec, renderFn, fontOpacityPct) {
         const layer = $("projection-lyric");
         const fontOp = clamp(Number(fontOpacityPct ?? 100), 20, 100) / 100;
-        const dur = clamp(Number(durSec), 0.3, 1.5);
+        const dur = worshipFluidDurScale(durSec);
         const t = canonicalPageTransition(trans);
         if (!layer || t === "none" || typeof renderFn !== "function") {
             if (typeof renderFn === "function") renderFn();
             return;
         }
 
-        /* 克隆旧层（快照当前歌词内容），放在当前层下面 */
+        const exitPreset = pageTransitionExitPreset(t);
+        const enterStart = pageTransitionEnterStartPreset(t);
+        const inner = layer.querySelector("#projection-lyric-anim");
+        const target = inner || layer;
+
         const oldLyric = layer.cloneNode(true);
         oldLyric.id = "projection-lyric-old";
         oldLyric.style.pointerEvents = "none";
@@ -1730,40 +1986,115 @@
         oldLyric.style.transform = LYRIC_CENTER_TRANSFORM;
         layer.parentNode.insertBefore(oldLyric, layer);
 
-        /* 清空当前层，渲染新内容 */
         renderFn({ pageTransitionMidSwap: true });
 
-        /* 同步新层基础样式（须保留 translateY(-50%)，否则 top% 垂直中心会失效，歌词整体偏下） */
         layer.style.transition = "none";
-        layer.style.opacity = "0";
+        layer.style.opacity = "1";
         layer.style.transform = LYRIC_CENTER_TRANSFORM;
+        target.style.transition = "none";
+        if (enterStart) {
+            target.style.opacity = enterStart.opacity;
+            target.style.transform = enterStart.transform || LYRIC_CENTER_TRANSFORM;
+        } else {
+            target.style.opacity = "0";
+            target.style.transform = LYRIC_CENTER_TRANSFORM;
+        }
 
-        /* 双 rAF 确保 DOM 已渲染后再启动动画，消除闪烁 */
         requestAnimationFrame(() => {
             requestAnimationFrame(() => {
-                const ease = "cubic-bezier(0.4, 0, 0.2, 1)";
-                oldLyric.style.transition = `opacity ${dur}s ${ease}`;
-                layer.style.transition = `opacity ${dur}s ${ease}`;
-                oldLyric.style.opacity = "0";
-                layer.style.opacity = String(fontOp);
+                const exitEase = WORSHIP_FLUID_EASE_EXIT;
+                const enterEase = WORSHIP_FLUID_EASE_ENTER;
+                if (exitPreset) {
+                    oldLyric.style.transition = `opacity ${dur}s ${exitEase}, transform ${dur}s ${exitEase}`;
+                    oldLyric.style.opacity = exitPreset.opacity;
+                    oldLyric.style.transform = exitPreset.transform || LYRIC_CENTER_TRANSFORM;
+                } else {
+                    oldLyric.style.transition = `opacity ${dur}s ${exitEase}`;
+                    oldLyric.style.opacity = "0";
+                }
+                target.style.transition = `opacity ${dur}s ${enterEase}, transform ${dur}s ${enterEase}`;
+                target.style.opacity = String(fontOp);
+                target.style.transform = LYRIC_CENTER_TRANSFORM;
             });
         });
 
-        /* 动画结束后移除旧层，并恢复可复用的 transform，避免后续非转场渲染继承错误矩阵 */
         window.setTimeout(() => {
             if (oldLyric.parentNode) oldLyric.parentNode.removeChild(oldLyric);
             try {
                 layer.style.transition = "";
                 layer.style.transform = LYRIC_CENTER_TRANSFORM;
+                target.style.transition = "";
+                target.style.transform = "";
+                target.style.opacity = String(fontOp);
             } catch (_e) {
                 /* ignore */
             }
-        }, Math.round(dur * 1000) + 200);
+        }, Math.round(dur * 1000) + 120);
+    }
+
+    /** 切歌：旧诗上浮漂走 → 新诗自下附着落位（比页内翻页更慢、更柔） */
+    function runFluidSongSwitchThenRender(durSec, renderFn, fontOpacityPct) {
+        const layer = $("projection-lyric");
+        const fontOp = clamp(Number(fontOpacityPct ?? 100), 20, 100) / 100;
+        const dur = clamp(Number(durSec), 0.45, 1.2) || WORSHIP_SONG_SWITCH_DUR_SEC;
+        if (!layer || typeof renderFn !== "function") {
+            if (typeof renderFn === "function") renderFn();
+            return;
+        }
+
+        const inner = layer.querySelector("#projection-lyric-anim");
+        const target = inner || layer;
+        const exitPreset = fluidSongSwitchExitStyle();
+        const enterStart = fluidSongSwitchEnterStartStyle();
+
+        const oldLyric = layer.cloneNode(true);
+        oldLyric.id = "projection-lyric-old";
+        oldLyric.style.pointerEvents = "none";
+        oldLyric.style.zIndex = "9";
+        oldLyric.style.transition = "none";
+        oldLyric.style.opacity = "1";
+        oldLyric.style.transform = LYRIC_CENTER_TRANSFORM;
+        layer.parentNode.insertBefore(oldLyric, layer);
+
+        renderFn({ pageTransitionMidSwap: true });
+
+        layer.style.transition = "none";
+        layer.style.opacity = "1";
+        layer.style.transform = LYRIC_CENTER_TRANSFORM;
+        target.style.transition = "none";
+        target.style.opacity = enterStart.opacity;
+        target.style.transform = enterStart.transform;
+
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                oldLyric.style.transition = `opacity ${dur}s ${WORSHIP_FLUID_EASE_EXIT}, transform ${dur}s ${WORSHIP_FLUID_EASE_EXIT}`;
+                oldLyric.style.opacity = exitPreset.opacity;
+                oldLyric.style.transform = exitPreset.transform;
+                target.style.transition = `opacity ${dur}s ${WORSHIP_FLUID_EASE_ENTER}, transform ${dur}s ${WORSHIP_FLUID_EASE_ENTER}`;
+                target.style.opacity = String(fontOp);
+                target.style.transform = LYRIC_CENTER_TRANSFORM;
+            });
+        });
+
+        window.setTimeout(() => {
+            if (oldLyric.parentNode) oldLyric.parentNode.removeChild(oldLyric);
+            try {
+                layer.style.transition = "";
+                layer.style.transform = LYRIC_CENTER_TRANSFORM;
+                target.style.transition = "";
+                target.style.transform = "";
+                target.style.opacity = String(fontOp);
+            } catch (_e) {
+                /* ignore */
+            }
+        }, Math.round(dur * 1000) + 140);
     }
 
     try {
         globalThis.__worshipCanonicalPageTransition = canonicalPageTransition;
         globalThis.__worshipRunDisplayPageTransitionThenRender = runDisplayPageTransitionThenRender;
+        globalThis.__worshipRunFluidSongSwitchThenRender = runFluidSongSwitchThenRender;
+        globalThis.__worshipSongSwitchDurSec = worshipFluidSongSwitchDurSec;
     } catch (_e) {
         /* ignore */
     }
@@ -1772,19 +2103,76 @@
     let monitorLyricTransTimer = 0;
     let monitorLyricTransPending = null;
 
-    function flushMonitorLyricTrans() {
+    /** 入场动画进行中（exit 定时器已清零但 enter 仍在播） */
+    let lyricEnterAnimUntil = 0;
+    /** 连按翻页时递增；完成一次换词入场后归零 */
+    let pageNavTransEpoch = 0;
+    /** 本帧 updateAll 是否处于「追赶」上一段转场 */
+    let pageNavChasingThisFrame = false;
+
+    function isLyricPageTransBusy() {
+        return !!(
+            galleryLyricTransTimer ||
+            galleryLyricTransPending ||
+            monitorLyricTransTimer ||
+            monitorLyricTransPending ||
+            Date.now() < lyricEnterAnimUntil
+        );
+    }
+
+    function markPageNavChaseIfBusy() {
+        const busy = isLyricPageTransBusy();
+        if (busy) pageNavTransEpoch++;
+        pageNavChasingThisFrame = busy;
+        return busy;
+    }
+
+    function resetLyricAnimEl(el, fontOpacityPct, endTransform) {
+        if (!el || !el.isConnected) return;
+        const fontOp = clamp(Number(fontOpacityPct ?? 100), 20, 100) / 100;
+        const endT = endTransform != null && String(endTransform).trim() ? String(endTransform).trim() : "";
+        el.style.transition = "none";
+        el.style.opacity = String(fontOp);
+        el.style.transform = endT;
+        void el.offsetWidth;
+        el.style.transition = "";
+    }
+
+    function noteLyricEnterAnimUntil(durSec) {
+        const ms = Math.round(Math.max(0.2, worshipFluidDurScale(durSec)) * 1000) + 140;
+        lyricEnterAnimUntil = Date.now() + ms;
+        window.setTimeout(() => {
+            if (Date.now() >= lyricEnterAnimUntil - 80) lyricEnterAnimUntil = 0;
+        }, ms + 40);
+    }
+
+    function flushMonitorLyricTrans(opts) {
+        const invokePending = !(opts && opts.invokePending === false);
+        const skipReset = !!(opts && opts.skipReset);
+        cancelMonitorLyricExitArm();
         if (monitorLyricTransTimer) {
             clearTimeout(monitorLyricTransTimer);
             monitorLyricTransTimer = 0;
         }
         const cb = monitorLyricTransPending;
         monitorLyricTransPending = null;
-        if (cb) cb();
+        if (!skipReset) {
+            const host = $("projection-preview-monitor");
+            const anim = host && host.querySelector("#monitor-lyric-anim");
+            if (anim) {
+                const op =
+                    liveState && liveState.fontOpacityPct != null
+                        ? liveState.fontOpacityPct
+                        : state.ui.fontOpacityPct;
+                resetLyricAnimEl(anim, op, "");
+            }
+        }
+        if (invokePending && cb) cb();
     }
 
-    function runMonitorLyricExitThen(el, trans, durSec, onExitComplete) {
-        const dur = clamp(Number(durSec), 0.3, 1.5);
-        const ease = "cubic-bezier(0.4, 0, 0.2, 1)";
+    function runMonitorLyricExitThen(el, trans, durSec, onExitComplete, easeOverride) {
+        const dur = worshipFluidDurScale(durSec);
+        const ease = easeOverride || WORSHIP_FLUID_EASE_EXIT;
         if (!onExitComplete) {
             flushMonitorLyricTrans();
             return;
@@ -1809,35 +2197,50 @@
             onExitComplete();
             return;
         }
-        el.style.transition = `opacity ${dur}s ${ease}, transform ${dur}s ${ease}`;
-        el.style.opacity = exitPreset.opacity;
-        el.style.transform = exitPreset.transform;
         monitorLyricTransPending = onExitComplete;
-        monitorLyricTransTimer = window.setTimeout(() => {
+        runLyricCssFadeThen(el, durSec, ease, exitPreset.opacity, exitPreset.transform, () => {
             monitorLyricTransTimer = 0;
             const fn = monitorLyricTransPending;
             monitorLyricTransPending = null;
+            monitorLyricExitArm = null;
             if (fn) fn();
-        }, Math.round(dur * 1000));
+        }, (arm) => {
+            monitorLyricExitArm = arm;
+            if (arm) monitorLyricTransTimer = arm.fallbackId;
+        });
     }
 
     /** 页面画廊歌词翻页：独立定时器，勿与投屏监视 / 迷你预览共用 */
     let galleryLyricTransTimer = 0;
     let galleryLyricTransPending = null;
 
-    function flushGalleryLyricTrans() {
+    function flushGalleryLyricTrans(opts) {
+        const invokePending = !(opts && opts.invokePending === false);
+        const skipReset = !!(opts && opts.skipReset);
+        cancelGalleryLyricExitArm();
         if (galleryLyricTransTimer) {
             clearTimeout(galleryLyricTransTimer);
             galleryLyricTransTimer = 0;
         }
         const cb = galleryLyricTransPending;
         galleryLyricTransPending = null;
-        if (cb) cb();
+        if (!skipReset) {
+            const src = galleryPageTransitionSource();
+            document
+                .querySelectorAll("#layout-page-gallery .gallery-page-card.is-active .gallery-card-lyric-anim")
+                .forEach((el) => resetLyricAnimEl(el, src.fontOpacityPct, "translateY(-50%)"));
+        }
+        if (invokePending && cb) cb();
     }
 
-    function runGalleryLyricExitThen(el, trans, durSec, onExitComplete) {
-        const dur = clamp(Number(durSec), 0.3, 1.5);
-        const ease = "cubic-bezier(0.4, 0, 0.2, 1)";
+    /** 画廊歌词翻页转场是否与投屏监视一致（仅当前诗歌为视频背景时跳过 CSS 过渡） */
+    function galleryLyricTransitionEnabled() {
+        return !isMainVideoBackground();
+    }
+
+    function runGalleryLyricExitThen(el, trans, durSec, onExitComplete, easeOverride) {
+        const dur = worshipFluidDurScale(durSec);
+        const ease = easeOverride || WORSHIP_FLUID_EASE_EXIT;
         if (!onExitComplete) {
             flushGalleryLyricTrans();
             return;
@@ -1862,16 +2265,17 @@
             onExitComplete();
             return;
         }
-        el.style.transition = `opacity ${dur}s ${ease}, transform ${dur}s ${ease}`;
-        el.style.opacity = exitPreset.opacity;
-        el.style.transform = exitPreset.transform;
         galleryLyricTransPending = onExitComplete;
-        galleryLyricTransTimer = window.setTimeout(() => {
+        runLyricCssFadeThen(el, durSec, ease, exitPreset.opacity, exitPreset.transform, () => {
             galleryLyricTransTimer = 0;
             const fn = galleryLyricTransPending;
             galleryLyricTransPending = null;
+            galleryLyricExitArm = null;
             if (fn) fn();
-        }, Math.round(dur * 1000));
+        }, (arm) => {
+            galleryLyricExitArm = arm;
+            if (arm) galleryLyricTransTimer = arm.fallbackId;
+        });
     }
 
     /**
@@ -1897,9 +2301,9 @@
     }
 
     /** 迷你预览：仅离场（当前页歌词），结束后由回调替换 DOM */
-    function runMiniPageTransitionExitThen(el, trans, durSec, onExitComplete) {
-        const dur = clamp(Number(durSec), 0.3, 1.5);
-        const ease = "cubic-bezier(0.4, 0, 0.2, 1)";
+    function runMiniPageTransitionExitThen(el, trans, durSec, onExitComplete, easeOverride) {
+        const dur = worshipFluidDurScale(durSec);
+        const ease = easeOverride || WORSHIP_FLUID_EASE_EXIT;
         if (!onExitComplete) {
             flushMiniPageExitCompletion();
             return;
@@ -1941,13 +2345,19 @@
     }
 
     /** 迷你预览：入场（新歌词已挂载后调用） */
-    function runMiniPageTransitionEnter(el, trans, durSec, fontOpacityPct, endTransform) {
+    function runMiniPageTransitionEnter(el, trans, durSec, fontOpacityPct, endTransform, opts) {
         const fontOp = clamp(Number(fontOpacityPct ?? 100), 20, 100) / 100;
-        const dur = clamp(Number(durSec), 0.3, 1.5);
-        const ease = "cubic-bezier(0.4, 0, 0.2, 1)";
+        const songSwitch = !!(opts && opts.songSwitch);
+        const dur =
+            opts && opts.rawDur
+                ? clamp(Number(durSec), 0.08, 1.5)
+                : songSwitch
+                  ? worshipFluidSongSwitchDurSec()
+                  : worshipFluidDurScale(durSec);
+        const ease = WORSHIP_FLUID_EASE_ENTER;
         const t = canonicalPageTransition(trans);
         if (!el || t === "none") return;
-        const in0 = pageTransitionEnterStartPreset(t);
+        const in0 = songSwitch ? fluidSongSwitchEnterStartStyle() : pageTransitionEnterStartPreset(t);
         if (!in0) return;
         const endT = endTransform != null && String(endTransform).trim() ? String(endTransform).trim() : "";
         const extra = in0.transform && String(in0.transform).trim() ? String(in0.transform).trim() : "";
@@ -1956,16 +2366,23 @@
         el.style.transition = "none";
         el.style.transform = startTf || "";
         el.style.opacity = in0.opacity;
+        noteLyricEnterAnimUntil(dur);
+        beginLyricCssTransition(el);
         requestAnimationFrame(() => {
-            el.style.transition = `opacity ${dur}s ${ease}, transform ${dur}s ${ease}`;
-            el.style.opacity = String(fontOp);
-            el.style.transform = endT || "";
+            requestAnimationFrame(() => {
+                if (!el.isConnected) return;
+                el.style.transition = `opacity ${dur}s ${ease}, transform ${dur}s ${ease}`;
+                el.style.opacity = String(fontOp);
+                el.style.transform = endT || "";
+                armLyricTransitionEnd(el, dur, () => {
+                    if (!el.isConnected) return;
+                    endLyricCssTransition(el);
+                    el.style.opacity = String(fontOp);
+                    el.style.transform = endT || "";
+                    lyricEnterAnimUntil = 0;
+                });
+            });
         });
-        window.setTimeout(() => {
-            if (!el || !el.isConnected) return;
-            el.style.opacity = String(fontOp);
-            el.style.transform = endT || "";
-        }, Math.round(dur * 1000) + 120);
     }
 
     /** 离场 → 回调重建内容 → 入场（快速预览翻页） */
@@ -2101,6 +2518,37 @@
         });
     }
 
+    let galleryVisualStyleRelayoutRaf = 0;
+    /** 轻量刷新页面画廊卡片蒙版/暗角/歌词排版，与投屏监视、真实投屏同源 */
+    function scheduleGalleryVisualStyleRelayout() {
+        if (galleryVisualStyleRelayoutRaf) return;
+        galleryVisualStyleRelayoutRaf = requestAnimationFrame(() => {
+            galleryVisualStyleRelayoutRaf = 0;
+            const gal = $("layout-page-gallery");
+            if (gal) {
+                gal.querySelectorAll("[data-gallery-card]").forEach((card) => {
+                    const sid = card.getAttribute("data-song-id");
+                    const plSong = state.songs.find((x) => String(x.id) === String(sid || ""));
+                    applyGalleryCardProjectionMask(card, plSong);
+                    const vig = card.querySelector(".card-vignette-radial");
+                    if (vig) applyRadialVignetteToLayer(vig, vignetteUiContextForSong(plSong));
+                });
+            }
+            const miniM = $("mini-preview")?.querySelector(".mini-preview-projection-mask");
+            if (miniM) {
+                const op = clamp(Number(state.ui.overlayOpacityPct), 0, 80) / 100;
+                miniM.style.background = `rgba(0,0,0,${op})`;
+            }
+            const miniV = $("mini-preview")?.querySelector(".mini-preview-vignette-radial");
+            if (miniV) applyRadialVignetteToLayer(miniV, state.ui);
+            syncGalleryCardLyricFontsToProjectionScale();
+        });
+    }
+
+    function scheduleGalleryVignetteRelayout() {
+        scheduleGalleryVisualStyleRelayout();
+    }
+
     /** 页面画廊缩略图：与 #monitor-lyric-layer 相同语义 — top% 为歌词块垂直中心（translateY(-50%)），左右 4% 与投屏一致 */
     function applyGalleryCardLyricVerticalLayout(card, lyricAnim, song) {
         if (!card || !lyricAnim) return;
@@ -2146,32 +2594,46 @@
         if (!gal) return;
         const refW = 1920;
         const band = 0.92;
-        const lh = getAdvPreviewLineHeightNumber();
-        const baseFs = clampLyricFontSize(state.ui.fontSize);
-        const spRaw = clamp(Number(state.ui.textStrokePx ?? 0), 0, 6);
         gal.querySelectorAll(".gallery-page-card[data-gallery-card]").forEach((card) => {
             const sid = card.getAttribute("data-song-id");
             const plSong = state.songs.find((s) => String(s.id) === String(sid || ""));
             if (!plSong) return;
+            const typo = lyricTypographyContextForSong(plSong);
+            const spRaw = clamp(Number(typo.textStrokePx ?? 0), 0, 6);
             const wTotal = Math.max(1, card.getBoundingClientRect().width);
             const scale = (wTotal * band) / refW;
-            const fsPx = Math.max(5, Math.round(baseFs * scale));
-            const lightBg = effectiveSongBackground(plSong).bgType === "solid-white";
-            const root = String(state.ui.fontColor ?? "#ffffff").trim() || "#ffffff";
+            const songFs =
+                String(plSong.id) === String(state.currentSongId || "")
+                    ? state.ui.fontSize
+                    : Number.isFinite(Number(plSong.fontSize))
+                      ? plSong.fontSize
+                      : state.ui.fontSize;
+            const fsPx = Math.max(5, Math.round(clampLyricFontSize(songFs) * scale));
+            const lh =
+                String(plSong.id) === String(state.currentSongId || "")
+                    ? getAdvPreviewLineHeightNumber()
+                    : Number.isFinite(Number(plSong.lineHeight))
+                      ? clamp(Number(plSong.lineHeight), 1.2, 2.4)
+                      : getAdvPreviewLineHeightNumber();
+            const lightBg = typo.lightBg;
+            const root = String(typo.fontColor ?? "#ffffff").trim() || "#ffffff";
             const tContr = lightBg ? "#111" : root;
             const displayColor = root || tContr || "#ffffff";
             const strokeLightBg = displayColor === "#111" || tContr === "#111";
             const tcol = strokeLightBg ? "rgba(0,0,0,0.4)" : "rgba(0,0,0,0.62)";
             const applyScaledTypography = (row) => {
+                applyTypographyToPreviewRow(row, typo);
                 row.style.fontSize = `${fsPx}px`;
                 row.style.lineHeight = String(lh);
                 if (spRaw > 0) {
-                    const w = Math.min(spRaw, 2.5) * scale;
+                    const w = Math.max(0.35, Math.min(spRaw, 2.5) * scale);
                     row.style.webkitTextStroke = `${w}px ${tcol}`;
                     row.style.paintOrder = "stroke fill";
+                    row.style.textShadow = "none";
                 } else {
                     row.style.webkitTextStroke = "";
                     row.style.paintOrder = "";
+                    row.style.textShadow = "";
                 }
             };
             card.querySelectorAll(".gallery-card-line").forEach((row) => {
@@ -2184,13 +2646,18 @@
     function relayoutGalleryLyricVerticalPads() {
         const gal = document.getElementById("layout-page-gallery");
         if (!gal) return;
-        gal.querySelectorAll(".gallery-page-card[data-gallery-card]").forEach((card) => {
+        const busy = isLyricPageTransBusy();
+        const cardNodes = busy
+            ? gal.querySelectorAll(".gallery-page-card.is-active[data-gallery-card]")
+            : gal.querySelectorAll(".gallery-page-card[data-gallery-card]");
+        cardNodes.forEach((card) => {
             const sid = card.getAttribute("data-song-id");
             const plSong = state.songs.find((s) => String(s.id) === String(sid || ""));
             const lyricAnim = card.querySelector(":scope > .gallery-card-lyric-anim");
             if (!lyricAnim || !plSong) return;
             applyGalleryCardLyricVerticalLayout(card, lyricAnim, plSong);
         });
+        if (busy) return;
         syncGalleryCardLyricFontsToProjectionScale();
         syncGalleryZoomShellVerticalGap();
     }
@@ -3369,7 +3836,12 @@
     function maybeStartNewUserArrowGuide() {
         if (isDisplay || isLeader) return;
         if (!isWorshipFirstVisit()) return;
-        startNewUserArrowGuideCore();
+        const start = () => startNewUserArrowGuideCore();
+        if (typeof WorshipIntro !== "undefined" && WorshipIntro.whenDone) {
+            WorshipIntro.whenDone(start);
+        } else {
+            start();
+        }
     }
 
     function replayNewUserArrowGuideFromToolbar() {
@@ -3613,6 +4085,7 @@
     function renderLyricTemplateModalList() {
         const ul = $("lyric-template-list");
         if (!ul) return;
+        upsertLocalDataVolumeBanner(ul.parentElement, getLocalDataVolumeSnapshot());
         const tpls = getLyricTemplates();
         ul.innerHTML = "";
         if (!tpls.length) {
@@ -3688,7 +4161,9 @@
                 songVisual: {
                     overlayOpacityPct: song.overlayOpacityPct,
                     fontOpacityPct: song.fontOpacityPct,
-                    posY: song.posY
+                    posY: song.posY,
+                    pageTransition: songHasOwnPageTransition(song) ? song.pageTransition : undefined,
+                    pageTransitionSpeed: songHasOwnPageTransition(song) ? song.pageTransitionSpeed : undefined
                 },
                 meta: {
                     key: song.key || "",
@@ -3702,6 +4177,7 @@
             if (list.length > 40) list.length = 40;
             if (!saveLyricTemplates(list)) return;
             showCornerSuccessToast("✅ 已保存为诗歌存档", $("save-as-template-btn"));
+            maybeRemindLocalDataVolume($("save-as-template-btn"));
         });
     }
 
@@ -3733,6 +4209,12 @@
             if (Number.isFinite(Number(tpl.songVisual.posY))) {
                 song.posY = clamp(Number(tpl.songVisual.posY), 20, 70);
             }
+            if (tpl.songVisual.pageTransition != null && String(tpl.songVisual.pageTransition).trim()) {
+                song.pageTransition = canonicalPageTransition(tpl.songVisual.pageTransition);
+                if (Number.isFinite(Number(tpl.songVisual.pageTransitionSpeed))) {
+                    song.pageTransitionSpeed = clamp(Number(tpl.songVisual.pageTransitionSpeed), 0.3, 1.5);
+                }
+            }
         }
         const idx = Math.max(0, state.songs.findIndex((s) => s.id === state.currentSongId));
         if (!isDisplay && !isLeader) {
@@ -3753,6 +4235,7 @@
         if (Number.isFinite(Number(song.posY))) {
             state.ui.posY = clamp(Number(song.posY), 20, 70);
         }
+        syncPageTransitionFromCurrentSong();
         state.currentSongId = song.id;
         if (!isDisplay && !isLeader) {
             persistSongBackgroundFromUi(song.id);
@@ -4836,20 +5319,6 @@
 
     function applyAdvPreviewCssVarsFromStorage() {
         try {
-            const r = localStorage.getItem(ADV_MINI_OVERLAY_PCT_LS);
-            if (r != null && r !== "") {
-                const pct = clamp(parseInt(r, 10), 0, 55);
-                if (Number.isFinite(pct)) {
-                    document.documentElement.style.setProperty("--adv-mini-readability", (pct / 100).toFixed(3));
-                }
-            }
-            const b = localStorage.getItem(ADV_MINI_BLUR_PX_LS);
-            if (b != null && b !== "") {
-                const px = clamp(parseInt(b, 10), 0, 20);
-                if (Number.isFinite(px)) {
-                    document.documentElement.style.setProperty("--adv-mini-blur-px", String(px));
-                }
-            }
             const lh = localStorage.getItem(ADV_PREVIEW_LINE_HEIGHT_LS);
             if (lh != null && lh.trim() !== "") {
                 const v = clamp(parseFloat(lh), 1.2, 2.4);
@@ -4864,10 +5333,6 @@
 
     function persistAdvPreviewCssVars() {
         try {
-            const ov = $("adv-lyric-overlay-opacity");
-            if (ov) localStorage.setItem(ADV_MINI_OVERLAY_PCT_LS, String(clamp(parseInt(ov.value, 10), 0, 55)));
-            const bl = $("adv-lyric-layer-blur");
-            if (bl) localStorage.setItem(ADV_MINI_BLUR_PX_LS, String(clamp(parseInt(bl.value, 10), 0, 20)));
             const lh = $("adv-preview-line-height");
             if (lh) {
                 const v = clamp(parseFloat(lh.value), 1.2, 2.4);
@@ -4900,11 +5365,15 @@
         state.ui.editorAutoFontMinPx = 11;
         state.ui.editorAutoFontMaxPx = 20;
         defaultSongPosY = 40;
+        defaultPageTransition = "none";
+        defaultPageTransitionSpeed = 0.6;
         const song = currentSong();
         if (song) {
             song.posY = 40;
             song.overlayOpacityPct = 30;
             song.fontOpacityPct = 100;
+            delete song.pageTransition;
+            delete song.pageTransitionSpeed;
         }
         state.currentPage = 0;
         document.body.setAttribute("data-theme", "dark");
@@ -4914,12 +5383,8 @@
             /* ignore */
         }
         applyThemeBgOpacityVar();
-        document.documentElement.style.setProperty("--adv-mini-readability", "0");
-        document.documentElement.style.setProperty("--adv-mini-blur-px", "0");
         document.documentElement.style.setProperty("--adv-preview-line-height", "1.65");
         try {
-            localStorage.removeItem(ADV_MINI_OVERLAY_PCT_LS);
-            localStorage.removeItem(ADV_MINI_BLUR_PX_LS);
             localStorage.removeItem(ADV_PREVIEW_LINE_HEIGHT_LS);
         } catch (_) {
             /* ignore */
@@ -5476,6 +5941,67 @@
         } catch (_e) {
             /* ignore */
         }
+        capturePresentationStyleBaseline();
+        updateEditorUnsavedIndicator();
+    }
+
+    /** 控制台网站界面固定字体；歌词投屏字体由 state.ui.fontFamily / 字体选择器控制 */
+    const CONSOLE_UI_FONT_FAMILY = "'Microsoft YaHei','PingFang SC',sans-serif";
+
+    function vignetteUiContextForSong(plSong) {
+        const isCur = plSong && String(plSong.id) === String(state.currentSongId || "");
+        if (isCur) {
+            return {
+                vignetteShape: state.ui.vignetteShape,
+                vignetteCenterBrightness: state.ui.vignetteCenterBrightness,
+                vignetteEdgeDarkness: state.ui.vignetteEdgeDarkness
+            };
+        }
+        return {
+            vignetteShape: plSong?.vignetteShape === "ellipse" ? "ellipse" : "circle",
+            vignetteCenterBrightness: Number.isFinite(Number(plSong?.vignetteCenterBrightness))
+                ? clamp(Number(plSong.vignetteCenterBrightness), -50, 50)
+                : 0,
+            vignetteEdgeDarkness: Number.isFinite(Number(plSong?.vignetteEdgeDarkness))
+                ? clamp(Number(plSong.vignetteEdgeDarkness), 0, 90)
+                : 0
+        };
+    }
+
+    function overlayUiContextForSong(plSong) {
+        const isCur = plSong && String(plSong.id) === String(state.currentSongId || "");
+        if (isCur) {
+            return { overlayOpacityPct: clamp(Number(state.ui.overlayOpacityPct), 0, 80) };
+        }
+        return {
+            overlayOpacityPct: Number.isFinite(Number(plSong?.overlayOpacityPct))
+                ? clamp(Number(plSong.overlayOpacityPct), 0, 80)
+                : 30
+        };
+    }
+
+    function ensureGalleryCardProjectionMask(card) {
+        if (!card) return null;
+        let m = card.querySelector(".gallery-card-projection-mask");
+        if (!m) {
+            m = document.createElement("div");
+            m.className = "gallery-card-projection-mask";
+            m.setAttribute("aria-hidden", "true");
+            m.style.cssText =
+                "position:absolute;inset:0;pointer-events:none;z-index:1;border-radius:inherit;transition:background 0.12s ease;";
+            const vig = card.querySelector(".card-vignette-radial");
+            if (vig) card.insertBefore(m, vig);
+            else card.appendChild(m);
+        }
+        return m;
+    }
+
+    function applyGalleryCardProjectionMask(card, plSong) {
+        const m = ensureGalleryCardProjectionMask(card);
+        if (!m) return;
+        const ctx = overlayUiContextForSong(plSong);
+        const op = clamp(Number(ctx.overlayOpacityPct ?? 30), 0, 80) / 100;
+        m.style.background = `rgba(0,0,0,${op})`;
     }
 
     function hydrateCurrentSongBackgroundIntoUi() {
@@ -5483,6 +6009,83 @@
         if (!s) return;
         applyBackgroundSliceToUi(getStoredSongBackgroundOrDefaults(s));
         normalizeLegacyBgImageReference();
+    }
+
+    function hydrateCurrentSongTypographyIntoUi() {
+        const s = currentSong();
+        if (!s) return;
+        if (s.fontFamily != null && String(s.fontFamily).trim()) {
+            state.ui.fontFamily = String(s.fontFamily).trim();
+        }
+        if (Number.isFinite(Number(s.fontSize))) state.ui.fontSize = clampLyricFontSize(s.fontSize);
+        if (s.fontColor != null && String(s.fontColor).trim()) state.ui.fontColor = String(s.fontColor).trim();
+        if (s.fontWeight != null && String(s.fontWeight).trim()) state.ui.fontWeight = String(s.fontWeight).trim();
+        if (Number.isFinite(Number(s.textStrokePx))) state.ui.textStrokePx = clamp(Number(s.textStrokePx), 0, 6);
+        if (Number.isFinite(Number(s.lineHeight))) {
+            document.documentElement.style.setProperty(
+                "--adv-preview-line-height",
+                String(clamp(Number(s.lineHeight), 1.2, 2.4))
+            );
+        }
+        if (s.vignetteShape === "ellipse" || s.vignetteShape === "circle") state.ui.vignetteShape = s.vignetteShape;
+        if (Number.isFinite(Number(s.vignetteCenterBrightness))) {
+            state.ui.vignetteCenterBrightness = clamp(Number(s.vignetteCenterBrightness), -50, 50);
+        }
+        if (Number.isFinite(Number(s.vignetteEdgeDarkness))) {
+            state.ui.vignetteEdgeDarkness = clamp(Number(s.vignetteEdgeDarkness), 0, 90);
+        }
+    }
+
+    function persistCurrentSongTypographyFromUi(songId) {
+        if (isDisplay || isLeader) return;
+        const sid = songId != null ? songId : state.currentSongId;
+        const s = state.songs.find((x) => String(x.id) === String(sid || ""));
+        if (!s) return;
+        s.fontFamily = String(state.ui.fontFamily || CONSOLE_UI_FONT_FAMILY).trim() || CONSOLE_UI_FONT_FAMILY;
+        s.fontSize = clampLyricFontSize(state.ui.fontSize);
+        s.fontColor = String(state.ui.fontColor || "#ffffff").trim() || "#ffffff";
+        s.fontWeight = state.ui.fontWeight == null || state.ui.fontWeight === "" ? "700" : String(state.ui.fontWeight);
+        s.textStrokePx = clamp(Number(state.ui.textStrokePx), 0, 6);
+        s.lineHeight = getAdvPreviewLineHeightNumber();
+        s.vignetteShape = state.ui.vignetteShape === "ellipse" ? "ellipse" : "circle";
+        s.vignetteCenterBrightness = clamp(Number(state.ui.vignetteCenterBrightness), -50, 50);
+        s.vignetteEdgeDarkness = clamp(Number(state.ui.vignetteEdgeDarkness), 0, 90);
+    }
+
+    function persistCurrentSongTypographyAfterUiChange() {
+        if (isDisplay || isLeader) return;
+        persistCurrentSongTypographyFromUi(state.currentSongId);
+        try {
+            saveSongs();
+        } catch (_e) {
+            /* ignore */
+        }
+        capturePresentationStyleBaseline();
+        updateEditorUnsavedIndicator();
+    }
+
+    function lyricTypographyContextForSong(plSong) {
+        const isCur = plSong && String(plSong.id) === String(state.currentSongId || "");
+        const effBg = effectiveSongBackground(plSong);
+        const pick = (own, fallback) => (own != null && own !== "" ? own : fallback);
+        return {
+            fontFamily: isCur
+                ? state.ui.fontFamily
+                : pick(plSong?.fontFamily, state.ui.fontFamily),
+            fontColor: isCur ? state.ui.fontColor : pick(plSong?.fontColor, state.ui.fontColor),
+            fontOpacityPct: isCur
+                ? state.ui.fontOpacityPct
+                : Number.isFinite(Number(plSong?.fontOpacityPct))
+                  ? plSong.fontOpacityPct
+                  : state.ui.fontOpacityPct,
+            textStrokePx: isCur
+                ? state.ui.textStrokePx
+                : Number.isFinite(Number(plSong?.textStrokePx))
+                  ? plSong.textStrokePx
+                  : state.ui.textStrokePx,
+            fontWeight: isCur ? state.ui.fontWeight : pick(plSong?.fontWeight, state.ui.fontWeight),
+            lightBg: effBg.bgType === "solid-white"
+        };
     }
 
     /** 画廊 / 逻辑用：当前诗歌与高级编辑 state.ui 同步；其余诗歌读各自持久化字段或 backgroundDefaults */
@@ -6046,6 +6649,8 @@
 
     function switchBgTabTo(name) {
         const tabName = name || "preset";
+        const bgGroup = document.querySelector(".bg-panel-group");
+        if (bgGroup) bgGroup.dataset.bgTabActive = tabName;
         document.querySelectorAll(".bg-tab").forEach((tab) => {
             const on = tab.getAttribute("data-bg-tab") === tabName;
             tab.classList.toggle("active", on);
@@ -6412,17 +7017,73 @@
         const payload = {
             items: [...state.playlist.items],
             running: !!state.playlist.running,
-            activeIndex: clamp(
-                Number(state.playlist.activeIndex) || 0,
-                0,
-                Math.max(0, state.playlist.items.length - 1)
-            )
+            activeIndex: state.playlist.items.length
+                ? clamp(
+                      Number(state.playlist.activeIndex) || 0,
+                      0,
+                      state.playlist.items.length - 1
+                  )
+                : -1
         };
         try {
             setStore(STORAGE.PLAYLIST, payload);
             setStore(STORAGE_PLAYLIST_CANON, payload);
         } catch (err) {
             if (!isStorageQuotaExceededError(err)) console.warn("savePlaylist", err);
+        }
+    }
+
+    function playlistSongIdMatch(a, b) {
+        return String(a || "") === String(b || "");
+    }
+
+    function findSongByPlaylistId(songId) {
+        return state.songs.find((s) => playlistSongIdMatch(s.id, songId)) || null;
+    }
+
+    function playlistIncludesSongId(songId) {
+        return state.playlist.items.some((id) => playlistSongIdMatch(id, songId));
+    }
+
+    function playlistIndexOfSongId(songId) {
+        return state.playlist.items.findIndex((id) => playlistSongIdMatch(id, songId));
+    }
+
+    /** 移除无效 id、修正 activeIndex；removedAtIndex 为刚从列表删掉的项原下标 */
+    function reconcilePlaylistState(opts) {
+        const removedAt = opts && Number.isFinite(opts.removedAtIndex) ? opts.removedAtIndex : -1;
+        const normalized = [];
+        state.playlist.items.forEach((id) => {
+            const song = findSongByPlaylistId(id);
+            if (!song) return;
+            if (!normalized.some((x) => playlistSongIdMatch(x, song.id))) {
+                normalized.push(song.id);
+            }
+        });
+        state.playlist.items = normalized;
+        if (!normalized.length) {
+            state.playlist.running = false;
+            state.playlist.activeIndex = -1;
+            return;
+        }
+        if (removedAt >= 0) {
+            if (state.playlist.activeIndex === removedAt) {
+                state.playlist.activeIndex = Math.min(removedAt, normalized.length - 1);
+            } else if (state.playlist.activeIndex > removedAt) {
+                state.playlist.activeIndex -= 1;
+            }
+        }
+        if (state.playlist.activeIndex < 0) {
+            state.playlist.activeIndex = 0;
+        }
+        state.playlist.activeIndex = clamp(
+            state.playlist.activeIndex,
+            0,
+            normalized.length - 1
+        );
+        if (!state.playlist.running) {
+            const curIx = playlistIndexOfSongId(state.currentSongId);
+            if (curIx >= 0) state.playlist.activeIndex = curIx;
         }
     }
 
@@ -6661,9 +7322,12 @@
         }
         const playlist = readPlaylistFromAllStorageKeys();
         if (playlist && Array.isArray(playlist.items)) {
-            state.playlist.items = playlist.items.filter((id) => state.songs.some((s) => s.id === id));
+            state.playlist.items = playlist.items.slice();
             state.playlist.running = !!playlist.running && state.playlist.items.length > 0;
-            state.playlist.activeIndex = clamp(Number(playlist.activeIndex) || 0, 0, Math.max(0, state.playlist.items.length - 1));
+            state.playlist.activeIndex = Number.isFinite(Number(playlist.activeIndex))
+                ? Number(playlist.activeIndex)
+                : 0;
+            reconcilePlaylistState();
             try {
                 savePlaylist();
             } catch (_ePl) {
@@ -6672,6 +7336,9 @@
         }
         state.playlist.autoSwitch = false;
         defaultSongPosY = clamp(Number(state.ui.posY) || 40, 20, 70);
+        defaultPageTransition = canonicalPageTransition(state.ui.pageTransition);
+        defaultPageTransitionSpeed =
+            Math.round(clamp(Number(state.ui.pageTransitionSpeed) || 0.6, 0.3, 1.5) * 10) / 10;
         const curSong = state.songs.find((s) => s.id === state.currentSongId);
         if (curSong) {
             const pc = splitPages(curSong.lyrics || "", state.ui.defaultLines);
@@ -6940,11 +7607,11 @@
     }
 
     function isEditorDirty() {
-        return getEditorDirtyState().any;
+        return getEditorDirtyState().any || isPresentationStyleDirty();
     }
 
     function getEditorDirtyState() {
-        const none = { any: false, title: false, lyrics: false };
+        const none = { any: false, title: false, lyrics: false, style: false };
         if (isDisplay || isLeader) return none;
         if (!editorPersistBaseline) return none;
         if (editorPersistBaseline.songId !== String(state.currentSongId || "")) return none;
@@ -6954,10 +7621,12 @@
         const baseLyrics = String(editorPersistBaseline.lyrics ?? "");
         const titleDirty = title !== baseTitle;
         const lyricsDirty = lyrics !== baseLyrics;
+        const styleDirty = isPresentationStyleDirty();
         return {
-            any: titleDirty || lyricsDirty,
+            any: titleDirty || lyricsDirty || styleDirty,
             title: titleDirty,
-            lyrics: lyricsDirty
+            lyrics: lyricsDirty,
+            style: styleDirty
         };
     }
 
@@ -6971,9 +7640,249 @@
             badge.textContent = "未保存";
             return;
         }
-        if (dirty.title && dirty.lyrics) badge.textContent = "未保存 · 歌名与歌词";
-        else if (dirty.title) badge.textContent = "未保存 · 歌名";
-        else badge.textContent = "未保存 · 歌词";
+        const parts = [];
+        if (dirty.title) parts.push("歌名");
+        if (dirty.lyrics) parts.push("歌词");
+        if (dirty.style) parts.push("投屏样式");
+        badge.textContent = parts.length ? `未保存 · ${parts.join("与")}` : "未保存";
+    }
+
+    function normalizePresentationComparable(snap) {
+        if (!snap) return null;
+        return {
+            songId: String(snap.songId || ""),
+            bgType: snap.bgType,
+            bgImage: String(snap.bgImage || ""),
+            bgImageId: String(snap.bgImageId || ""),
+            bgMediaType: snap.bgMediaType === "video" ? "video" : "image",
+            posY: snap.posY != null ? clamp(Number(snap.posY), 20, 70) : defaultSongPosY,
+            overlayOpacityPct:
+                snap.overlayOpacityPct != null ? clamp(Number(snap.overlayOpacityPct), 0, 80) : 30,
+            fontOpacityPct:
+                snap.fontOpacityPct != null ? clamp(Number(snap.fontOpacityPct), 20, 100) : 100,
+            pageTransition: canonicalPageTransition(
+                snap.pageTransition != null ? snap.pageTransition : defaultPageTransition
+            ),
+            pageTransitionSpeed: clamp(
+                Math.round(Number(snap.pageTransitionSpeed ?? defaultPageTransitionSpeed) * 10) / 10,
+                0.3,
+                1.5
+            ),
+            fontSize: snap.fontSize != null ? clampLyricFontSize(snap.fontSize) : clampLyricFontSize(state.ui.fontSize),
+            fontColor: String(snap.fontColor != null ? snap.fontColor : state.ui.fontColor || "#ffffff").trim(),
+            fontWeight:
+                snap.fontWeight != null && String(snap.fontWeight).trim()
+                    ? String(snap.fontWeight).trim()
+                    : String(state.ui.fontWeight || "700"),
+            textStrokePx: snap.textStrokePx != null ? clamp(Number(snap.textStrokePx), 0, 6) : clamp(Number(state.ui.textStrokePx), 0, 6),
+            lineHeight:
+                snap.lineHeight != null ? clamp(Number(snap.lineHeight), 1.2, 2.4) : getAdvPreviewLineHeightNumber(),
+            vignetteShape: snap.vignetteShape === "ellipse" ? "ellipse" : "circle",
+            vignetteCenterBrightness:
+                snap.vignetteCenterBrightness != null
+                    ? clamp(Number(snap.vignetteCenterBrightness), -50, 50)
+                    : clamp(Number(state.ui.vignetteCenterBrightness), -50, 50),
+            vignetteEdgeDarkness:
+                snap.vignetteEdgeDarkness != null
+                    ? clamp(Number(snap.vignetteEdgeDarkness), 0, 90)
+                    : clamp(Number(state.ui.vignetteEdgeDarkness), 0, 90)
+        };
+    }
+
+    function snapshotPresentationStyleForSong(song) {
+        if (!song) return null;
+        const bg = getStoredSongBackgroundOrDefaults(song);
+        return {
+            songId: String(song.id || ""),
+            bgType: bg.bgType,
+            bgImage: String(bg.bgImage || ""),
+            bgImageId: String(bg.bgImageId || ""),
+            bgMediaType: bg.bgMediaType === "video" ? "video" : "image",
+            posY: Number.isFinite(Number(song.posY)) ? clamp(Number(song.posY), 20, 70) : null,
+            overlayOpacityPct: Number.isFinite(Number(song.overlayOpacityPct))
+                ? clamp(Number(song.overlayOpacityPct), 0, 80)
+                : null,
+            fontOpacityPct: Number.isFinite(Number(song.fontOpacityPct))
+                ? clamp(Number(song.fontOpacityPct), 20, 100)
+                : null,
+            pageTransition: songHasOwnPageTransition(song) ? canonicalPageTransition(song.pageTransition) : null,
+            pageTransitionSpeed:
+                songHasOwnPageTransition(song) && song.pageTransitionSpeed != null
+                    ? clamp(Math.round(Number(song.pageTransitionSpeed) * 10) / 10, 0.3, 1.5)
+                    : null,
+            fontSize: Number.isFinite(Number(song.fontSize)) ? clampLyricFontSize(song.fontSize) : null,
+            fontColor: song.fontColor != null && String(song.fontColor).trim() ? String(song.fontColor).trim() : null,
+            fontWeight: song.fontWeight != null && String(song.fontWeight).trim() ? String(song.fontWeight).trim() : null,
+            textStrokePx: Number.isFinite(Number(song.textStrokePx)) ? clamp(Number(song.textStrokePx), 0, 6) : null,
+            lineHeight: Number.isFinite(Number(song.lineHeight)) ? clamp(Number(song.lineHeight), 1.2, 2.4) : null,
+            vignetteShape: song.vignetteShape === "ellipse" || song.vignetteShape === "circle" ? song.vignetteShape : null,
+            vignetteCenterBrightness: Number.isFinite(Number(song.vignetteCenterBrightness))
+                ? clamp(Number(song.vignetteCenterBrightness), -50, 50)
+                : null,
+            vignetteEdgeDarkness: Number.isFinite(Number(song.vignetteEdgeDarkness))
+                ? clamp(Number(song.vignetteEdgeDarkness), 0, 90)
+                : null
+        };
+    }
+
+    function readPresentationStyleFromUiSnapshot() {
+        const song = currentSong();
+        if (!song) return null;
+        return {
+            songId: String(song.id || ""),
+            bgType: state.ui.bgType,
+            bgImage: String(state.ui.bgImage || ""),
+            bgImageId: String(state.ui.bgImageId || ""),
+            bgMediaType: state.ui.bgMediaType === "video" ? "video" : "image",
+            posY: clamp(Number(state.ui.posY), 20, 70),
+            overlayOpacityPct: clamp(Number(state.ui.overlayOpacityPct), 0, 80),
+            fontOpacityPct: clamp(Number(state.ui.fontOpacityPct), 20, 100),
+            pageTransition: canonicalPageTransition($("page-transition-select")?.value ?? state.ui.pageTransition),
+            pageTransitionSpeed: clamp(
+                Math.round(
+                    parseFloat($("page-transition-speed-slider")?.value ?? String(state.ui.pageTransitionSpeed ?? 0.6)) *
+                        10
+                ) / 10,
+                0.3,
+                1.5
+            ),
+            fontSize: clampLyricFontSize(state.ui.fontSize),
+            fontColor: String(state.ui.fontColor || "#ffffff").trim(),
+            fontWeight: state.ui.fontWeight == null || state.ui.fontWeight === "" ? "700" : String(state.ui.fontWeight),
+            textStrokePx: clamp(Number(state.ui.textStrokePx), 0, 6),
+            lineHeight: getAdvPreviewLineHeightNumber(),
+            vignetteShape: state.ui.vignetteShape === "ellipse" ? "ellipse" : "circle",
+            vignetteCenterBrightness: clamp(Number(state.ui.vignetteCenterBrightness), -50, 50),
+            vignetteEdgeDarkness: clamp(Number(state.ui.vignetteEdgeDarkness), 0, 90)
+        };
+    }
+
+    function presentationStyleSnapshotsEqual(a, b) {
+        const na = normalizePresentationComparable(a);
+        const nb = normalizePresentationComparable(b);
+        if (!na || !nb) return na === nb;
+        return JSON.stringify(na) === JSON.stringify(nb);
+    }
+
+    function capturePresentationStyleBaseline() {
+        const song = currentSong();
+        if (!song) {
+            presentationStyleBaseline = null;
+            updateEditorUnsavedIndicator();
+            return;
+        }
+        presentationStyleBaseline = snapshotPresentationStyleForSong(song);
+        updateEditorUnsavedIndicator();
+    }
+
+    function isPresentationStyleDirty() {
+        if (isDisplay || isLeader) return false;
+        if (!presentationStyleBaseline) return false;
+        if (presentationStyleBaseline.songId !== String(state.currentSongId || "")) return false;
+        const cur = readPresentationStyleFromUiSnapshot();
+        return !presentationStyleSnapshotsEqual(presentationStyleBaseline, cur);
+    }
+
+    function persistCurrentSongPresentationFromUi(songId) {
+        if (isDisplay || isLeader) return;
+        const sid = songId != null ? songId : state.currentSongId;
+        const s = state.songs.find((x) => String(x.id) === String(sid || ""));
+        if (!s) return;
+        persistSongBackgroundFromUi(sid);
+        persistCurrentSongTypographyFromUi(sid);
+        s.posY = clamp(Number(state.ui.posY), 20, 70);
+        s.overlayOpacityPct = clamp(Number(state.ui.overlayOpacityPct), 0, 80);
+        s.fontOpacityPct = clamp(Number(state.ui.fontOpacityPct), 20, 100);
+        persistPageTransitionFromUi(sid);
+    }
+
+    function revertPresentationStyleToBaseline() {
+        if (!presentationStyleBaseline || presentationStyleBaseline.songId !== String(state.currentSongId || "")) {
+            return;
+        }
+        const song = currentSong();
+        if (!song) return;
+        const b = presentationStyleBaseline;
+        song.bgType = b.bgType;
+        song.bgImage = b.bgImage;
+        song.bgImageId = b.bgImageId;
+        song.bgMediaType = b.bgMediaType;
+        if (b.posY != null) song.posY = b.posY;
+        else delete song.posY;
+        if (b.overlayOpacityPct != null) song.overlayOpacityPct = b.overlayOpacityPct;
+        else delete song.overlayOpacityPct;
+        if (b.fontOpacityPct != null) song.fontOpacityPct = b.fontOpacityPct;
+        else delete song.fontOpacityPct;
+        if (b.pageTransition != null) {
+            song.pageTransition = b.pageTransition;
+            song.pageTransitionSpeed = b.pageTransitionSpeed != null ? b.pageTransitionSpeed : defaultPageTransitionSpeed;
+        } else {
+            delete song.pageTransition;
+            delete song.pageTransitionSpeed;
+        }
+        if (b.fontSize != null) song.fontSize = b.fontSize;
+        else delete song.fontSize;
+        if (b.fontColor != null) song.fontColor = b.fontColor;
+        else delete song.fontColor;
+        if (b.fontWeight != null) song.fontWeight = b.fontWeight;
+        else delete song.fontWeight;
+        if (b.textStrokePx != null) song.textStrokePx = b.textStrokePx;
+        else delete song.textStrokePx;
+        if (b.lineHeight != null) song.lineHeight = b.lineHeight;
+        else delete song.lineHeight;
+        if (b.vignetteShape != null) song.vignetteShape = b.vignetteShape;
+        else delete song.vignetteShape;
+        if (b.vignetteCenterBrightness != null) song.vignetteCenterBrightness = b.vignetteCenterBrightness;
+        else delete song.vignetteCenterBrightness;
+        if (b.vignetteEdgeDarkness != null) song.vignetteEdgeDarkness = b.vignetteEdgeDarkness;
+        else delete song.vignetteEdgeDarkness;
+        hydrateCurrentSongBackgroundIntoUi();
+        hydrateCurrentSongTypographyIntoUi();
+        syncPosYFromCurrentSong();
+        syncOverlayFontOpacityFromCurrentSong();
+        syncPageTransitionFromCurrentSong();
+        updateUIFromState();
+        updatePageTransitionScopeUi();
+    }
+
+    function updatePageTransitionScopeUi() {
+        const song = currentSong();
+        const scope = $("adv-page-transition-scope");
+        if (scope) {
+            const title = (song?.title || "当前诗歌").trim() || "当前诗歌";
+            scope.textContent = `以下翻页转场仅作用于当前诗歌「${title}」。换一首不同的歌时，由播放列表的切歌淡入淡出控制，与此处无关。`;
+        }
+        const pill = $("song-page-transition-pill");
+        if (pill) {
+            const inherit = !songHasOwnPageTransition(song);
+            const trans = getEffectivePageTransition(song);
+            const spd = getEffectivePageTransitionSpeed(song);
+            pill.textContent = `✨ ${formatPageTransitionSummary(trans, spd, { inherit })}`;
+            pill.title = inherit
+                ? `继承默认翻页转场：${pageTransitionLabel(trans)}（${spd.toFixed(1)}秒）。点击打开高级编辑。`
+                : `本首已单独设置：${pageTransitionLabel(trans)}（${spd.toFixed(1)}秒）。点击打开高级编辑。`;
+            pill.hidden = false;
+        }
+        const restoreBtn = $("page-transition-restore-default-btn");
+        if (restoreBtn) {
+            restoreBtn.disabled = !songHasOwnPageTransition(song);
+        }
+    }
+
+    function openAdvDrawerTransitionSection() {
+        const toggle = $("adv-drawer-toggle");
+        if (toggle) toggle.checked = true;
+        const section = document.querySelector('[data-adv-acc-id="transition"]');
+        if (section) {
+            section.classList.add("is-open");
+            const trig = section.querySelector(".adv-drawer-acc-trigger");
+            if (trig) trig.setAttribute("aria-expanded", "true");
+        }
+        try {
+            $("page-transition-select")?.focus({ preventScroll: true });
+        } catch (_e) {
+            $("page-transition-select")?.focus();
+        }
     }
 
     function openLyricEditorDrawer() {
@@ -7017,7 +7926,7 @@
         modal.innerHTML =
             '<div class="unsaved-switch-modal__panel">' +
             '<p id="unsaved-switch-modal-title" class="unsaved-switch-modal__title">当前诗歌有未保存的修改</p>' +
-            '<p class="unsaved-switch-modal__text">要先保存到诗歌库，还是放弃修改并切换？</p>' +
+            '<p class="unsaved-switch-modal__text">歌词、投屏样式（背景、位置、转场等）尚未保存。要先保存到诗歌库，还是放弃修改并切换？</p>' +
             '<div class="unsaved-switch-modal__actions">' +
             '<button type="button" class="small-btn" data-unsaved-action="save">保存并切换</button>' +
             '<button type="button" class="small-btn" data-unsaved-action="discard">放弃修改</button>' +
@@ -7237,12 +8146,20 @@
 
     /**
      * @param {{ galleryThumb?: boolean; song?: object }} [opts]
-     * 画廊里视频背景：各首诗歌的分页卡均使用真实 video 元素播放（与投屏监视一致）；不再对非当前诗歌降级为静帧封面，避免「像一张图」的观感。
+     * 画廊视频背景：仅当前诗歌的激活分页卡使用 live video（galleryThumb:false）；其余分页与其它诗歌用封面缩略图，减轻切歌解码压力。
      * 传入 opts.song 时按该诗歌独立背景渲染；否则按当前诗歌（与中间预览一致）。
      */
     function applyCardBackgroundFromSlice(card, slice, opts) {
         const galleryThumb = !!(opts && opts.galleryThumb);
-        card.querySelector(".card-video-bg")?.remove();
+        const oldVid = card.querySelector(".card-video-bg");
+        if (oldVid) {
+            try {
+                oldVid.pause();
+            } catch (_e) {
+                /* ignore */
+            }
+            oldVid.remove();
+        }
         card.querySelector(".gallery-video-stub")?.remove();
         card.querySelector(".gallery-card-css-dyn-bg")?.remove();
         clearCssDynamicBgClass(card);
@@ -7263,8 +8180,8 @@
             card.style.background = "#fff";
         } else if (bt === "solid-gray") {
             card.style.background = "#444";
-        } else if (bt === "gradient") {
-            card.style.background = "linear-gradient(135deg,#1a2f59,#0a0f1d)";
+        } else if (PRESET_GRADIENT_BG_TYPES.has(bt)) {
+            card.style.background = presetGradientCss(bt);
         } else if (bt === "image" && slice.bgImage) {
             if (slice.bgMediaType === "video") {
                 card.style.position = "relative";
@@ -7345,6 +8262,7 @@
     }
 
     function updateSpeakerCards(options = {}) {
+        markPageNavChaseIfBusy();
         const container = $("card-container");
         const song = currentSong();
         const sourcePages = song ? splitPages(lyricsForPaginationSplit(), state.ui.defaultLines) : [];
@@ -7585,27 +8503,82 @@
         });
     }
 
+    function scrollGalleryActiveIntoViewNow(gal) {
+        if (!gal || !gal.isConnected) return;
+        const active = gal.querySelector(".gallery-page-card.is-active");
+        if (!active || !gal.isConnected) return;
+        const galRect = gal.getBoundingClientRect();
+        const activeRect = active.getBoundingClientRect();
+        const margin = 24;
+        const mostlyVisible =
+            activeRect.left >= galRect.left - margin &&
+            activeRect.right <= galRect.right + margin &&
+            activeRect.top >= galRect.top - margin &&
+            activeRect.bottom <= galRect.bottom + margin;
+        if (mostlyVisible) return;
+        try {
+            active.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "auto" });
+        } catch (_e) {
+            active.scrollIntoView(false);
+        }
+    }
+
+    function flushPendingGalleryMorphScroll(gal) {
+        if (!gal || !gal._galleryMorphScrollPending) return;
+        delete gal._galleryMorphScrollPending;
+        requestAnimationFrame(() => scrollGalleryActiveIntoViewNow(gal));
+    }
+
     function scrollGalleryActiveIntoView(gal) {
         if (!gal || !gal.isConnected) return;
-        requestAnimationFrame(() => {
-            const active = gal.querySelector(".gallery-page-card.is-active");
-            if (!active || !gal.isConnected) return;
-            try {
-                active.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
-            } catch (_e) {
-                active.scrollIntoView(false);
-            }
-        });
+        if (gal._galleryDeferLiveVideo || gal._galleryHighlightHandoffActive) {
+            gal._galleryMorphScrollPending = true;
+            return;
+        }
+        requestAnimationFrame(() => scrollGalleryActiveIntoViewNow(gal));
     }
 
     /** 与 LIVE 快照对齐的转场参数，使画廊动效与投屏监视 / 会众投屏一致 */
     function galleryPageTransitionSource() {
+        const song = currentSong();
         const curSid = String(state.currentSongId || "");
         const ls = liveState && liveState.pages && String(liveState.songId || "") === curSid ? liveState : null;
-        const trans = canonicalPageTransition(ls ? ls.pageTransition : state.ui.pageTransition);
-        const dur = clamp(Number(ls != null ? ls.pageTransitionSpeed : state.ui.pageTransitionSpeed), 0.3, 1.5);
-        const fontOpacityPct = ls != null && ls.fontOpacityPct != null ? ls.fontOpacityPct : state.ui.fontOpacityPct;
+        const trans = canonicalPageTransition(
+            ls ? ls.pageTransition : song ? getEffectivePageTransition(song) : state.ui.pageTransition
+        );
+        const dur = clamp(
+            Number(
+                ls != null
+                    ? ls.pageTransitionSpeed
+                    : song
+                      ? getEffectivePageTransitionSpeed(song)
+                      : state.ui.pageTransitionSpeed
+            ),
+            0.3,
+            1.5
+        );
+        const fontOpacityPct =
+            ls != null && ls.fontOpacityPct != null
+                ? ls.fontOpacityPct
+                : song && song.fontOpacityPct != null
+                  ? song.fontOpacityPct
+                  : state.ui.fontOpacityPct;
         return { trans, dur, fontOpacityPct };
+    }
+
+    function resolveGalleryActiveLineList(plSong) {
+        if (!plSong) return ["…"];
+        const lyricsSrc = getStablePagingLyricsForPageSplit();
+        const pages = splitPages(lyricsSrc, state.ui.defaultLines);
+        const seq = getPlaybackSequenceForSong(plSong, true);
+        const cp = clamp(state.currentPage, 0, Math.max(0, seq.length - 1));
+        const pi = seq[cp]?.sourcePage ?? cp;
+        const lines = pages[pi] || [];
+        let lineList = Array.isArray(lines)
+            ? lines.map((x) => String(x ?? "").trim()).filter((s) => s.length > 0)
+            : [];
+        if (!lineList.length) lineList = ["…"];
+        return lineList;
     }
 
     function appendGalleryLinesToLyricAnim(lyricAnim, lineList, plSong) {
@@ -7616,16 +8589,161 @@
             row.className = "gallery-card-line";
             row.style.position = "relative";
             row.style.zIndex = "2";
-            populateLyricRowElement(row, l, {
-                fontFamily: state.ui.fontFamily,
-                fontColor: state.ui.fontColor,
-                fontOpacityPct: state.ui.fontOpacityPct,
-                textStrokePx: state.ui.textStrokePx,
-                fontWeight: state.ui.fontWeight,
-                lightBg: effectiveSongBackground(plSong).bgType === "solid-white"
-            });
+            populateLyricRowElement(row, l, lyricTypographyContextForSong(plSong));
             lyricAnim.appendChild(row);
         });
+    }
+
+    const GALLERY_HANDOFF_MS = 400;
+    let galleryActiveMorphTarget = null;
+    let galleryActiveMorphSource = null;
+
+    function galleryRenderedSwitchKey() {
+        return `${state.currentSongId}:${state.currentPage}`;
+    }
+
+    function markGalleryRenderedSwitchKey(gal) {
+        if (gal) gal._galleryRenderedSwitchKey = galleryRenderedSwitchKey();
+    }
+
+    function songHasGalleryVideoBg(plSong) {
+        if (!plSong) return false;
+        const eff = effectiveSongBackground(plSong);
+        return eff.bgType === "image" && eff.bgMediaType === "video" && !!eff.bgImage;
+    }
+
+    function desiredGalleryCardVideoMode(plSong, isCurrentSection, isActiveCard, deferLive) {
+        if (!songHasGalleryVideoBg(plSong)) return null;
+        if (isCurrentSection && isActiveCard && !deferLive) return "live";
+        return "thumb";
+    }
+
+    function applyGalleryCardVideoMode(card, plSong, mode) {
+        if (!card || !plSong || !mode) return;
+        if ((card.dataset.galleryVideoMode || "") === mode) return;
+        applyCardBackground(card, { galleryThumb: mode !== "live", song: plSong });
+        card.dataset.galleryVideoMode = mode;
+    }
+
+    /** 视频背景：仅当前诗歌的激活卡片播 live video，其余用封面，避免切歌/翻页时多路解码卡顿 */
+    function syncGalleryAllSectionVideoModes(gal) {
+        if (!gal) return;
+        const curSid = String(state.currentSongId || "");
+        const deferLive = !!gal._galleryDeferLiveVideo;
+        gal.querySelectorAll(":scope > .gallery-song-section").forEach((sec) => {
+            const sid = sec.getAttribute("data-song-id") || "";
+            const plSong = state.songs.find((s) => String(s.id) === String(sid));
+            if (!plSong || !songHasGalleryVideoBg(plSong)) return;
+            const isCurrent = String(sid) === curSid;
+            sec.querySelectorAll(":scope .gallery-page-card[data-gallery-card]").forEach((card) => {
+                const act = card.classList.contains("is-active");
+                const mode = desiredGalleryCardVideoMode(plSong, isCurrent, act, deferLive);
+                applyGalleryCardVideoMode(card, plSong, mode);
+            });
+        });
+    }
+
+    function finishGalleryLiveVideoAfterSwitch(gal) {
+        if (!gal || !gal._galleryDeferLiveVideo) return;
+        delete gal._galleryDeferLiveVideo;
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => syncGalleryAllSectionVideoModes(gal));
+        });
+    }
+
+    /** 仅在页码/曲目变化时记录旧高亮框位置；避免同一次 updateAll 内二次 render 覆盖来源导致变形被跳过 */
+    function captureGalleryActiveFlowOrigin(gal) {
+        if (!gal) return;
+        const prevRenderedKey = gal._galleryRenderedSwitchKey || "";
+        const nextKey = galleryRenderedSwitchKey();
+        if (nextKey === prevRenderedKey) return;
+        if (!prevRenderedKey) return;
+        const prev = gal.querySelector(".gallery-page-card.is-active");
+        if (!prev) {
+            delete gal._galleryFlowFromEl;
+            return;
+        }
+        gal._galleryDeferLiveVideo = true;
+        gal._galleryFlowFromEl = prev;
+    }
+
+    function clearGalleryMorphHandoffClasses() {
+        if (galleryActiveMorphTarget) {
+            galleryActiveMorphTarget.classList.remove("gallery-highlight-enter");
+            galleryActiveMorphTarget = null;
+        }
+        if (galleryActiveMorphSource) {
+            galleryActiveMorphSource.classList.remove("gallery-morph-source-handoff");
+            galleryActiveMorphSource = null;
+        }
+        document
+            .querySelectorAll(
+                "#layout-page-gallery .gallery-page-card.gallery-morph-source-handoff, #layout-page-gallery .gallery-page-card.gallery-highlight-enter"
+            )
+            .forEach((el) => {
+                el.classList.remove("gallery-morph-source-handoff", "gallery-highlight-enter");
+            });
+    }
+
+    function teardownGalleryActiveMorph() {
+        const staleFrame = document.getElementById("gallery-active-morph-frame");
+        if (staleFrame) staleFrame.remove();
+        delete document.getElementById("layout-page-gallery")?._galleryHighlightHandoffActive;
+        clearGalleryMorphHandoffClasses();
+    }
+
+    function runGalleryCardSwitchLandingPulse(el) {
+        if (!el || !el.isConnected) return;
+        el.classList.remove("gallery-card-switch-pulse");
+        void el.offsetWidth;
+        el.classList.add("gallery-card-switch-pulse");
+        el.addEventListener(
+            "animationend",
+            (ev) => {
+                if (ev.target !== el || ev.animationName !== "galleryCardSwitchPulse") return;
+                el.classList.remove("gallery-card-switch-pulse");
+            },
+            { once: true }
+        );
+    }
+
+    /** 翻页交互层：金边留在卡片上交叉淡入淡出，不用悬浮框在屏幕里飞 */
+    function runGalleryCardHighlightHandoff(fromEl, targetEl, gal) {
+        if (!fromEl || !fromEl.isConnected || !targetEl || !targetEl.isConnected) return false;
+        if (fromEl === targetEl) return false;
+        if (pageNavChasingThisFrame) return false;
+        if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return false;
+
+        teardownGalleryActiveMorph();
+        galleryActiveMorphTarget = targetEl;
+        galleryActiveMorphSource = fromEl;
+        if (gal) gal._galleryHighlightHandoffActive = true;
+
+        fromEl.classList.add("gallery-morph-source-handoff");
+        targetEl.classList.add("gallery-highlight-enter");
+        void targetEl.offsetWidth;
+
+        let done = false;
+        const finish = () => {
+            if (done) return;
+            done = true;
+            clearGalleryMorphHandoffClasses();
+            if (gal) delete gal._galleryHighlightHandoffActive;
+            runGalleryCardSwitchLandingPulse(targetEl);
+            finishGalleryLiveVideoAfterSwitch(gal);
+            flushPendingGalleryMorphScroll(gal);
+        };
+
+        targetEl.addEventListener(
+            "animationend",
+            (ev) => {
+                if (ev.target !== targetEl || ev.animationName !== "galleryGoldHandoffIn") return;
+                finish();
+            },
+            { once: true }
+        );
+        setTimeout(finish, GALLERY_HANDOFF_MS + 90);
+        return true;
     }
 
     /** 页面画廊：翻页/点击后当前卡片轻量动效（键盘与鼠标共用） */
@@ -7635,18 +8753,19 @@
             el.classList.remove("gallery-card-switch-pulse");
         });
         const active = gal.querySelector(".gallery-page-card.is-active");
-        if (!active) return;
-        active.classList.remove("gallery-card-switch-pulse");
-        void active.offsetWidth;
-        active.classList.add("gallery-card-switch-pulse");
-        active.addEventListener(
-            "animationend",
-            (ev) => {
-                if (ev.target !== active || ev.animationName !== "galleryCardSwitchPulse") return;
-                active.classList.remove("gallery-card-switch-pulse");
-            },
-            { once: true }
-        );
+        if (!active) {
+            teardownGalleryActiveMorph();
+            finishGalleryLiveVideoAfterSwitch(gal);
+            return;
+        }
+
+        const fromEl = gal._galleryFlowFromEl;
+        delete gal._galleryFlowFromEl;
+        if (fromEl && runGalleryCardHighlightHandoff(fromEl, active, gal)) return;
+
+        runGalleryCardSwitchLandingPulse(active);
+        finishGalleryLiveVideoAfterSwitch(gal);
+        flushPendingGalleryMorphScroll(gal);
     }
 
     function scheduleGalleryCardSwitchAnimation() {
@@ -7654,10 +8773,12 @@
             cancelAnimationFrame(scheduleGalleryCardSwitchAnimation._raf);
         }
         scheduleGalleryCardSwitchAnimation._raf = requestAnimationFrame(() => {
-            scheduleGalleryCardSwitchAnimation._raf = 0;
-            const gal = $("layout-page-gallery");
-            runGalleryCardSwitchAnimation(gal);
-            runGalleryActiveLyricEnterOnly(gal);
+            scheduleGalleryCardSwitchAnimation._raf = requestAnimationFrame(() => {
+                scheduleGalleryCardSwitchAnimation._raf = 0;
+                const gal = $("layout-page-gallery");
+                runGalleryCardSwitchAnimation(gal);
+                if (!isLyricPageTransBusy()) runGalleryActiveLyricEnterOnly(gal);
+            });
         });
     }
 
@@ -7676,13 +8797,18 @@
         const trans = src.trans;
         const dur = src.dur;
         const shouldAnim =
-            !projectionDisplayIsVideoBackground() &&
+            galleryLyricTransitionEnabled() &&
             prevP !== undefined &&
             trans !== "none" &&
             (String(prevP) !== String(idx) || String(prevS || "") !== curSid);
         if (shouldAnim) {
             const active = gal.querySelector(".gallery-page-card.is-active .gallery-card-lyric-anim");
-            if (active) runMiniPageTransitionEnter(active, trans, dur, src.fontOpacityPct, "translateY(-50%)");
+            const songSwitch = String(prevS || "") !== curSid;
+            if (active) {
+                runMiniPageTransitionEnter(active, trans, dur, src.fontOpacityPct, "translateY(-50%)", {
+                    songSwitch
+                });
+            }
         }
         gal.dataset.galLyricLastPage = String(idx);
         gal.dataset.galLyricLastSongId = curSid;
@@ -7742,18 +8868,90 @@
         return parts.join("\x1e");
     }
 
+    /** 画廊激活卡：离场→换词→入场；连按时追赶目标页（ProPresenter 式跟手） */
+    function runCoalescedGalleryActiveLyricSwap(card, lyricAnim, plSong, gsrc, hasPriorLines, gal) {
+        const chasing = pageNavChasingThisFrame;
+        const epoch = pageNavTransEpoch;
+        const endTf = "translateY(-50%)";
+        const curSid = String(state.currentSongId || "");
+
+        const applyLatest = () => {
+            const freshLines = resolveGalleryActiveLineList(plSong);
+            appendGalleryLinesToLyricAnim(lyricAnim, freshLines, plSong);
+            applyGalleryCardLyricVerticalLayout(card, lyricAnim, plSong);
+            const enterDur = chasing ? Math.max(0.16, gsrc.dur * 0.48) : gsrc.dur;
+            runMiniPageTransitionEnter(lyricAnim, gsrc.trans, enterDur, gsrc.fontOpacityPct, endTf, {
+                rawDur: chasing
+            });
+            if (gal) {
+                gal.dataset.galLyricLastPage = String(state.currentPage);
+                gal.dataset.galLyricLastSongId = curSid;
+                gal.dataset.galLyricSkipScheduleEnter = "1";
+            }
+            pageNavTransEpoch = 0;
+            requestAnimationFrame(() => relayoutGalleryLyricVerticalPads());
+        };
+
+        if (!hasPriorLines || gsrc.trans === "none" || !galleryLyricTransitionEnabled()) {
+            applyLatest();
+            return;
+        }
+
+        gal.dataset.galLyricSkipScheduleEnter = "1";
+
+        if (chasing) {
+            flushGalleryLyricTrans({ invokePending: false });
+            const chaseDur = Math.max(0.1, gsrc.dur * 0.28);
+            galleryLyricTransPending = () => {
+                galleryLyricTransTimer = 0;
+                applyLatest();
+            };
+            runLyricCssFadeThen(
+                lyricAnim,
+                chaseDur,
+                WORSHIP_FLUID_EASE_CROSS,
+                "0.12",
+                endTf,
+                () => {
+                    const fn = galleryLyricTransPending;
+                    galleryLyricTransPending = null;
+                    galleryLyricExitArm = null;
+                    if (fn) fn();
+                },
+                (arm) => {
+                    galleryLyricExitArm = arm;
+                    if (arm) galleryLyricTransTimer = arm.fallbackId;
+                },
+                { rawDur: true }
+            );
+            return;
+        }
+
+        runGalleryLyricExitThen(lyricAnim, gsrc.trans, gsrc.dur, () => {
+            if (epoch !== pageNavTransEpoch) {
+                applyLatest();
+                return;
+            }
+            applyLatest();
+        });
+    }
+
     /** 结构未变时只改高亮与歌词，保留 video 节点，避免翻页黑闪 */
     function tryPatchPageGalleryInPlace(gal, songIdsOrdered) {
         const sections = gal.querySelectorAll(":scope > .gallery-song-section");
         if (sections.length !== songIdsOrdered.length) return false;
-        flushGalleryLyricTrans();
+        if (pageNavChasingThisFrame) {
+            flushGalleryLyricTrans({ invokePending: false });
+        } else {
+            flushGalleryLyricTrans({ invokePending: false, skipReset: true });
+        }
         const gsrc = galleryPageTransitionSource();
         const prevGalP = gal.dataset.galLyricLastPage;
         const prevGalS = gal.dataset.galLyricLastSongId;
         const idxNav = state.currentPage;
         const curSid = String(state.currentSongId || "");
         const needGalLyricTrans =
-            !projectionDisplayIsVideoBackground() &&
+            galleryLyricTransitionEnabled() &&
             prevGalP !== undefined &&
             gsrc.trans !== "none" &&
             (String(prevGalP) !== String(idxNav) || String(prevGalS || "") !== curSid);
@@ -7809,14 +9007,10 @@
                 }
                 const act = isCurrent && si === cp;
                 card.className = "gallery-page-card" + (act ? " is-active" : "");
-                const borderCol = act ? "#d4af37" : "rgba(255,255,255,0.12)";
-                card.style.border = "2px solid " + borderCol;
-                card.style.boxShadow = act
-                    ? "0 0 0 1px rgba(212,175,55,0.35), 0 8px 28px rgba(0,0,0,0.35)"
-                    : "";
 
+                applyGalleryCardProjectionMask(card, plSong);
                 const vig = card.querySelector(".card-vignette-radial");
-                if (vig) applyRadialVignetteToLayer(vig, state.ui);
+                if (vig) applyRadialVignetteToLayer(vig, vignetteUiContextForSong(plSong));
 
                 let lyricAnim = card.querySelector(":scope > .gallery-card-lyric-anim");
                 if (!lyricAnim) {
@@ -7837,23 +9031,27 @@
                 const prevBgSig = card.getAttribute("data-gallery-bg-sig") || "";
                 if (prevBgSig !== wantBgSig) {
                     applyCardBackground(card, {
-                        galleryThumb: !galleryLiveVideoBgThis,
+                        galleryThumb: !galleryLiveVideoBgThis || !act,
                         song: plSong
                     });
                     card.setAttribute("data-gallery-bg-sig", wantBgSig);
+                    if (galleryLiveVideoBgThis) {
+                        card.dataset.galleryVideoMode = act && !gal._galleryDeferLiveVideo ? "live" : "thumb";
+                    } else {
+                        delete card.dataset.galleryVideoMode;
+                    }
+                }
+
+                /* 同歌翻页：非激活卡歌词不变，跳过重绘减轻卡顿 */
+                if (isCurrent && needGalLyricTrans && !act) {
+                    continue;
                 }
 
                 const hasPriorLines = !!lyricAnim.querySelector(".gallery-card-line");
                 if (act && needGalLyricTrans && hasPriorLines) {
-                    runGalleryLyricExitThen(lyricAnim, gsrc.trans, gsrc.dur, () => {
-                        appendGalleryLinesToLyricAnim(lyricAnim, lineList, plSong);
-                        applyGalleryCardLyricVerticalLayout(card, lyricAnim, plSong);
-                        runMiniPageTransitionEnter(lyricAnim, gsrc.trans, gsrc.dur, gsrc.fontOpacityPct, "translateY(-50%)");
-                        gal.dataset.galLyricLastPage = String(idxNav);
-                        gal.dataset.galLyricLastSongId = curSid;
-                        gal.dataset.galLyricSkipScheduleEnter = "1";
-                        requestAnimationFrame(() => relayoutGalleryLyricVerticalPads());
-                    });
+                    runCoalescedGalleryActiveLyricSwap(card, lyricAnim, plSong, gsrc, hasPriorLines, gal);
+                } else if (act && needGalLyricTrans) {
+                    runCoalescedGalleryActiveLyricSwap(card, lyricAnim, plSong, gsrc, false, gal);
                 } else {
                     card.querySelectorAll(".gallery-card-line").forEach((n) => n.remove());
                     appendGalleryLinesToLyricAnim(lyricAnim, lineList, plSong);
@@ -7861,8 +9059,11 @@
                 }
             }
         }
+        syncGalleryAllSectionVideoModes(gal);
         refreshGallerySectionPageIndicators();
-        requestAnimationFrame(() => relayoutGalleryLyricVerticalPads());
+        if (!isLyricPageTransBusy()) {
+            requestAnimationFrame(() => relayoutGalleryLyricVerticalPads());
+        }
         return true;
     }
 
@@ -8008,6 +9209,7 @@
     function renderPageGallery() {
         const gal = document.getElementById("layout-page-gallery");
         const finishGalleryChrome = () => {
+            markGalleryRenderedSwitchKey(gal);
             updateGalleryStatusBar();
             updateGalleryZoom();
             resetGalleryWrapperScroll();
@@ -8017,6 +9219,7 @@
             finishGalleryChrome();
             return;
         }
+        captureGalleryActiveFlowOrigin(gal);
         if (!state.songs || !state.songs.length || !state.currentSongId) {
             gal.innerHTML = buildGalleryPlaylistEmptyHtml();
             bindGalleryPlaylistEmptyActions(gal);
@@ -8062,6 +9265,8 @@
             const plSong = state.songs.find((s) => String(s.id) === String(sid));
             if (!plSong) return;
 
+            const isCurrent = String(sid) === String(state.currentSongId);
+
             const section = document.createElement("section");
             section.className = "gallery-song-section";
             section.setAttribute("data-song-id", String(sid));
@@ -8078,9 +9283,32 @@
             titleEl.textContent = plSong.title || "未命名";
             headMain.appendChild(idxLabel);
             headMain.appendChild(titleEl);
+            if (isCurrent) {
+                const transPill = document.createElement("button");
+                transPill.type = "button";
+                transPill.className = "gallery-song-transition-pill";
+                transPill.id = songOrd === 0 || isCurrent ? "gallery-active-transition-pill" : "";
+                const inherit = !songHasOwnPageTransition(plSong);
+                const trans = getEffectivePageTransition(plSong);
+                const spd = getEffectivePageTransitionSpeed(plSong);
+                transPill.textContent = `✨ ${formatPageTransitionSummary(trans, spd, { inherit, short: true })}`;
+                transPill.title = inherit
+                    ? `默认翻页转场：${pageTransitionLabel(trans)}`
+                    : `本首翻页转场：${pageTransitionLabel(trans)}`;
+                transPill.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    openAdvDrawerTransitionSection();
+                });
+                headMain.appendChild(transPill);
+            } else if (songHasOwnPageTransition(plSong)) {
+                const transHint = document.createElement("span");
+                transHint.className = "gallery-song-transition-hint";
+                transHint.textContent = `✨ ${pageTransitionLabel(getEffectivePageTransition(plSong))}`;
+                transHint.title = "本首已单独设置翻页转场";
+                headMain.appendChild(transHint);
+            }
             head.appendChild(headMain);
 
-            const isCurrent = String(sid) === String(state.currentSongId);
             const lyricsSrc = isCurrent ? getStablePagingLyricsForPageSplit() : String(plSong.lyrics ?? "");
             const pages = splitPages(lyricsSrc, state.ui.defaultLines);
             const seq = getPlaybackSequenceForSong(plSong, isCurrent);
@@ -8147,22 +9375,22 @@
                 card.setAttribute("data-playback-step-id", String(step.id || ""));
                 card.className = "gallery-page-card" + (act ? " is-active" : "");
                 card.setAttribute("role", "listitem");
-                card.style.cssText =
-                    "border-radius:16px;border:2px solid " +
-                    (act ? "#d4af37" : "rgba(255,255,255,0.12)") +
-                    ";padding:10px 12px;cursor:pointer;box-sizing:border-box;overflow:hidden;flex-shrink:0;transition:border-color 0.15s ease,box-shadow 0.15s ease;position:relative;";
-                if (act) card.style.boxShadow = "0 0 0 1px rgba(212,175,55,0.35), 0 8px 28px rgba(0,0,0,0.35)";
+                const wantLiveVideo = galleryLiveVideoBgThis && act && !gal._galleryDeferLiveVideo;
                 applyCardBackground(card, {
-                    galleryThumb: !galleryLiveVideoBgThis,
+                    galleryThumb: !wantLiveVideo,
                     song: plSong
                 });
+                if (galleryLiveVideoBgThis) {
+                    card.dataset.galleryVideoMode = wantLiveVideo ? "live" : "thumb";
+                }
                 card.setAttribute("data-gallery-bg-sig", pageGalleryBackgroundIdentityKey(effStrip));
+                applyGalleryCardProjectionMask(card, plSong);
                 const vig = document.createElement("div");
                 vig.className = "card-vignette-radial";
                 vig.style.cssText =
                     "position:absolute;inset:0;pointer-events:none;z-index:1;border-radius:inherit;";
                 card.appendChild(vig);
-                applyRadialVignetteToLayer(vig, state.ui);
+                applyRadialVignetteToLayer(vig, vignetteUiContextForSong(plSong));
                 const lyricAnim = document.createElement("div");
                 lyricAnim.className = "gallery-card-lyric-anim";
                 lyricAnim.style.cssText =
@@ -8178,14 +9406,7 @@
                     row.className = "gallery-card-line";
                     row.style.position = "relative";
                     row.style.zIndex = "2";
-                    populateLyricRowElement(row, l, {
-                        fontFamily: state.ui.fontFamily,
-                        fontColor: state.ui.fontColor,
-                        fontOpacityPct: state.ui.fontOpacityPct,
-                        textStrokePx: state.ui.textStrokePx,
-                        fontWeight: state.ui.fontWeight,
-                        lightBg: effectiveSongBackground(plSong).bgType === "solid-white"
-                    });
+                    populateLyricRowElement(row, l, lyricTypographyContextForSong(plSong));
                     lyricAnim.appendChild(row);
                 });
                 applyGalleryCardLyricVerticalLayout(card, lyricAnim, plSong);
@@ -8208,6 +9429,7 @@
         });
 
         gal.dataset.galleryStructSig = newSig;
+        syncGalleryAllSectionVideoModes(gal);
         scrollGalleryActiveIntoView(gal);
         scheduleGalleryCardSwitchAnimation();
         refreshGallerySectionPageIndicators();
@@ -8256,7 +9478,7 @@
         menu.hidden = false;
         const pad = 8;
         const estW = 168;
-        const estH = 108;
+        const estH = 148;
         const x = clamp(clientX, pad, window.innerWidth - estW - pad);
         const y = clamp(clientY, pad, window.innerHeight - estH - pad);
         menu.style.left = `${x}px`;
@@ -8277,6 +9499,181 @@
         hideSongContextMenu();
         switchSong(copy.id);
         showToast("已复制诗歌", $("add-song-btn"));
+    }
+
+    let copyPresentationStyleSourceId = "";
+
+    function ensureCopyPresentationStyleModal() {
+        let modal = $("copy-presentation-style-modal");
+        if (modal) return modal;
+        modal = document.createElement("div");
+        modal.id = "copy-presentation-style-modal";
+        modal.className = "copy-presentation-style-modal";
+        modal.hidden = true;
+        modal.setAttribute("role", "dialog");
+        modal.setAttribute("aria-modal", "true");
+        modal.setAttribute("aria-labelledby", "copy-presentation-style-modal-title");
+        modal.innerHTML =
+            '<div class="copy-presentation-style-modal__panel">' +
+            '<p id="copy-presentation-style-modal-title" class="copy-presentation-style-modal__title">复制投屏样式</p>' +
+            '<p class="copy-presentation-style-modal__hint">将背景、垂直位置、遮罩/字透明度、翻页转场复制到所选诗歌（不含歌词与全局字体）。</p>' +
+            '<div id="copy-presentation-style-list" class="copy-presentation-style-list" role="list"></div>' +
+            '<div class="copy-presentation-style-modal__actions">' +
+            '<button type="button" class="small-btn" id="copy-presentation-style-confirm">复制到所选</button>' +
+            '<button type="button" class="small-btn" id="copy-presentation-style-cancel">取消</button>' +
+            "</div></div>";
+        document.body.appendChild(modal);
+        modal.addEventListener("click", (e) => {
+            if (e.target === modal) hideCopyPresentationStyleModal();
+        });
+        $("copy-presentation-style-cancel")?.addEventListener("click", () => hideCopyPresentationStyleModal());
+        $("copy-presentation-style-confirm")?.addEventListener("click", () => {
+            commitCopyPresentationStyleModal();
+        });
+        return modal;
+    }
+
+    function hideCopyPresentationStyleModal() {
+        const modal = $("copy-presentation-style-modal");
+        if (modal) modal.hidden = true;
+        copyPresentationStyleSourceId = "";
+    }
+
+    function readSongPresentationStylePayload(song) {
+        if (!song) return null;
+        if (String(song.id) === String(state.currentSongId) && !isDisplay && !isLeader) {
+            const ui = readPresentationStyleFromUiSnapshot();
+            if (ui) {
+                return {
+                    bgType: ui.bgType,
+                    bgImage: ui.bgImage,
+                    bgImageId: ui.bgImageId,
+                    bgMediaType: ui.bgMediaType,
+                    posY: ui.posY,
+                    overlayOpacityPct: ui.overlayOpacityPct,
+                    fontOpacityPct: ui.fontOpacityPct,
+                    pageTransition: ui.pageTransition,
+                    pageTransitionSpeed: ui.pageTransitionSpeed
+                };
+            }
+        }
+        const bg = getStoredSongBackgroundOrDefaults(song);
+        const payload = {
+            bgType: bg.bgType,
+            bgImage: String(bg.bgImage || ""),
+            bgImageId: String(bg.bgImageId || ""),
+            bgMediaType: bg.bgMediaType === "video" ? "video" : "image",
+            posY: Number.isFinite(Number(song.posY)) ? clamp(Number(song.posY), 20, 70) : defaultSongPosY,
+            overlayOpacityPct: Number.isFinite(Number(song.overlayOpacityPct))
+                ? clamp(Number(song.overlayOpacityPct), 0, 80)
+                : 30,
+            fontOpacityPct: Number.isFinite(Number(song.fontOpacityPct))
+                ? clamp(Number(song.fontOpacityPct), 20, 100)
+                : 100
+        };
+        if (songHasOwnPageTransition(song)) {
+            payload.pageTransition = canonicalPageTransition(song.pageTransition);
+            payload.pageTransitionSpeed = getEffectivePageTransitionSpeed(song);
+        } else {
+            payload.pageTransition = null;
+            payload.pageTransitionSpeed = null;
+        }
+        return payload;
+    }
+
+    function applyPresentationStylePayloadToSong(song, payload) {
+        if (!song || !payload) return;
+        song.bgType = payload.bgType;
+        song.bgImage = payload.bgImage;
+        song.bgImageId = payload.bgImageId;
+        song.bgMediaType = payload.bgMediaType === "video" ? "video" : "image";
+        song.posY = clamp(Number(payload.posY), 20, 70);
+        song.overlayOpacityPct = clamp(Number(payload.overlayOpacityPct), 0, 80);
+        song.fontOpacityPct = clamp(Number(payload.fontOpacityPct), 20, 100);
+        if (payload.pageTransition != null && String(payload.pageTransition).trim()) {
+            song.pageTransition = canonicalPageTransition(payload.pageTransition);
+            song.pageTransitionSpeed = clamp(Number(payload.pageTransitionSpeed ?? defaultPageTransitionSpeed), 0.3, 1.5);
+        } else {
+            delete song.pageTransition;
+            delete song.pageTransitionSpeed;
+        }
+    }
+
+    function openCopyPresentationStyleModal(sourceSongId) {
+        const src = state.songs.find((s) => String(s.id) === String(sourceSongId || ""));
+        if (!src) return;
+        const modal = ensureCopyPresentationStyleModal();
+        copyPresentationStyleSourceId = String(src.id);
+        const list = $("copy-presentation-style-list");
+        const titleEl = $("copy-presentation-style-modal-title");
+        if (titleEl) {
+            titleEl.textContent = `复制投屏样式：${(src.title || "未命名").trim() || "未命名"}`;
+        }
+        if (list) {
+            list.replaceChildren();
+            const targets = state.songs.filter((s) => String(s.id) !== String(src.id));
+            if (!targets.length) {
+                const empty = document.createElement("p");
+                empty.className = "copy-presentation-style-empty";
+                empty.textContent = "曲库中没有其他诗歌可复制。";
+                list.appendChild(empty);
+            } else {
+                targets.forEach((s) => {
+                    const row = document.createElement("label");
+                    row.className = "copy-presentation-style-row";
+                    row.innerHTML = `<input type="checkbox" value="${s.id}"><span>${(s.title || "未命名").trim() || "未命名"}</span>`;
+                    list.appendChild(row);
+                });
+            }
+        }
+        modal.hidden = false;
+    }
+
+    function commitCopyPresentationStyleModal() {
+        const srcId = copyPresentationStyleSourceId;
+        const src = state.songs.find((s) => String(s.id) === String(srcId || ""));
+        const list = $("copy-presentation-style-list");
+        if (!src || !list) {
+            hideCopyPresentationStyleModal();
+            return;
+        }
+        const payload = readSongPresentationStylePayload(src);
+        const checked = [...list.querySelectorAll('input[type="checkbox"]:checked')];
+        if (!checked.length) {
+            showToast("请至少选择一首目标诗歌", $("copy-presentation-style-confirm"));
+            return;
+        }
+        let n = 0;
+        checked.forEach((cb) => {
+            const tid = cb.value;
+            const target = state.songs.find((s) => String(s.id) === String(tid));
+            if (!target) return;
+            applyPresentationStylePayloadToSong(target, payload);
+            n += 1;
+        });
+        try {
+            saveSongs();
+        } catch (_e) {
+            /* ignore */
+        }
+        hideCopyPresentationStyleModal();
+        renderSongList();
+        renderPageGallery();
+        if (String(state.currentSongId) === String(srcId)) {
+            capturePresentationStyleBaseline();
+        } else {
+            const cur = currentSong();
+            if (cur && checked.some((cb) => String(cb.value) === String(cur.id))) {
+                hydrateCurrentSongBackgroundIntoUi();
+                syncPosYFromCurrentSong();
+                syncOverlayFontOpacityFromCurrentSong();
+                syncPageTransitionFromCurrentSong();
+                updateUIFromState();
+                capturePresentationStyleBaseline();
+                updateAll();
+            }
+        }
+        showToast(n ? `已复制样式到 ${n} 首诗歌` : "未复制", $("copy-presentation-style-confirm"));
     }
 
     function buildSongCategoryPanels(filteredSongsInOrder) {
@@ -8351,7 +9748,7 @@
   </div>
 </div>
 ${deleteBtnHtml}
-<button type="button" class="song-add-btn${state.playlist.items.includes(song.id) ? " in-playlist" : ""}" title="${state.playlist.items.includes(song.id) ? "已在播放列表" : "加入播放列表"}" data-song-id="${song.id}">${state.playlist.items.includes(song.id) ? "✓" : "+"}</button>`;
+<button type="button" class="song-add-btn${playlistIncludesSongId(song.id) ? " in-playlist" : ""}" title="${playlistIncludesSongId(song.id) ? "已在播放列表" : "加入播放列表"}" data-song-id="${song.id}">${playlistIncludesSongId(song.id) ? "✓" : "+"}</button>`;
 
         const openSong = () => {
             switchSong(song.id);
@@ -8522,7 +9919,7 @@ ${deleteBtnHtml}
 
     function applySongAddBtnState(btn, songId) {
         if (!btn || !document.contains(btn)) return;
-        const inPl = state.playlist.items.includes(songId);
+        const inPl = playlistIncludesSongId(songId);
         btn.classList.remove("is-added", "is-duplicate");
         btn.disabled = false;
         if (inPl) {
@@ -8592,6 +9989,7 @@ ${deleteBtnHtml}
     }
 
     function renderPlaylist(opts) {
+        reconcilePlaylistState();
         const highlightSongId = opts && opts.highlightSongId;
         const list = $("playlist-list");
         if (!list) return;
@@ -8604,16 +10002,22 @@ ${deleteBtnHtml}
             return;
         }
         state.playlist.items.forEach((songId, idx) => {
-            const song = state.songs.find((s) => s.id === songId);
+            const song = findSongByPlaylistId(songId);
             if (!song) return;
             const li = document.createElement("li");
             li.className = "playlist-item" + (state.playlist.running && idx === state.playlist.activeIndex ? " active" : "");
-            if (highlightSongId && songId === highlightSongId) {
+            if (highlightSongId && playlistSongIdMatch(songId, highlightSongId)) {
                 li.classList.add("playlist-item--just-added");
             }
             li.draggable = true;
             li.dataset.idx = String(idx);
             li.innerHTML = `<span>${escapeHtml(song.title || "未命名")}</span><button class="playlist-remove-btn" title="移出" aria-label="移出播放列表">✕</button>`;
+            li.addEventListener("click", (e) => {
+                if (e.target.closest(".playlist-remove-btn")) return;
+                state.playlist.activeIndex = idx;
+                savePlaylist();
+                switchSong(song.id, { page: 0 });
+            });
             li.querySelector(".playlist-remove-btn")?.addEventListener("click", (e) => {
                 e.stopPropagation();
                 removeFromPlaylist(songId, { listItem: li });
@@ -8653,7 +10057,7 @@ ${deleteBtnHtml}
                 savePlaylist();
             });
             list.appendChild(li);
-            if (highlightSongId && songId === highlightSongId) {
+            if (highlightSongId && playlistSongIdMatch(songId, highlightSongId)) {
                 requestAnimationFrame(() => scrollPlaylistItemIntoView(li));
                 setTimeout(() => {
                     if (document.contains(li)) li.classList.remove("playlist-item--just-added");
@@ -8684,6 +10088,147 @@ ${deleteBtnHtml}
         localStorage.setItem(WORSHIP_SETLISTS_LS, JSON.stringify(arr));
     }
 
+    function tryPersistSavedSetlists(arr) {
+        try {
+            persistSavedSetlists(arr);
+            return true;
+        } catch (err) {
+            if (isStorageQuotaExceededError(err)) return false;
+            throw err;
+        }
+    }
+
+    function countSongsForLocalDataReminder() {
+        if (!Array.isArray(state.songs) || !state.songs.length) return 0;
+        if (state.songs.length === 1 && isLikelyDefaultOnlyLibrary(state.songs)) return 0;
+        return state.songs.length;
+    }
+
+    function getLocalDataVolumeSnapshot() {
+        let setlists = 0;
+        try {
+            setlists = loadSavedSetlists().length;
+        } catch (_e) {
+            setlists = 0;
+        }
+        return {
+            setlists,
+            templates: getLyricTemplates().length,
+            songs: countSongsForLocalDataReminder()
+        };
+    }
+
+    function getLocalDataVolumeLevel(snap) {
+        const s = snap || getLocalDataVolumeSnapshot();
+        if (
+            s.setlists >= SETLIST_COUNT_CRITICAL ||
+            s.templates >= LYRIC_TEMPLATE_COUNT_CRITICAL ||
+            s.songs >= SONG_LIBRARY_COUNT_CRITICAL
+        ) {
+            return 2;
+        }
+        if (
+            s.setlists >= SETLIST_COUNT_WARN ||
+            s.templates >= LYRIC_TEMPLATE_COUNT_WARN ||
+            s.songs >= SONG_LIBRARY_COUNT_WARN
+        ) {
+            return 1;
+        }
+        return 0;
+    }
+
+    function buildLocalDataVolumeMessage(snap, level, short) {
+        const lv = level != null ? level : getLocalDataVolumeLevel(snap);
+        if (lv === 0) return "";
+        const parts = [];
+        if (snap.setlists >= SETLIST_COUNT_WARN) parts.push(`歌单 ${snap.setlists} 条`);
+        if (snap.templates >= LYRIC_TEMPLATE_COUNT_WARN) parts.push(`诗歌存档 ${snap.templates} 条`);
+        if (snap.songs >= SONG_LIBRARY_COUNT_WARN) parts.push(`诗歌库 ${snap.songs} 首`);
+        if (!parts.length) return "";
+        const head = lv >= 2 ? "⚠️ 本地数据较多" : "💡 本地数据渐多";
+        const tail = short
+            ? "建议删除不用的歌单/存档，或用「📤 导出」备份。"
+            : "建议打开「📋 我的歌单」或「📄 诗歌存档」清理，或使用「📤 导出」备份，以免浏览器空间不足。";
+        return `${head}：${parts.join("、")}。${tail}`;
+    }
+
+    function upsertLocalDataVolumeBanner(container, snap) {
+        if (!container) return;
+        const level = getLocalDataVolumeLevel(snap);
+        let banner = container.querySelector(".local-data-volume-banner");
+        if (level === 0) {
+            banner?.remove();
+            return;
+        }
+        const text = buildLocalDataVolumeMessage(snap, level, true);
+        if (!text) {
+            banner?.remove();
+            return;
+        }
+        if (!banner) {
+            banner = document.createElement("p");
+            banner.className = "local-data-volume-banner";
+            banner.setAttribute("role", "status");
+            const listEl = container.querySelector("#setlist-list, #lyric-template-list, .setlist-modal__list");
+            if (listEl) container.insertBefore(banner, listEl);
+            else container.insertBefore(banner, container.firstChild);
+        }
+        banner.className =
+            "local-data-volume-banner" +
+            (level >= 2 ? " local-data-volume-banner--critical" : " local-data-volume-banner--warn");
+        banner.textContent = text;
+    }
+
+    function maybeRemindLocalDataVolume(anchorEl, opts) {
+        if (isDisplay || isLeader) return;
+        const snap = getLocalDataVolumeSnapshot();
+        const level = getLocalDataVolumeLevel(snap);
+        if (level === 0) return;
+
+        const o = opts && typeof opts === "object" ? opts : {};
+        if (o.sessionOnly) {
+            try {
+                if (sessionStorage.getItem(LOCAL_DATA_REMIND_SESSION_KEY) === "1") return;
+            } catch (_e) {
+                /* ignore */
+            }
+        }
+
+        let st = {};
+        try {
+            st = parseJSON(localStorage.getItem(LOCAL_DATA_REMIND_LS), {});
+        } catch (_e2) {
+            st = {};
+        }
+        const now = Date.now();
+        const lastLevel = Number(st.lastLevel) || 0;
+        const lastAt = Number(st.lastAt) || 0;
+        const cooldown = level >= 2 ? 2 * 86400000 : 7 * 86400000;
+        const escalated = level > lastLevel;
+        if (!o.force && !escalated && lastAt && now - lastAt < cooldown) return;
+
+        const msg = buildLocalDataVolumeMessage(snap, level, false);
+        if (!msg) return;
+        showToast(msg, anchorEl || $("save-setlist-btn") || $("song-library"), {
+            variant: level >= 2 ? "warning" : undefined
+        });
+        try {
+            localStorage.setItem(
+                LOCAL_DATA_REMIND_LS,
+                JSON.stringify({ lastAt: now, lastLevel: level, snap })
+            );
+        } catch (_e3) {
+            /* ignore */
+        }
+        if (o.sessionOnly) {
+            try {
+                sessionStorage.setItem(LOCAL_DATA_REMIND_SESSION_KEY, "1");
+            } catch (_e4) {
+                /* ignore */
+            }
+        }
+    }
+
     function closeSetlistModal() {
         const m = $("setlist-modal");
         if (!m) return;
@@ -8707,6 +10252,8 @@ ${deleteBtnHtml}
     function renderSetlistModalList() {
         const root = $("setlist-list");
         if (!root) return;
+        const snap = getLocalDataVolumeSnapshot();
+        upsertLocalDataVolumeBanner(root.parentElement, snap);
         root.innerHTML = "";
         const lists = loadSavedSetlists();
         if (!lists.length) {
@@ -8721,12 +10268,23 @@ ${deleteBtnHtml}
             card.className = "setlist-card";
             const nameEl = document.createElement("p");
             nameEl.className = "setlist-card__name";
-            nameEl.textContent = String(sl.name || "未命名歌单");
+            const title = String(sl.name || "未命名歌单");
+            nameEl.textContent = title;
+            if (sl.compact) {
+                const tag = document.createElement("span");
+                tag.className = "setlist-card__tag";
+                tag.textContent = "已压缩";
+                nameEl.appendChild(tag);
+            }
             const meta = document.createElement("p");
             meta.className = "setlist-card__meta";
             const n = Array.isArray(sl.songs) ? sl.songs.length : 0;
             const when = sl.createdAt ? new Date(sl.createdAt).toLocaleString() : "—";
-            meta.textContent = `${n} 首 · 保存于 ${when}`;
+            const updated =
+                sl.updatedAt && sl.updatedAt !== sl.createdAt
+                    ? ` · 更新于 ${new Date(sl.updatedAt).toLocaleString()}`
+                    : "";
+            meta.textContent = `${n} 首 · 保存于 ${when}${updated}`;
             const actions = document.createElement("div");
             actions.className = "setlist-card__actions";
             const loadBtn = document.createElement("button");
@@ -8805,7 +10363,9 @@ ${deleteBtnHtml}
                 normalizeLegacyBgImageReference();
                 syncPosYFromCurrentSong();
                 syncOverlayFontOpacityFromCurrentSong();
+                syncPageTransitionFromCurrentSong();
                 updateUIFromState();
+                capturePresentationStyleBaseline();
                 renderSongList();
                 updateSpeakerCards();
                 renderMiniPreview();
@@ -8825,6 +10385,7 @@ ${deleteBtnHtml}
         }
         broadcastState();
         closeSetlistModal();
+        renderPlaylist();
         showToast(
             hasSnap ? "已加载歌单（含背景与排版）" : "已加载歌单",
             triggerBtn || $("load-setlist-btn")
@@ -8864,6 +10425,8 @@ ${deleteBtnHtml}
         }
         const inp = $("setlist-name-input");
         if (inp) inp.value = "";
+        const dupHint = $("setlist-name-dup-hint");
+        if (dupHint) dupHint.hidden = true;
         setlistNameModalCtx = null;
     }
 
@@ -8881,6 +10444,7 @@ ${deleteBtnHtml}
         window.requestAnimationFrame(() => {
             inp.focus();
             inp.select();
+            updateSetlistNameDuplicateHint();
         });
         return true;
     }
@@ -9071,6 +10635,12 @@ ${deleteBtnHtml}
             row.fontOpacityPct = clamp(Number(song.fontOpacityPct), 20, 100);
         }
         if (Number.isFinite(Number(song.posY))) row.posY = clamp(Number(song.posY), 20, 70);
+        if (songHasOwnPageTransition(song)) {
+            row.pageTransition = canonicalPageTransition(song.pageTransition);
+            if (song.pageTransitionSpeed != null && Number.isFinite(Number(song.pageTransitionSpeed))) {
+                row.pageTransitionSpeed = clamp(Math.round(Number(song.pageTransitionSpeed) * 10) / 10, 0.3, 1.5);
+            }
+        }
         return row;
     }
 
@@ -9087,8 +10657,8 @@ ${deleteBtnHtml}
             vignetteShape: u.vignetteShape,
             vignetteCenterBrightness: u.vignetteCenterBrightness,
             vignetteEdgeDarkness: u.vignetteEdgeDarkness,
-            pageTransition: u.pageTransition,
-            pageTransitionSpeed: u.pageTransitionSpeed
+            pageTransition: canonicalPageTransition(defaultPageTransition),
+            pageTransitionSpeed: clamp(Math.round(Number(defaultPageTransitionSpeed) * 10) / 10, 0.3, 1.5)
         };
     }
 
@@ -9113,6 +10683,12 @@ ${deleteBtnHtml}
         }
         if (Number.isFinite(Number(song.fontOpacityPct))) {
             row.fontOpacityPct = clamp(Number(song.fontOpacityPct), 20, 100);
+        }
+        if (songHasOwnPageTransition(song)) {
+            row.pageTransition = canonicalPageTransition(song.pageTransition);
+            if (song.pageTransitionSpeed != null && Number.isFinite(Number(song.pageTransitionSpeed))) {
+                row.pageTransitionSpeed = clamp(Math.round(Number(song.pageTransitionSpeed) * 10) / 10, 0.3, 1.5);
+            }
         }
         return row;
     }
@@ -9144,11 +10720,132 @@ ${deleteBtnHtml}
             state.ui.vignetteEdgeDarkness = clamp(Number(d.vignetteEdgeDarkness), 0, 90);
         }
         if (d.pageTransition != null) {
-            state.ui.pageTransition = canonicalPageTransition(d.pageTransition);
+            defaultPageTransition = canonicalPageTransition(d.pageTransition);
+            state.ui.pageTransition = defaultPageTransition;
         }
         if (d.pageTransitionSpeed != null && Number.isFinite(Number(d.pageTransitionSpeed))) {
-            state.ui.pageTransitionSpeed = clamp(Number(d.pageTransitionSpeed), 0.3, 1.5);
+            defaultPageTransitionSpeed = clamp(Number(d.pageTransitionSpeed), 0.3, 1.5);
+            state.ui.pageTransitionSpeed = defaultPageTransitionSpeed;
         }
+    }
+
+    function normalizeSetlistDisplayName(name) {
+        return String(name || "").trim();
+    }
+
+    function setlistNamesMatch(a, b) {
+        const x = normalizeSetlistDisplayName(a).toLowerCase();
+        const y = normalizeSetlistDisplayName(b).toLowerCase();
+        return x.length > 0 && x === y;
+    }
+
+    function findSavedSetlistIndexByName(name, lists) {
+        const arr = Array.isArray(lists) ? lists : [];
+        return arr.findIndex((sl) => sl && setlistNamesMatch(sl.name, name));
+    }
+
+    function updateSetlistNameDuplicateHint() {
+        const inp = $("setlist-name-input");
+        const hint = $("setlist-name-dup-hint");
+        if (!inp || !hint) return;
+        const name = normalizeSetlistDisplayName(inp.value);
+        if (!name) {
+            hint.hidden = true;
+            return;
+        }
+        const dup = findSavedSetlistIndexByName(name, loadSavedSetlists()) >= 0;
+        hint.hidden = !dup;
+    }
+
+    function gatherSetlistPayloadFromIds(ids) {
+        const songEntries = [];
+        const librarySnapshots = [];
+        const tracks = [];
+        (Array.isArray(ids) ? ids : []).forEach((id) => {
+            const song = state.songs.find((s) => String(s.id) === String(id));
+            if (song) {
+                try {
+                    songEntries.push(JSON.parse(JSON.stringify(song)));
+                } catch (_e) {
+                    songEntries.push({ ...song });
+                }
+            }
+            const libSnap = gatherSetlistSongLibrarySnapshot(id);
+            if (libSnap) librarySnapshots.push(libSnap);
+            const row = gatherSetlistTrackPresentationSnapshot(id);
+            if (row) tracks.push(row);
+        });
+        return { songEntries, librarySnapshots, tracks };
+    }
+
+    function buildSetlistEntry(name, ids, opts) {
+        const o = opts && typeof opts === "object" ? opts : {};
+        const payload = gatherSetlistPayloadFromIds(ids);
+        const now = Date.now();
+        return {
+            id: o.overwriteId || "setlist_" + now,
+            name: normalizeSetlistDisplayName(name),
+            songs: [...ids],
+            createdAt: o.preserveCreatedAt != null ? o.preserveCreatedAt : now,
+            updatedAt: now,
+            songEntries: payload.songEntries,
+            librarySnapshots: payload.librarySnapshots,
+            presentation: {
+                v: SETLIST_PRESENTATION_SNAPSHOT_V,
+                defaults: gatherSetlistTypographyDefaultsForSnapshot(),
+                tracks: payload.tracks
+            }
+        };
+    }
+
+    function stripInlineMediaFromSetlistSnap(snap) {
+        if (!snap || typeof snap !== "object") return;
+        if (typeof snap.bgImage === "string" && /^data:/i.test(snap.bgImage)) snap.bgImage = "";
+        if (snap.background && typeof snap.background === "object") {
+            if (typeof snap.background.bgImage === "string" && /^data:/i.test(snap.background.bgImage)) {
+                snap.background.bgImage = "";
+            }
+        }
+    }
+
+    /** level 1：去掉内嵌 base64 背景；level 2：去掉完整 songEntries 副本（保留 librarySnapshots） */
+    function compressSetlistEntry(entry, level) {
+        const out = JSON.parse(JSON.stringify(entry));
+        const lv = Math.max(1, Math.floor(Number(level) || 1));
+        if (lv >= 1) {
+            (out.songEntries || []).forEach(stripInlineMediaFromSetlistSnap);
+            (out.librarySnapshots || []).forEach(stripInlineMediaFromSetlistSnap);
+            (out.presentation?.tracks || []).forEach(stripInlineMediaFromSetlistSnap);
+            out.compact = true;
+            out.compactLevel = 1;
+        }
+        if (lv >= 2) {
+            delete out.songEntries;
+            out.compactLevel = 2;
+        }
+        return out;
+    }
+
+    function persistSetlistEntryWithCompression(entry, lists, replaceIndex) {
+        const levels = [
+            { level: 0, suffix: "" },
+            { level: 1, suffix: "（已压缩背景大图）" },
+            { level: 2, suffix: "（已精简副本）" }
+        ];
+        for (let i = 0; i < levels.length; i++) {
+            const { level, suffix } = levels[i];
+            const candidate =
+                level > 0 ? compressSetlistEntry(entry, level) : JSON.parse(JSON.stringify(entry));
+            const draft = lists.slice();
+            if (replaceIndex >= 0) draft[replaceIndex] = candidate;
+            else draft.push(candidate);
+            if (tryPersistSavedSetlists(draft)) {
+                if (replaceIndex >= 0) lists[replaceIndex] = candidate;
+                else lists.push(candidate);
+                return { ok: true, suffix, compact: level > 0 };
+            }
+        }
+        return { ok: false };
     }
 
     function applySetlistTrackPresentationToSong(song, track) {
@@ -9169,13 +10866,21 @@ ${deleteBtnHtml}
         if (track.fontOpacityPct != null && Number.isFinite(Number(track.fontOpacityPct))) {
             song.fontOpacityPct = clamp(Number(track.fontOpacityPct), 20, 100);
         }
+        if (track.pageTransition != null && String(track.pageTransition).trim()) {
+            song.pageTransition = canonicalPageTransition(track.pageTransition);
+            if (track.pageTransitionSpeed != null && Number.isFinite(Number(track.pageTransitionSpeed))) {
+                song.pageTransitionSpeed = clamp(Number(track.pageTransitionSpeed), 0.3, 1.5);
+            } else {
+                delete song.pageTransitionSpeed;
+            }
+        }
     }
 
     function commitSetlistNameModalSave() {
         const inp = $("setlist-name-input");
         const ctx = setlistNameModalCtx;
         if (!inp || !ctx) return;
-        const trimmed = String(inp.value || "").trim();
+        const trimmed = normalizeSetlistDisplayName(inp.value);
         if (!trimmed) {
             showToast("请输入歌单名称", $("setlist-name-confirm"));
             return;
@@ -9189,49 +10894,41 @@ ${deleteBtnHtml}
         } catch (_e) {
             /* ignore */
         }
-        const librarySnapshots = [];
-        const songEntries = [];
-        const tracks = [];
-        ctx.ids.forEach((id) => {
-            const song = state.songs.find((s) => String(s.id) === String(id));
-            if (song) {
-                try {
-                    songEntries.push(JSON.parse(JSON.stringify(song)));
-                } catch (_e) {
-                    songEntries.push({ ...song });
-                }
-            }
-            const libSnap = gatherSetlistSongLibrarySnapshot(id);
-            if (libSnap) librarySnapshots.push(libSnap);
-            const row = gatherSetlistTrackPresentationSnapshot(id);
-            if (row) tracks.push(row);
-        });
         let lists = loadSavedSetlists();
-        const entry = {
-            id: "setlist_" + Date.now(),
-            name: trimmed,
-            songs: [...ctx.ids],
-            createdAt: Date.now(),
-            songEntries,
-            librarySnapshots,
-            presentation: {
-                v: SETLIST_PRESENTATION_SNAPSHOT_V,
-                defaults: gatherSetlistTypographyDefaultsForSnapshot(),
-                tracks
+        const existingIx = findSavedSetlistIndexByName(trimmed, lists);
+        let replaceIndex = -1;
+        let buildOpts = {};
+        if (existingIx >= 0) {
+            if (!ctx.forceOverwrite) {
+                const existingName = lists[existingIx].name || trimmed;
+                if (
+                    !window.confirm(
+                        `已存在同名歌单「${existingName}」。\n是否用当前播放列表覆盖保存？\n（原歌单内容将被替换）`
+                    )
+                ) {
+                    return;
+                }
+                ctx.forceOverwrite = true;
             }
-        };
+            replaceIndex = existingIx;
+            buildOpts = {
+                overwriteId: lists[existingIx].id,
+                preserveCreatedAt: lists[existingIx].createdAt || Date.now()
+            };
+        }
+        const entry = buildSetlistEntry(trimmed, ctx.ids, buildOpts);
         const btn = ctx.triggerBtn;
-        try {
-            lists.push(entry);
-            persistSavedSetlists(lists);
-        } catch (err) {
-            console.warn("persist setlists", err);
-            showToast("歌单保存失败", btn);
+        const result = persistSetlistEntryWithCompression(entry, lists, replaceIndex);
+        if (!result.ok) {
+            console.warn("persist setlists failed after compression retries");
+            showToast("歌单保存失败：浏览器存储空间不足，请删除旧歌单或导出备份后重试", btn);
             closeSetlistNameModal();
             return;
         }
         closeSetlistNameModal();
-        showToast("歌单已保存", btn, { variant: "success" });
+        const msg = replaceIndex >= 0 ? "已覆盖保存歌单" : "歌单已保存";
+        showToast(msg + (result.suffix || ""), btn, { variant: "success" });
+        maybeRemindLocalDataVolume(btn);
     }
 
     function installSetlistNameModalHandlers() {
@@ -9255,15 +10952,18 @@ ${deleteBtnHtml}
                 commitSetlistNameModalSave();
             }
         });
+        inp?.addEventListener("input", () => updateSetlistNameDuplicateHint());
     }
 
     function addToPlaylist(songId, triggerElement) {
         if (!songId) return;
-        if (state.playlist.items.includes(songId)) {
+        if (playlistIncludesSongId(songId)) {
             flashSongAddBtnDuplicate(triggerElement);
             return;
         }
-        state.playlist.items.push(songId);
+        const song = findSongByPlaylistId(songId);
+        if (!song) return;
+        state.playlist.items.push(song.id);
         savePlaylist();
         renderPlaylist({ highlightSongId: songId });
         if (triggerElement) {
@@ -9281,19 +10981,13 @@ ${deleteBtnHtml}
     }
 
     function removeFromPlaylist(songId, opts) {
-        if (!songId || state.playlist.items.indexOf(songId) < 0) return;
+        if (!songId || playlistIndexOfSongId(songId) < 0) return;
 
         const commitRemove = () => {
-            const idx = state.playlist.items.indexOf(songId);
+            const idx = playlistIndexOfSongId(songId);
             if (idx < 0) return;
             state.playlist.items.splice(idx, 1);
-            if (state.playlist.activeIndex >= state.playlist.items.length) {
-                state.playlist.activeIndex = Math.max(0, state.playlist.items.length - 1);
-            }
-            if (!state.playlist.items.length) {
-                state.playlist.running = false;
-                state.playlist.activeIndex = -1;
-            }
+            reconcilePlaylistState({ removedAtIndex: idx });
             savePlaylist();
             renderPlaylist();
             syncSongAddButtonsForId(songId, { animateRestore: true });
@@ -9315,7 +11009,7 @@ ${deleteBtnHtml}
     function switchToPlaylistSong(index, withFade, whichPage) {
         if (index < 0 || index >= state.playlist.items.length) return false;
         const songId = state.playlist.items[index];
-        if (!state.songs.some((s) => s.id === songId)) return false;
+        if (!findSongByPlaylistId(songId)) return false;
         state.playlist.running = true;
         state.playlist.activeIndex = index;
         if (withFade) state.playlist.fadeNext = true;
@@ -9323,9 +11017,9 @@ ${deleteBtnHtml}
         if (whichPage === "last") {
             const lp = splitPages(getStablePagingLyricsForPageSplit(), state.ui.defaultLines);
             state.currentPage = Math.max(0, lp.length - 1);
+            updateSpeakerCards();
+            renderMiniPreview();
         }
-        updateSpeakerCards();
-        renderMiniPreview();
         renderPlaylist();
         broadcastState();
         savePlaylist();
@@ -9469,8 +11163,8 @@ ${deleteBtnHtml}
             mini.classList.add(`css-bg-${state.ui.bgType}`);
         } else if (state.ui.bgType === "solid-white") mini.style.background = "rgba(255, 255, 255, 0.55)";
         else if (state.ui.bgType === "solid-gray") mini.style.background = "rgba(68, 68, 68, 0.55)";
-        else if (state.ui.bgType === "gradient") {
-            mini.style.background = "linear-gradient(140deg, rgba(27, 47, 89, 0.55), rgba(10, 15, 29, 0.55))";
+        else if (PRESET_GRADIENT_BG_TYPES.has(state.ui.bgType)) {
+            mini.style.background = presetGradientCss(state.ui.bgType);
         } else if (state.ui.bgType === "image" && state.ui.bgImage && state.ui.bgMediaType === "video") {
             mini.style.background = "#000";
             let v = mini.querySelector(".mini-preview-bg-video");
@@ -9992,11 +11686,9 @@ ${deleteBtnHtml}
 
     function initFontFamilySelector() {
         const sel = $("font-family-selector");
-        if (!sel || !globalThis.WorshipFontData || typeof globalThis.WorshipFontData.populateFontFamilySelect !== "function") {
-            return;
-        }
-        let fixed = false;
-        globalThis.WorshipFontData.populateFontFamilySelect(sel, {
+        const fd = globalThis.WorshipFontData;
+        if (!sel || !fd || typeof fd.populateFontFamilySelect !== "function") return;
+        fd.populateFontFamilySelect(sel, {
             currentValue: state.ui.fontFamily,
             uiForPresetMatch: {
                 fontFamily: state.ui.fontFamily,
@@ -10005,10 +11697,12 @@ ${deleteBtnHtml}
             },
             onMissing: (resolved) => {
                 state.ui.fontFamily = resolved;
-                fixed = true;
             }
         });
-        if (fixed) saveSettings();
+        sel.disabled = false;
+        sel.removeAttribute("aria-hidden");
+        const row = sel.closest(".adv-drawer-field") || sel.parentElement;
+        if (row) row.hidden = false;
     }
 
     function ensureFontColorControls() {
@@ -10096,9 +11790,11 @@ ${deleteBtnHtml}
                 state.ui.fontColor = c;
                 updateUIFromState();
                 saveSettings();
+                persistCurrentSongTypographyAfterUiChange();
                 updateSpeakerCards();
                 renderMiniPreview();
                 scheduleLiveStyleProjectionPush({ fontColor: c });
+                scheduleGalleryVisualStyleRelayout();
             });
             chips.appendChild(chip);
         });
@@ -10108,9 +11804,11 @@ ${deleteBtnHtml}
                 state.ui.fontColor = val;
                 updateUIFromState();
                 saveSettings();
+                persistCurrentSongTypographyAfterUiChange();
                 updateSpeakerCards();
                 renderMiniPreview();
                 scheduleLiveStyleProjectionPush({ fontColor: val });
+                scheduleGalleryVisualStyleRelayout();
             } else {
                 showToast("请输入有效颜色", $("font-color-custom"));
             }
@@ -10147,7 +11845,7 @@ ${deleteBtnHtml}
                 if (ov) ov.textContent = String(pct);
                 updateAdvSliderSwatches();
                 scheduleMiniSliderDomPreview(() => applyMiniPreviewProjectionMaskOpacity(pct));
-                refreshMonitorContent();
+                scheduleLiveStyleProjectionPush({ overlayOpacityPct: pct });
             });
             rng.addEventListener("change", () => {
                 state.ui.overlayOpacityPct = clamp(Number(rng.value || 0), 0, 80);
@@ -10157,51 +11855,33 @@ ${deleteBtnHtml}
                 if (song) song.overlayOpacityPct = state.ui.overlayOpacityPct;
                 updateAdvSliderSwatches();
                 saveSongs();
+                capturePresentationStyleBaseline();
+                updateEditorUnsavedIndicator();
                 updateAll();
             });
         }
     }
 
-    function updateBgImageThumb() {
-        const imageOption = document.querySelector('.bg-option[data-bg="image"]');
-        if (!imageOption) return;
-        if (state.ui.bgImage && state.ui.bgMediaType === "video") {
-            imageOption.style.backgroundImage = "none";
-            imageOption.style.background = "linear-gradient(145deg,#2a2a3c,#121218)";
-            imageOption.style.backgroundSize = "";
-            imageOption.style.backgroundPosition = "";
-            imageOption.style.borderStyle = "solid";
-            imageOption.title = "视频背景";
-        } else if (state.ui.bgImage) {
-            imageOption.style.background = "";
-            imageOption.style.backgroundImage = `url("${state.ui.bgImage}")`;
-            imageOption.style.backgroundSize = "cover";
-            imageOption.style.backgroundPosition = "center";
-            imageOption.style.borderStyle = "solid";
-            imageOption.title = "从文件上传";
-        } else {
-            imageOption.style.background = "";
-            imageOption.style.backgroundImage = "";
-            imageOption.style.borderStyle = "dashed";
-        }
-    }
-
     function updateUIFromState() {
         try {
-            document.documentElement.style.setProperty(
-                "--worship-app-font-family",
-                state.ui.fontFamily || "'Microsoft YaHei','PingFang SC',sans-serif"
-            );
+            document.documentElement.style.setProperty("--worship-app-font-family", CONSOLE_UI_FONT_FAMILY);
         } catch (_e) {
             /* ignore */
         }
         scheduleEnsureLyricWebFonts(state.ui.fontFamily);
         if ($("theme-selector")) $("theme-selector").value = state.ui.theme;
         const fontSel = $("font-family-selector");
-        if (fontSel && globalThis.WorshipFontData && typeof globalThis.WorshipFontData.syncFontFamilySelectToState === "function") {
-            globalThis.WorshipFontData.syncFontFamilySelectToState(fontSel, state.ui);
-        } else if (fontSel) {
-            fontSel.value = state.ui.fontFamily;
+        if (
+            fontSel &&
+            globalThis.WorshipFontData &&
+            typeof globalThis.WorshipFontData.syncFontFamilySelectToState === "function"
+        ) {
+            globalThis.WorshipFontData.syncFontFamilySelectToState(fontSel, {
+                fontFamily: state.ui.fontFamily,
+                fontColor: state.ui.fontColor,
+                fontWeight: state.ui.fontWeight
+            });
+            fontSel.disabled = false;
         }
         const megaEl = $("font-mega-mode");
         if (megaEl) megaEl.checked = !!state.ui.fontMegaMode;
@@ -10233,7 +11913,6 @@ ${deleteBtnHtml}
             $("font-opacity-val").textContent = String(clamp(Number(state.ui.fontOpacityPct), 20, 100));
         }
         document.body.setAttribute("data-theme", state.ui.theme);
-        updateBgImageThumb();
         if ($("font-color-custom")) $("font-color-custom").value = state.ui.fontColor;
         document.querySelectorAll(".font-color-chip").forEach((chip) => {
             chip.classList.toggle("active", chip.dataset.color === state.ui.fontColor);
@@ -10247,18 +11926,6 @@ ${deleteBtnHtml}
             getComputedStyle(document.documentElement).getPropertyValue("--adv-preview-line-height") || "1.65"
         ).trim();
         if ($("adv-preview-line-height")) $("adv-preview-line-height").value = lh || "1.65";
-        const mr = parseFloat(
-            getComputedStyle(document.documentElement).getPropertyValue("--adv-mini-readability") || "0"
-        );
-        if ($("adv-lyric-overlay-opacity") && Number.isFinite(mr)) {
-            $("adv-lyric-overlay-opacity").value = String(clamp(Math.round(mr * 100), 0, 55));
-        }
-        const blurPx = parseFloat(
-            getComputedStyle(document.documentElement).getPropertyValue("--adv-mini-blur-px") || "0"
-        );
-        if ($("adv-lyric-layer-blur") && Number.isFinite(blurPx)) {
-            $("adv-lyric-layer-blur").value = String(clamp(Math.round(blurPx), 0, 20));
-        }
         if ($("text-stroke-slider")) $("text-stroke-slider").value = String(clamp(Number(state.ui.textStrokePx), 0, 6));
         if ($("text-stroke-val")) $("text-stroke-val").textContent = String(clamp(Number(state.ui.textStrokePx), 0, 6));
         if ($("vignette-shape-select")) $("vignette-shape-select").value = state.ui.vignetteShape === "ellipse" ? "ellipse" : "circle";
@@ -10282,6 +11949,7 @@ ${deleteBtnHtml}
         if ($("page-transition-speed-val")) $("page-transition-speed-val").textContent = psp.toFixed(1);
         ensureFontOpacitySwatchLayout();
         updateAdvSliderSwatches();
+        updatePageTransitionScopeUi();
         updateCloudUploadBtnState();
         try {
             syncGlobalProjectionUiFallback();
@@ -10349,6 +12017,8 @@ ${deleteBtnHtml}
         state.currentPage = clamp(state.currentPage, 0, Math.max(0, pages.length - 1));
         const fadeNow = !!state.playlist.fadeNext;
         state.playlist.fadeNext = false;
+        const songSwitchAnim = !!state._pendingSongSwitchAnim;
+        if (songSwitchAnim) state._pendingSongSwitchAnim = false;
         const overlayPct = clamp(Number(state.ui.overlayOpacityPct), 0, 80);
         const fontOpPct = clamp(Number(state.ui.fontOpacityPct), 20, 100);
         const base = {
@@ -10360,6 +12030,7 @@ ${deleteBtnHtml}
             overlayOpacityPct: overlayPct,
             fontOpacityPct: fontOpPct,
             playlistFade: fadeNow,
+            songSwitchAnim,
             pages,
             pageIndex: state.currentPage,
             text: {
@@ -10370,12 +12041,18 @@ ${deleteBtnHtml}
                 color: state.ui.bgType === "solid-white" ? "#111" : state.ui.fontColor,
                 strokePx: clamp(Number(state.ui.textStrokePx), 0, 6)
             },
-            pageTransition: canonicalPageTransition(state.ui.pageTransition),
+            pageTransition: canonicalPageTransition(
+                song ? getEffectivePageTransition(song) : state.ui.pageTransition
+            ),
             pageTransitionSpeed:
-                Math.round(clamp(Number(state.ui.pageTransitionSpeed), 0.3, 1.5) * 10) / 10,
+                Math.round(
+                    clamp(song ? getEffectivePageTransitionSpeed(song) : Number(state.ui.pageTransitionSpeed), 0.3, 1.5) *
+                        10
+                ) / 10,
             vignetteShape: state.ui.vignetteShape === "ellipse" ? "ellipse" : "circle",
             vignetteCenterBrightness: clamp(Number(state.ui.vignetteCenterBrightness), -50, 50),
             vignetteEdgeDarkness: clamp(Number(state.ui.vignetteEdgeDarkness), 0, 90),
+            lineHeight: getAdvPreviewLineHeightNumber(),
             background: {
                 type: state.ui.bgType,
                 imageData: state.ui.bgImage,
@@ -10590,6 +12267,8 @@ ${deleteBtnHtml}
         if (o.fontSize != null) text.fontSize = clampLyricFontSize(o.fontSize);
         if (o.posY != null) text.topPct = clamp(Number(o.posY), 20, 70);
         if (o.textStrokePx != null) text.strokePx = clamp(Number(o.textStrokePx), 0, 6);
+        if (o.fontFamily != null) text.fontFamily = String(o.fontFamily);
+        if (o.fontWeight != null) text.fontWeight = String(o.fontWeight);
         if (o.fontColor != null) {
             const c = String(o.fontColor).trim();
             snap.fontColor = c;
@@ -10598,7 +12277,28 @@ ${deleteBtnHtml}
         }
         let fontOpacityPct = snap.fontOpacityPct;
         if (o.fontOpacityPct != null) fontOpacityPct = clamp(Number(o.fontOpacityPct), 20, 100);
-        return { ...snap, text, fontOpacityPct };
+        let overlayOpacityPct = snap.overlayOpacityPct;
+        if (o.overlayOpacityPct != null) overlayOpacityPct = clamp(Number(o.overlayOpacityPct), 0, 80);
+        let vignetteShape = snap.vignetteShape;
+        if (o.vignetteShape != null) vignetteShape = o.vignetteShape === "ellipse" ? "ellipse" : "circle";
+        let vignetteCenterBrightness = snap.vignetteCenterBrightness;
+        if (o.vignetteCenterBrightness != null) {
+            vignetteCenterBrightness = clamp(Number(o.vignetteCenterBrightness), -50, 50);
+        }
+        let vignetteEdgeDarkness = snap.vignetteEdgeDarkness;
+        if (o.vignetteEdgeDarkness != null) vignetteEdgeDarkness = clamp(Number(o.vignetteEdgeDarkness), 0, 90);
+        let lineHeight = snap.lineHeight;
+        if (o.lineHeight != null) lineHeight = clamp(Number(o.lineHeight), 1.2, 2.4);
+        return {
+            ...snap,
+            text,
+            fontOpacityPct,
+            overlayOpacityPct,
+            vignetteShape,
+            vignetteCenterBrightness,
+            vignetteEdgeDarkness,
+            lineHeight
+        };
     }
 
     let _liveStylePushRaf = 0;
@@ -10634,6 +12334,8 @@ ${deleteBtnHtml}
             const o = _liveStyleOverrides;
             _liveStyleOverrides = null;
             refreshMonitorContent(o, null, { persist: false, styleOnly: true });
+            scheduleGalleryVisualStyleRelayout();
+            if (o.posY != null) scheduleGalleryLyricPadRelayout();
         });
     }
 
@@ -10742,7 +12444,9 @@ ${deleteBtnHtml}
             textStrokePx: t.strokePx,
             lightBg
         });
-        const lh = getAdvPreviewLineHeightNumber();
+        const lh = Number.isFinite(Number(snap.lineHeight))
+            ? clamp(Number(snap.lineHeight), 1.2, 2.4)
+            : getAdvPreviewLineHeightNumber();
 
         const { bgEl, videoEl, mask, vig, lyr } = ensureMonitorPreviewLayers(content);
         if (!bgEl || !videoEl || !mask || !vig || !lyr) return;
@@ -10788,8 +12492,8 @@ ${deleteBtnHtml}
                 bgEl.style.background = "#fff";
             } else if (type === "solid-gray") {
                 bgEl.style.background = "#444";
-            } else if (type === "gradient") {
-                bgEl.style.background = "linear-gradient(135deg,#1a2f59,#0a0f1d)";
+            } else if (PRESET_GRADIENT_BG_TYPES.has(type)) {
+                bgEl.style.background = presetGradientCss(type);
             } else if (type === "image" && bgState.imageData) {
                 bgEl.style.backgroundImage = `url("${bgState.imageData}")`;
                 bgEl.style.backgroundSize = "cover";
@@ -10844,7 +12548,9 @@ ${deleteBtnHtml}
         };
 
         const transEff = canonicalPageTransition(snap.pageTransition);
-        const durTrans = clamp(Number(snap.pageTransitionSpeed), 0.3, 1.5);
+        const durTrans = snap.songSwitchAnim
+            ? worshipFluidSongSwitchDurSec()
+            : worshipFluidDurScale(clamp(Number(snap.pageTransitionSpeed), 0.3, 1.5));
         const prevP = host.dataset.monitorLastPage;
         const prevS = host.dataset.monitorLastSongId;
         const navChanged =
@@ -10852,9 +12558,9 @@ ${deleteBtnHtml}
             (String(prevP) !== String(idx) || String(prevS || "") !== curSid);
         const shouldTrans =
             navChanged &&
-            !snap.playlistFade &&
             !projectionDisplayIsVideoBackground(snap) &&
-            transEff !== "none";
+            (snap.songSwitchAnim || (!snap.playlistFade && transEff !== "none"));
+        const transForAnim = snap.songSwitchAnim ? "fade" : transEff;
 
         const finishMonitorNavState = () => {
             host.dataset.monitorLastPage = String(idx);
@@ -10882,12 +12588,53 @@ ${deleteBtnHtml}
             applyStaticLyricPresentation();
         } else {
             layoutMonitorPreviewScale();
-            runMonitorLyricExitThen(anim, transEff, durTrans, () => {
+            const chasing = pageNavChasingThisFrame;
+            const epoch = pageNavTransEpoch;
+            const finishMonitorSwap = () => {
                 fillMonitorLyricInner();
-                runMiniPageTransitionEnter(anim, transEff, durTrans, snap.fontOpacityPct);
+                const enterDur = chasing
+                    ? Math.max(0.16, clamp(Number(snap.pageTransitionSpeed), 0.3, 1.5) * 0.48)
+                    : durTrans;
+                runMiniPageTransitionEnter(anim, transForAnim, enterDur, snap.fontOpacityPct, "", {
+                    songSwitch: !!snap.songSwitchAnim,
+                    rawDur: chasing
+                });
                 finishMonitorNavState();
                 layoutMonitorPreviewScale();
-            });
+                pageNavTransEpoch = 0;
+            };
+            if (chasing) {
+                flushMonitorLyricTrans({ invokePending: false });
+                const chaseDur = Math.max(0.1, clamp(Number(snap.pageTransitionSpeed), 0.3, 1.5) * 0.28);
+                monitorLyricTransPending = finishMonitorSwap;
+                runLyricCssFadeThen(
+                    anim,
+                    chaseDur,
+                    WORSHIP_FLUID_EASE_CROSS,
+                    "0.12",
+                    "",
+                    () => {
+                        monitorLyricTransTimer = 0;
+                        const fn = monitorLyricTransPending;
+                        monitorLyricTransPending = null;
+                        monitorLyricExitArm = null;
+                        if (fn) fn();
+                    },
+                    (arm) => {
+                        monitorLyricExitArm = arm;
+                        if (arm) monitorLyricTransTimer = arm.fallbackId;
+                    },
+                    { rawDur: true }
+                );
+            } else {
+                runMonitorLyricExitThen(anim, transForAnim, durTrans, () => {
+                    if (epoch !== pageNavTransEpoch) {
+                        finishMonitorSwap();
+                        return;
+                    }
+                    finishMonitorSwap();
+                });
+            }
         }
     }
 
@@ -11248,7 +12995,6 @@ ${deleteBtnHtml}
             }
             renderPlaylist();
             broadcastState();
-            renderPageGallery();
         } finally {
             const song = currentSong();
             if (song && mergedPaging.length > String(song.lyrics || "").length) {
@@ -11310,7 +13056,9 @@ ${deleteBtnHtml}
         if (!state.songs.length) {
             state.songs.push({ id: uid(), ...DEFAULT_SONG });
         }
-        state.playlist.items = state.playlist.items.filter((id) => id !== songId);
+        const plRemovedAt = playlistIndexOfSongId(songId);
+        state.playlist.items = state.playlist.items.filter((id) => !playlistSongIdMatch(id, songId));
+        reconcilePlaylistState({ removedAtIndex: plRemovedAt >= 0 ? plRemovedAt : -1 });
         savePlaylist();
         if (state.currentSongId === songId) {
             state.currentSongId = state.songs[0].id;
@@ -11338,13 +13086,14 @@ ${deleteBtnHtml}
             return;
         }
         if (!confirm(`确定删除选中的 ${ids.length} 首诗歌？`)) return;
-        const rm = new Set(ids);
-        state.songs = state.songs.filter((s) => !rm.has(s.id));
+        const rm = new Set(ids.map(String));
+        state.songs = state.songs.filter((s) => !rm.has(String(s.id)));
         libraryBatchSelected.clear();
         if (!state.songs.length) {
             state.songs.push({ id: uid(), ...DEFAULT_SONG });
         }
-        state.playlist.items = state.playlist.items.filter((id) => !rm.has(id));
+        state.playlist.items = state.playlist.items.filter((id) => !rm.has(String(id)));
+        reconcilePlaylistState();
         savePlaylist();
         if (!state.songs.some((s) => s.id === state.currentSongId)) {
             state.currentSongId = state.songs[0].id;
@@ -11396,11 +13145,16 @@ ${deleteBtnHtml}
                 if (action === "cancel") return;
                 if (action === "save") {
                     saveCurrentLyrics({ silent: true });
+                    persistCurrentSongPresentationFromUi(state.currentSongId);
+                    saveSongs();
+                    capturePresentationStyleBaseline();
                     switchSongCore(songId, { ...(opts || {}), skipUnsavedCheck: true });
                     return;
                 }
                 if (action === "discard") {
                     revertEditorToPersistBaseline();
+                    revertPresentationStyleToBaseline();
+                    capturePresentationStyleBaseline();
                     switchSongCore(songId, { ...(opts || {}), skipUnsavedCheck: true });
                 }
             });
@@ -11411,21 +13165,28 @@ ${deleteBtnHtml}
 
     function switchSongCore(songId, opts) {
         if (!state.songs.some((s) => s.id === songId)) return;
+        const prevSongId = state.currentSongId;
         libraryPendingDeleteId = "";
         if (!isDisplay && !isLeader) {
             syncEditorToSong();
-            persistSongBackgroundFromUi(state.currentSongId);
+            persistCurrentSongPresentationFromUi(state.currentSongId);
             saveSongs();
         }
         state.currentSongId = songId;
+        if (String(prevSongId || "") !== String(songId || "")) {
+            state._pendingSongSwitchAnim = true;
+        }
         if (!isDisplay && !isLeader) {
             hydrateCurrentSongBackgroundIntoUi();
+            hydrateCurrentSongTypographyIntoUi();
         }
         syncPosYFromCurrentSong();
         syncOverlayFontOpacityFromCurrentSong();
+        syncPageTransitionFromCurrentSong();
         updateUIFromState();
         syncSongToEditor();
         captureEditorPersistBaseline();
+        capturePresentationStyleBaseline();
         const song = state.songs.find((s) => String(s.id) === String(songId));
         const stepCount = song ? Math.max(1, getPlaybackSequenceForSong(song, true).length) : 1;
         const wantPage = opts && opts.page != null && Number.isFinite(Number(opts.page)) ? Math.floor(Number(opts.page)) : 0;
@@ -11435,7 +13196,7 @@ ${deleteBtnHtml}
         renderMiniPreview();
         renderPlaylist();
         saveSettings();
-        renderPageGallery();
+        broadcastState();
     }
 
     let lyricDraftSaveTimer = 0;
@@ -11750,8 +13511,6 @@ ${deleteBtnHtml}
     function collectWorshipBackupLocalExtras() {
         const keys = [
             THEME_BG_OPACITY_STORAGE,
-            ADV_MINI_OVERLAY_PCT_LS,
-            ADV_MINI_BLUR_PX_LS,
             ADV_PREVIEW_LINE_HEIGHT_LS,
             ADV_ACC_STORAGE_KEY,
             "worship_theme_wallpaper",
@@ -11894,11 +13653,10 @@ ${deleteBtnHtml}
         if (data.playlist && typeof data.playlist === "object") {
             state.playlist.items = Array.isArray(data.playlist.items) ? data.playlist.items : [];
             state.playlist.running = !!data.playlist.running;
-            state.playlist.activeIndex = clamp(
-                Number(data.playlist.activeIndex) || 0,
-                0,
-                Math.max(0, state.playlist.items.length - 1)
-            );
+            state.playlist.activeIndex = Number.isFinite(Number(data.playlist.activeIndex))
+                ? Number(data.playlist.activeIndex)
+                : 0;
+            reconcilePlaylistState();
             setStore(STORAGE.PLAYLIST, {
                 items: state.playlist.items,
                 running: state.playlist.running,
@@ -12006,6 +13764,7 @@ ${deleteBtnHtml}
             }
         }
         syncEditorToSong();
+        persistCurrentSongPresentationFromUi(state.currentSongId);
         const song = currentSong();
         if (song) reconcilePlaybackSequenceAfterLyricsChange(song, { toast: true });
         saveSongs();
@@ -12015,6 +13774,7 @@ ${deleteBtnHtml}
         broadcastState();
         clearLyricDraft();
         captureEditorPersistBaseline();
+        capturePresentationStyleBaseline();
         if (!silent) {
             const st = currentSong();
             openSaveLyricsLibraryHintModal(st?.title || "");
@@ -13953,6 +15713,7 @@ ${deleteBtnHtml}
 
     function exportData() {
         syncEditorToSong();
+        persistCurrentSongPresentationFromUi(state.currentSongId);
         saveSongs();
         saveSettings();
         const payload = {
@@ -14768,6 +16529,7 @@ ${deleteBtnHtml}
                 if (!sid) return;
                 if (action === "edit") switchSong(sid);
                 else if (action === "copy") duplicateSong(sid);
+                else if (action === "copy-style") openCopyPresentationStyleModal(sid);
                 else if (action === "delete") {
                     libraryPendingDeleteId = sid;
                     renderSongList();
@@ -14834,6 +16596,7 @@ ${deleteBtnHtml}
             state.ui.fontSize = clampLyricFontSize($("font-slider").value || 60);
             if ($("font-val")) $("font-val").textContent = String(state.ui.fontSize);
             saveSettings();
+            persistCurrentSongTypographyAfterUiChange();
             updateAll();
         });
         on("font-mega-mode", "change", () => {
@@ -14876,65 +16639,51 @@ ${deleteBtnHtml}
             clearMiniPreviewLyricStageDragTransform();
             saveSongs();
             saveSettings();
+            capturePresentationStyleBaseline();
+            updateEditorUnsavedIndicator();
             updateAll();
         });
         on("font-family-selector", "change", () => {
-            const val = $("font-family-selector").value;
-            const WFD = globalThis.WorshipFontData;
-            if (WFD && typeof WFD.isPresetSelectValue === "function" && WFD.isPresetSelectValue(val)) {
-                const p = WFD.getPresetFromSelectValue(val);
-                if (p) {
-                    state.ui.fontFamily = p.fontFamily;
-                    state.ui.fontColor = p.fontColor;
-                    state.ui.fontWeight = p.fontWeight;
+            const sel = $("font-family-selector");
+            if (!sel) return;
+            const raw = sel.value;
+            const fd = globalThis.WorshipFontData;
+            if (fd && typeof fd.isPresetSelectValue === "function" && fd.isPresetSelectValue(raw)) {
+                const preset =
+                    typeof fd.getPresetFromSelectValue === "function" ? fd.getPresetFromSelectValue(raw) : null;
+                if (preset) {
+                    state.ui.fontFamily = preset.fontFamily;
+                    state.ui.fontColor = preset.fontColor;
+                    state.ui.fontWeight = preset.fontWeight;
+                    updateUIFromState();
+                    saveSettings();
+                    persistCurrentSongTypographyAfterUiChange();
+                    scheduleLiveStyleProjectionPush({
+                        fontFamily: preset.fontFamily,
+                        fontColor: preset.fontColor,
+                        fontWeight: preset.fontWeight
+                    });
+                    scheduleGalleryLyricPadRelayout();
+                    return;
                 }
-            } else {
-                state.ui.fontFamily = val;
             }
-            updateUIFromState();
+            state.ui.fontFamily = raw;
+            scheduleEnsureLyricWebFonts(state.ui.fontFamily);
             saveSettings();
-            updateAll();
+            persistCurrentSongTypographyAfterUiChange();
+            scheduleLiveStyleProjectionPush({ fontFamily: state.ui.fontFamily });
+            scheduleGalleryLyricPadRelayout();
         });
         on("theme-selector", "change", () => {
             state.ui.theme = $("theme-selector").value;
             document.body.setAttribute("data-theme", state.ui.theme);
             updateAll();
         });
-        /* 仅「上传背景图片」按钮打开文件框；预设网格中的图片入口切换到「我的背景」并应用已有缩略图 */
-        on("upload-bg-trigger", "click", (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            switchBgTabTo("mine");
-            const items = getUploadedBackgrounds();
-            if (!items.length) {
-                showToast('请先点击下方「上传背景图片」添加图片', $("upload-bg-btn"));
-                return;
-            }
-            const prefer = state.ui.bgImageId ? items.find((x) => x && x.id === state.ui.bgImageId) : null;
-            const pick = prefer || items[0];
-            if (!pick || !pick.imageData) return;
-            state.ui.bgType = "image";
-            state.ui.bgImageId = pick.id;
-            state.ui.bgImage = pick.imageData;
-            state.ui.bgMediaType =
-                pick.mediaType === "video" || inferMediaTypeFromDataUrl(pick.imageData) === "video"
-                    ? "video"
-                    : "image";
-            state.ui.lyricsBgShareToCloud = false;
-            recordBgThumbUsage(pick.id);
-            updateUIFromState();
-            updateAll();
-            saveSettings();
-            persistCurrentSongBgAfterUiChange();
-            renderUploadedBackgrounds();
-            showToast("已应用歌词背景", $("upload-bg-trigger"));
-        });
         on("upload-bg-btn", "click", (e) => {
             e.preventDefault();
             $("bg-image-input")?.click();
         });
         document.querySelectorAll(".bg-option").forEach((node) => {
-            if (node.id === "upload-bg-trigger") return;
             node.addEventListener("click", () => setBackground(node.getAttribute("data-bg") || "solid-black"));
         });
         initBgTabs();
@@ -14942,7 +16691,7 @@ ${deleteBtnHtml}
             const input = e.target;
             const files = input.files;
             if (!files || !files.length) return;
-            const toastAnchor = $("upload-bg-btn") || $("upload-bg-trigger");
+            const toastAnchor = $("upload-bg-btn");
             const list = Array.from(files);
             ensureBgImageInputAcceptsVideo();
             const largeCount = list.filter((file) => {
@@ -15137,27 +16886,18 @@ ${deleteBtnHtml}
             scheduleEditorLiveProjectionPush();
         });
 
-        on("adv-lyric-overlay-opacity", "input", () => {
-            const v = clamp(Number($("adv-lyric-overlay-opacity").value || 0), 0, 55);
-            document.documentElement.style.setProperty("--adv-mini-readability", (v / 100).toFixed(3));
-        });
-        on("adv-lyric-overlay-opacity", "change", () => {
-            persistAdvPreviewCssVars();
-            updateAll();
-        });
-        on("adv-lyric-layer-blur", "input", () => {
-            const v = clamp(Number($("adv-lyric-layer-blur").value || 0), 0, 20);
-            document.documentElement.style.setProperty("--adv-mini-blur-px", String(v));
-        });
-        on("adv-lyric-layer-blur", "change", () => {
-            persistAdvPreviewCssVars();
-            updateAll();
-        });
         on("adv-preview-line-height", "input", () => {
+            const lh = clamp(parseFloat($("adv-preview-line-height").value || "1.65"), 1.2, 2.4);
+            document.documentElement.style.setProperty("--adv-preview-line-height", String(lh));
+            scheduleLiveStyleProjectionPush({ lineHeight: lh });
+            scheduleGalleryLyricPadRelayout();
+        });
+        on("adv-preview-line-height", "change", () => {
             document.documentElement.style.setProperty(
                 "--adv-preview-line-height",
                 String($("adv-preview-line-height").value || "1.65")
             );
+            persistCurrentSongTypographyAfterUiChange();
             updateAll();
         });
         on("text-stroke-slider", "input", () => {
@@ -15188,26 +16928,54 @@ ${deleteBtnHtml}
             state.ui.textStrokePx = clamp(Number($("text-stroke-slider").value || 0), 0, 6);
             if ($("text-stroke-val")) $("text-stroke-val").textContent = String(state.ui.textStrokePx);
             saveSettings();
+            persistCurrentSongTypographyAfterUiChange();
             updateAll();
         });
         on("vignette-shape-select", "change", () => {
             state.ui.vignetteShape = $("vignette-shape-select").value === "ellipse" ? "ellipse" : "circle";
-            updateAll();
+            scheduleLiveStyleProjectionPush({ vignetteShape: state.ui.vignetteShape });
+            scheduleGalleryVignetteRelayout();
+            persistCurrentSongTypographyAfterUiChange();
         });
         on("vignette-center-slider", "input", () => {
             state.ui.vignetteCenterBrightness = clamp(Number($("vignette-center-slider").value || 0), -50, 50);
             if ($("vignette-center-val")) {
                 $("vignette-center-val").textContent = String(state.ui.vignetteCenterBrightness);
             }
-            updateAll();
+            scheduleLiveStyleProjectionPush({
+                vignetteCenterBrightness: state.ui.vignetteCenterBrightness,
+                vignetteEdgeDarkness: state.ui.vignetteEdgeDarkness
+            });
+            scheduleGalleryVignetteRelayout();
         });
         on("vignette-edge-slider", "input", () => {
             state.ui.vignetteEdgeDarkness = clamp(Number($("vignette-edge-slider").value || 0), 0, 90);
             if ($("vignette-edge-val")) $("vignette-edge-val").textContent = String(state.ui.vignetteEdgeDarkness);
-            updateAll();
+            scheduleLiveStyleProjectionPush({
+                vignetteCenterBrightness: state.ui.vignetteCenterBrightness,
+                vignetteEdgeDarkness: state.ui.vignetteEdgeDarkness
+            });
+            scheduleGalleryVignetteRelayout();
+        });
+        on("vignette-center-slider", "change", () => {
+            state.ui.vignetteCenterBrightness = clamp(Number($("vignette-center-slider").value || 0), -50, 50);
+            persistCurrentSongTypographyAfterUiChange();
+        });
+        on("vignette-edge-slider", "change", () => {
+            state.ui.vignetteEdgeDarkness = clamp(Number($("vignette-edge-slider").value || 0), 0, 90);
+            persistCurrentSongTypographyAfterUiChange();
         });
         on("page-transition-select", "change", () => {
             state.ui.pageTransition = canonicalPageTransition($("page-transition-select").value);
+            persistPageTransitionFromUi(state.currentSongId);
+            try {
+                saveSongs();
+            } catch (_e) {
+                /* ignore */
+            }
+            capturePresentationStyleBaseline();
+            updatePageTransitionScopeUi();
+            updateEditorUnsavedIndicator();
             updateAll();
             scheduleMiniPreviewTransitionDemo();
         });
@@ -15226,9 +16994,26 @@ ${deleteBtnHtml}
             if ($("page-transition-speed-val")) {
                 $("page-transition-speed-val").textContent = state.ui.pageTransitionSpeed.toFixed(1);
             }
+            persistPageTransitionFromUi(state.currentSongId);
+            try {
+                saveSongs();
+            } catch (_e) {
+                /* ignore */
+            }
+            capturePresentationStyleBaseline();
+            updatePageTransitionScopeUi();
+            updateEditorUnsavedIndicator();
             saveSettings();
             updateAll();
             scheduleMiniPreviewTransitionDemo();
+        });
+        on("page-transition-restore-default-btn", "click", () => {
+            restoreCurrentSongPageTransitionToDefault();
+            capturePresentationStyleBaseline();
+            updateEditorUnsavedIndicator();
+        });
+        on("song-page-transition-pill", "click", () => {
+            openAdvDrawerTransitionSection();
         });
 
         const popupBlockedBanner = $("popup-blocked-banner");
@@ -15583,12 +17368,8 @@ ${deleteBtnHtml}
         } else if (type === "solid-gray") {
             ctx.fillStyle = "#444";
             ctx.fillRect(0, 0, w, h);
-        } else if (type === "gradient") {
-            const g = ctx.createLinearGradient(0, 0, w, h);
-            g.addColorStop(0, "#1a2e59");
-            g.addColorStop(1, "#0a0f1d");
-            ctx.fillStyle = g;
-            ctx.fillRect(0, 0, w, h);
+        } else if (PRESET_GRADIENT_BG_TYPES.has(type)) {
+            fillPresetGradientCanvas(ctx, w, h, type);
         } else if (type === "image" && bgState.imageData) {
             const isGif = mediaType !== "video" && /^data:image\/gif/i.test(bgState.imageData);
             if (isGif && gifLayer) {
@@ -20009,7 +21790,7 @@ const linesHtml = rawLines
                 notifyProjectionConsoleReadyForGuide();
             } else {
                 const items = state.playlist.items || [];
-                const base = items.indexOf(state.currentSongId);
+                const base = playlistIndexOfSongId(state.currentSongId);
                 if (base <= 0) return;
                 const prevIdx = base - 1;
                 if (
@@ -20024,7 +21805,7 @@ const linesHtml = rawLines
             }
         } else if (cur >= maxIdx) {
             const items = state.playlist.items || [];
-            const songIdx = items.indexOf(state.currentSongId);
+            const songIdx = playlistIndexOfSongId(state.currentSongId);
             const base = songIdx >= 0 ? songIdx : clamp(state.playlist.activeIndex, 0, Math.max(0, items.length - 1));
             const nextIdx = base + 1;
             /** 当前曲在歌单内时：最后一页「下一页」直接进下一首，不必先点「开始播放列表」；否则仍按「连播已开始」逻辑 */
@@ -20185,45 +21966,61 @@ const linesHtml = rawLines
         }, 300);
     }
 
+    function worshipIntroProgress(p) {
+        if (typeof WorshipIntro !== "undefined" && WorshipIntro.setProgress) {
+            WorshipIntro.setProgress(p);
+        }
+    }
+
     function maybeShowWelcomeToast() {
         if (isDisplay || isLeader) return;
         if (welcomeToastDismissedToday()) return;
-        const wrap = document.createElement("div");
-        wrap.className = "welcome-toast-overlay";
-        const box = document.createElement("div");
-        box.className = "welcome-toast-box";
-        box.id = "welcome-toast";
-        box.style.opacity = "0";
-        box.style.transition = "opacity 0.35s ease";
-        const p = document.createElement("p");
-        p.className = "welcome-toast-text";
-        p.textContent = "✨ 尊贵的用户，欢迎您使用 😊";
-        const closeBtn = document.createElement("button");
-        closeBtn.type = "button";
-        closeBtn.className = "welcome-toast-close";
-        closeBtn.setAttribute("aria-label", "关闭欢迎提示");
-        closeBtn.textContent = "✕";
-        closeBtn.addEventListener("click", () => dismissWelcomeToast(wrap, { remember: true }));
-        box.appendChild(p);
-        box.appendChild(closeBtn);
-        wrap.appendChild(box);
-        document.body.appendChild(wrap);
-        requestAnimationFrame(() => {
+        const show = () => {
+            const wrap = document.createElement("div");
+            wrap.className = "welcome-toast-overlay";
+            const box = document.createElement("div");
+            box.className = "welcome-toast-box";
+            box.id = "welcome-toast";
+            box.style.opacity = "0";
+            box.style.transition = "opacity 0.35s ease";
+            const p = document.createElement("p");
+            p.className = "welcome-toast-text";
+            p.textContent = "✨ 尊贵的用户，欢迎您使用 😊";
+            const closeBtn = document.createElement("button");
+            closeBtn.type = "button";
+            closeBtn.className = "welcome-toast-close";
+            closeBtn.setAttribute("aria-label", "关闭欢迎提示");
+            closeBtn.textContent = "✕";
+            closeBtn.addEventListener("click", () => dismissWelcomeToast(wrap, { remember: true }));
+            box.appendChild(p);
+            box.appendChild(closeBtn);
+            wrap.appendChild(box);
+            document.body.appendChild(wrap);
             requestAnimationFrame(() => {
-                box.style.opacity = "1";
+                requestAnimationFrame(() => {
+                    box.style.opacity = "1";
+                });
             });
-        });
-        welcomeToastTimer = window.setTimeout(() => {
-            welcomeToastTimer = 0;
-            dismissWelcomeToast(wrap, { remember: false });
-        }, 3500);
+            welcomeToastTimer = window.setTimeout(() => {
+                welcomeToastTimer = 0;
+                dismissWelcomeToast(wrap, { remember: false });
+            }, 3500);
+        };
+        if (typeof WorshipIntro !== "undefined" && WorshipIntro.whenDone) {
+            WorshipIntro.whenDone(show);
+        } else {
+            show();
+        }
     }
 
     function initMain() {
+        worshipIntroProgress(0.04);
         const boot = () => {
+            worshipIntroProgress(0.1);
             tryFreeLocalStorageForWorshipBoot();
             ensureBgImageInputAcceptsVideo();
             loadState();
+            worshipIntroProgress(0.22);
             try {
                 upgradeSavedSetlistsInPlace();
             } catch (_e) {
@@ -20234,13 +22031,16 @@ const linesHtml = rawLines
             } catch (_e2) {
                 /* ignore */
             }
+            worshipIntroProgress(0.34);
             noteProjectionDisplayGone();
             applyAdvPreviewCssVarsFromStorage();
             ensureDefaultThemeBackgroundAtBoot();
             normalizeLegacyBgImageReference();
             refreshBackgroundDefaultsFromUi();
             hydrateCurrentSongBackgroundIntoUi();
+            hydrateCurrentSongTypographyIntoUi();
             applyThemeBackground();
+            worshipIntroProgress(0.48);
             const left = $("song-library");
             const right = $("preview-panel");
             if (left && !left.style.width) left.style.width = "260px";
@@ -20252,16 +22052,23 @@ const linesHtml = rawLines
             installAdvDrawerResetButton();
             syncPosYFromCurrentSong();
             syncOverlayFontOpacityFromCurrentSong();
+            syncPageTransitionFromCurrentSong();
             updateUIFromState();
             syncSongToEditor();
             captureEditorPersistBaseline();
+            capturePresentationStyleBaseline();
             renderSongList();
             updateSpeakerCards();
             renderMiniPreview();
             renderPlaylist();
+            worshipIntroProgress(0.64);
             bindEvents();
             installGalleryPlaybackInteractions();
             initUiZoom();
+            worshipIntroProgress(0.78);
+            window.setTimeout(() => {
+                maybeRemindLocalDataVolume($("save-setlist-btn") || $("song-library"), { sessionOnly: true });
+            }, 2800);
             startProjectionDisplayWindowWatch();
             installLyricEditorDrawerResize();
             initProjectionPreviewMonitor();
@@ -20288,6 +22095,7 @@ const linesHtml = rawLines
             migrateLegacyUploadedBackgrounds();
             seedUploadedBackgroundsFromState();
             renderUploadedBackgrounds();
+            worshipIntroProgress(0.9);
 
             if (channel) {
                 channel.onmessage = (e) => {
@@ -20388,11 +22196,20 @@ const linesHtml = rawLines
                 renderPageGallery();
             }, 500);
             requestEnsureUploadedVideoCoversOnMineTab();
+            if (typeof WorshipIntro !== "undefined" && WorshipIntro.signalAppReady) {
+                WorshipIntro.signalAppReady();
+            }
         };
-        initBackgroundImageIndexedDb().then(boot).catch((err) => {
-            console.error(err);
-            boot();
-        });
+        initBackgroundImageIndexedDb()
+            .then(() => {
+                worshipIntroProgress(0.08);
+                boot();
+            })
+            .catch((err) => {
+                console.error(err);
+                worshipIntroProgress(0.08);
+                boot();
+            });
     }
 
     function init() {

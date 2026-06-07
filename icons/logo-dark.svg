@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="WorshipApp logo">
+  <title>WorshipApp logo</title>
+  <path fill="#000000" d="M 228 0 H 796 C 1024 0 1024 0 1024 228 V 796 C 1024 1024 1024 1024 796 1024 H 228 C 0 1024 0 1024 0 796 V 228 C 0 0 0 0 228 0 Z"/>
+  <path fill="#FFFFFF" d="M 48.00 0.00 L 48.00 1023.00 L 975.00 1023.00 L 975.00 0.00 Z"/>
+</svg>

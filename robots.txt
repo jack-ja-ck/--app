@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://jack-ja-ck.github.io/--app/sitemap.xml

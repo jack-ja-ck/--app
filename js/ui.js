@@ -309,7 +309,7 @@ const UI = {
         const files = input && input.files;
         if (!files || !files.length) return;
         const arr = Array.from(files);
-        const anchor = document.getElementById("upload-bg-btn") || document.getElementById("upload-bg-trigger");
+        const anchor = document.getElementById("upload-bg-btn");
         const readOne = (file) =>
             new Promise((resolve, reject) => {
                 const r = new FileReader();
@@ -968,10 +968,20 @@ globalThis.drawBg = function (ts) {
     } else if (type === "solid-gray") {
         ctx.fillStyle = "#444";
         ctx.fillRect(0, 0, w, h);
-    } else if (type === "gradient") {
+    } else if (type === "gradient" || type === "deep-navy" || type === "dawn-glow") {
         const g = ctx.createLinearGradient(0, 0, w, h);
-        g.addColorStop(0, "#1a2e59");
-        g.addColorStop(1, "#0a0f1d");
+        if (type === "deep-navy") {
+            g.addColorStop(0, "#061018");
+            g.addColorStop(0.5, "#143052");
+            g.addColorStop(1, "#0a1a30");
+        } else if (type === "dawn-glow") {
+            g.addColorStop(0, "#1a1028");
+            g.addColorStop(0.45, "#5a3048");
+            g.addColorStop(1, "#c87840");
+        } else {
+            g.addColorStop(0, "#1a2e59");
+            g.addColorStop(1, "#0a0f1d");
+        }
         ctx.fillStyle = g;
         ctx.fillRect(0, 0, w, h);
     } else if (type === "image" && bgState.imageData) {
@@ -1092,6 +1102,27 @@ function projectionLyricLinesSig(st) {
     const lines = st.pages[idx] || [];
     return `${String(st.songId || "")}\x1d${idx}\x1d${lines.map((x) => String(x ?? "")).join("\x1e")}`;
 }
+function projectionLineHeightFromLive(ls) {
+    if (ls && Number.isFinite(Number(ls.lineHeight))) {
+        return globalThis.clamp(Number(ls.lineHeight), 1.2, 2.4);
+    }
+    return typeof globalThis.getAdvPreviewLineHeightNumber === "function"
+        ? globalThis.getAdvPreviewLineHeightNumber()
+        : 1.45;
+}
+function applyProjectionMaskFromLiveState() {
+    const el = document.getElementById("projection-bg-mask");
+    if (!el || !globalThis.liveState) return;
+    const p = globalThis.clamp(Number(globalThis.liveState.overlayOpacityPct ?? 30), 0, 80) / 100;
+    el.style.background = `rgba(0,0,0,${p})`;
+}
+function applyProjectionVignetteFromLiveState() {
+    const el = document.getElementById("projection-vignette-radial");
+    if (!el || !globalThis.liveState) return;
+    if (typeof globalThis.applyRadialVignetteToLayer === "function") {
+        globalThis.applyRadialVignetteToLayer(el, globalThis.liveState);
+    }
+}
 
 globalThis.applyLive = function (mode, payload, opts) {
     if (payload === undefined && mode && typeof mode === "object") {
@@ -1113,7 +1144,10 @@ globalThis.applyLive = function (mode, payload, opts) {
         next = { ...payload, background: prev.background };
     }
     globalThis.liveState = next;
+    applyProjectionMaskFromLiveState();
+    applyProjectionVignetteFromLiveState();
     const m = mode || globalThis.projectionMode;
+    const songSwitchAnim = m === "display" && !!next.songSwitchAnim;
     if (m === "display") {
         const prevIdx = Number(prev?.pageIndex) || 0;
         const newIdx = Number(next.pageIndex) || 0;
@@ -1129,14 +1163,31 @@ globalThis.applyLive = function (mode, payload, opts) {
         const dur = globalThis.clamp(Number(next.pageTransitionSpeed ?? 0.6), 0.3, 1.5);
         /** 视频背景与 <video> 同屏时，翻页 CSS 过渡易与解码/合成抢线程，出现短暂黑屏或卡顿；仅歌词瞬时替换 */
         const videoBg = projectionDisplayIsVideoBackground(next);
-        const doAnim =
+        const songChanged = !!prev && !sameSong;
+        const songSwitchDur =
+            typeof globalThis.__worshipSongSwitchDurSec === "function"
+                ? globalThis.__worshipSongSwitchDurSec()
+                : 0.78;
+        const doPageAnim =
             navChanged &&
+            !next.songSwitchAnim &&
             !videoBg &&
             !next.playlistFade &&
             trans !== "none" &&
             typeof globalThis.__worshipRunDisplayPageTransitionThenRender === "function";
+        const doSongSwitchAnim =
+            songChanged &&
+            !!next.songSwitchAnim &&
+            !styleOnly &&
+            typeof globalThis.__worshipRunFluidSongSwitchThenRender === "function";
         const fontOpForAnim = globalThis.clamp(Number(next.fontOpacityPct ?? 100), 20, 100);
-        if (doAnim) {
+        if (doSongSwitchAnim) {
+            globalThis.__worshipRunFluidSongSwitchThenRender(
+                next.playlistFade ? songSwitchDur * 1.08 : songSwitchDur,
+                (o) => globalThis.renderDisplayLyric(o),
+                fontOpForAnim
+            );
+        } else if (doPageAnim) {
             globalThis.__worshipRunDisplayPageTransitionThenRender(trans, dur, (o) => globalThis.renderDisplayLyric(o), fontOpForAnim);
         } else if (styleOnly && typeof globalThis.renderDisplayLyricStyleOnly === "function") {
             globalThis.renderDisplayLyricStyleOnly();
@@ -1155,7 +1206,25 @@ globalThis.applyLive = function (mode, payload, opts) {
         prev &&
         projectionLiveBackgroundSignature(prev.background) ===
             projectionLiveBackgroundSignature(globalThis.liveState.background);
-    if (!skipRestart) globalThis.restartBg();
+    if (!skipRestart) {
+        const deferBgMs =
+            m === "display" && songSwitchAnim
+                ? Math.round(
+                      (next.playlistFade
+                          ? (typeof globalThis.__worshipSongSwitchDurSec === "function"
+                                ? globalThis.__worshipSongSwitchDurSec()
+                                : 0.78) * 1080
+                          : (typeof globalThis.__worshipSongSwitchDurSec === "function"
+                                ? globalThis.__worshipSongSwitchDurSec()
+                                : 0.78) * 1000) + 80
+                  )
+                : 0;
+        if (deferBgMs > 0) {
+            window.setTimeout(() => globalThis.restartBg(), deferBgMs);
+        } else {
+            globalThis.restartBg();
+        }
+    }
 
 };
 globalThis.renderDisplayLyric = function (opts) {
@@ -1189,11 +1258,7 @@ globalThis.renderDisplayLyric = function (opts) {
             ? globalThis.clampLyricFontSize(Number(t.fontSize) || 60)
             : globalThis.clamp(t.fontSize || 56, 8, 500);
     layer.style.fontSize = `${fsPx}px`;
-    const lh =
-        typeof globalThis.getAdvPreviewLineHeightNumber === "function"
-            ? globalThis.getAdvPreviewLineHeightNumber()
-            : 1.45;
-    layer.style.lineHeight = String(lh);
+    layer.style.lineHeight = String(projectionLineHeightFromLive(globalThis.liveState));
     layer.style.fontWeight =
         t.fontWeight != null && t.fontWeight !== "" ? String(t.fontWeight) : "700";
     layer.style.color = fontColor;
@@ -1268,11 +1333,7 @@ globalThis.renderDisplayLyricStyleOnly = function () {
             ? globalThis.clampLyricFontSize(Number(t.fontSize) || 60)
             : globalThis.clamp(t.fontSize || 56, 8, 500);
     layer.style.fontSize = `${fsPx}px`;
-    const lh =
-        typeof globalThis.getAdvPreviewLineHeightNumber === "function"
-            ? globalThis.getAdvPreviewLineHeightNumber()
-            : 1.45;
-    layer.style.lineHeight = String(lh);
+    layer.style.lineHeight = String(projectionLineHeightFromLive(globalThis.liveState));
     layer.style.fontWeight =
         t.fontWeight != null && t.fontWeight !== "" ? String(t.fontWeight) : "700";
     layer.style.color = fontColor;
@@ -1285,6 +1346,8 @@ globalThis.renderDisplayLyricStyleOnly = function () {
     }
     target.style.transition = "none";
     target.style.opacity = String(fontOp);
+    applyProjectionMaskFromLiveState();
+    applyProjectionVignetteFromLiveState();
     globalThis.updateDisplayCardPreview();
 };
 globalThis.renderLeaderLyric = function () {
@@ -1401,6 +1464,20 @@ globalThis.installProjectionUI = function (mode) {
         "position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;display:none;" +
         "pointer-events:none;transform:translateZ(0);backface-visibility:hidden;-webkit-backface-visibility:hidden;";
     host.appendChild(gifImg);
+
+    const mask = document.createElement("div");
+    mask.id = "projection-bg-mask";
+    mask.setAttribute("aria-hidden", "true");
+    mask.style.cssText =
+        "position:absolute;inset:0;z-index:1;pointer-events:none;background:rgba(0,0,0,0.3);transition:background 0.12s ease;";
+    host.appendChild(mask);
+
+    const vig = document.createElement("div");
+    vig.id = "projection-vignette-radial";
+    vig.setAttribute("aria-hidden", "true");
+    vig.style.cssText =
+        "position:absolute;inset:0;z-index:1;pointer-events:none;transition:opacity 0.15s ease,background 0.15s ease;";
+    host.appendChild(vig);
 
     const lyric = document.createElement("div");
     lyric.id = "projection-lyric";

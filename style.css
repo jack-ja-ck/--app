@@ -2,10 +2,8 @@
 :root {
     --editor-split-pct: 58;
     --adv-drawer-user-width: 320px;
-    --adv-mini-readability: 0;
-    --adv-mini-blur-px: 0;
     --adv-preview-line-height: 1.65;
-    /** 与高级编辑「字体选择」同步，整站 UI + 歌词编辑区共用 */
+    /** 控制台网站界面固定字体；歌词投屏字体由高级编辑「字体选择」单独控制 */
     --worship-app-font-family: 'Microsoft YaHei','PingFang SC',sans-serif;
     --bg-primary: #0b0b12;
     --bg-secondary: rgba(20,20,30,0.92);
@@ -40,6 +38,18 @@
     --text-primary: #ffff00; --text-secondary: #aaa; --border-color: #ffff00;
     --accent: #ffaa00; --accent-light: #ffcc66; --preview-bg: #000;
     --editor-bg: #111; --editor-border: #ffff00; --slider-track: #ffff00;
+}
+
+.seo-intro {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
 }
 
 * { margin:0; padding:0; box-sizing:border-box; }
@@ -923,6 +933,9 @@ body.free-bg-modal-open {
 }
 /* 极窄侧栏：略缩小格宽，仍保持比例、仅换行不压扁 */
 @container preview-panel (max-width: 248px) {
+    .bg-selector--presets {
+        gap: 6px;
+    }
     #my-backgrounds-container.my-backgrounds {
         grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
     }
@@ -1417,6 +1430,122 @@ body[data-theme-custom-bg="1"] #editor-area {
 }
 .song-context-menu-item:hover {
     background: rgba(255,255,255,0.08);
+}
+
+.song-item-transition {
+    flex: 0 0 auto;
+    font-size: 0.72rem;
+    color: rgba(232, 201, 107, 0.92);
+    white-space: nowrap;
+    max-width: 5.5rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.song-page-transition-pill,
+.gallery-song-transition-pill {
+    flex: 0 0 auto;
+    border: 1px solid rgba(212, 175, 55, 0.35);
+    border-radius: 999px;
+    background: rgba(212, 175, 55, 0.1);
+    color: rgba(232, 201, 107, 0.95);
+    font-size: 0.72rem;
+    line-height: 1.2;
+    padding: 4px 10px;
+    cursor: pointer;
+    white-space: nowrap;
+    max-width: 11rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.song-page-transition-pill:hover,
+.gallery-song-transition-pill:hover {
+    background: rgba(212, 175, 55, 0.2);
+    border-color: rgba(212, 175, 55, 0.55);
+}
+
+.gallery-song-transition-hint {
+    flex: 0 0 auto;
+    font-size: 0.72rem;
+    color: rgba(232, 201, 107, 0.85);
+    white-space: nowrap;
+}
+
+.adv-page-transition-restore-btn {
+    margin-top: 8px;
+    width: 100%;
+    box-sizing: border-box;
+}
+.adv-page-transition-restore-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.copy-presentation-style-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 6000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(0, 0, 0, 0.55);
+}
+.copy-presentation-style-modal[hidden] {
+    display: none !important;
+}
+.copy-presentation-style-modal__panel {
+    width: min(420px, 96vw);
+    max-height: min(70vh, 520px);
+    overflow: auto;
+    padding: 18px 16px;
+    border-radius: 12px;
+    background: rgba(28, 30, 40, 0.98);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+.copy-presentation-style-modal__title {
+    margin: 0 0 8px;
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+.copy-presentation-style-modal__hint {
+    margin: 0 0 12px;
+    font-size: 0.82rem;
+    line-height: 1.45;
+    color: var(--text-secondary);
+}
+.copy-presentation-style-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 280px;
+    overflow-y: auto;
+    margin-bottom: 14px;
+}
+.copy-presentation-style-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.04);
+    cursor: pointer;
+    font-size: 0.88rem;
+}
+.copy-presentation-style-row:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+.copy-presentation-style-empty {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+.copy-presentation-style-modal__actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
 }
 
 .song-item--confirm-delete {
@@ -3125,6 +3254,38 @@ body.worship-audience-projection #popup-blocked-banner {
 .pwa-install-guide__icon-wrap {
     flex-shrink: 0;
 }
+.worship-app-mark-wrap {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 20px;
+    height: 20px;
+    vertical-align: middle;
+    position: relative;
+}
+.worship-app-mark-wrap--lg {
+    width: 56px;
+    height: 56px;
+}
+.worship-app-mark {
+    width: 100%;
+    height: 100%;
+    border-radius: 0;
+    object-fit: cover;
+    display: block;
+}
+.worship-app-mark-wrap .worship-app-mark--dark,
+.worship-app-mark-wrap .worship-app-mark--light {
+    position: absolute;
+    inset: 0;
+}
+.worship-app-mark[hidden] {
+    display: none !important;
+}
+.worship-app-mark-wrap--lg .worship-app-mark {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+}
 .pwa-install-guide__icon-img {
     width: 56px;
     height: 56px;
@@ -4519,12 +4680,7 @@ mark { background:rgba(255,215,0,.38); color:inherit; padding:0 2px; border-radi
 .bg-option { width:44px; height:44px; border-radius:14px; cursor:pointer; border:2px solid transparent; background-size:cover; box-shadow:0 1px 4px rgba(0,0,0,0.3); transition:all 0.15s ease; }
 .bg-option:hover { box-shadow:0 0 12px rgba(74,111,165,0.5); transform:translateY(-1px); }
 .bg-option:active { transform:scale(0.96); }
-#layout-page-gallery .gallery-page-card.is-active {
-    position: relative;
-    z-index: 4;
-    outline: 2px solid rgba(212, 175, 55, 0.45);
-    outline-offset: 3px;
-}
+/* 当前页金边见下方 .gallery-page-card.is-active（与悬停/翻页交互层统一） */
 
 .bg-option.active {
     border-color: white;
@@ -4554,16 +4710,14 @@ mark { background:rgba(255,215,0,.38); color:inherit; padding:0 2px; border-radi
 #preview-panel .projection-settings-flex-fill > .setting-group:not(.bg-panel-group) {
     flex-shrink: 0;
 }
-#preview-panel .bg-tab-panel.active .bg-selector {
-    flex: 1 1 auto;
-    min-height: 160px;
-    overflow-y: auto;
-    overflow-x: hidden;
-    align-content: start;
-}
-#preview-panel .bg-tab-panel.active #upload-bg-btn,
-#preview-panel .bg-tab-panel.active .bg-privacy-hint {
+#preview-panel .bg-tab-panel.active .bg-selector--presets {
     flex-shrink: 0;
+}
+#preview-panel .bg-panel-group > .bg-preset-actions {
+    flex-shrink: 0;
+}
+#preview-panel .bg-panel-group[data-bg-tab-active="shared"] > .bg-preset-actions {
+    display: none;
 }
 
 /* ========== 高级设置抽屉（纯 HTML/CSS + 内联 oninput，不依赖 app.js） ========== */
@@ -4681,8 +4835,47 @@ mark { background:rgba(255,215,0,.38); color:inherit; padding:0 2px; border-radi
     box-sizing: border-box;
     transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease, transform 0.12s ease;
 }
-.bg-action-btn--resources {
+.bg-selector--presets {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-rows: repeat(2, auto);
+    gap: 7px;
+    margin-top: 0;
+    padding-inline: 4px;
+    box-sizing: border-box;
+    justify-items: center;
+}
+#preview-panel .bg-selector--presets .bg-option {
+    max-width: none;
+    width: 100%;
+    justify-self: stretch;
+}
+#preview-panel .bg-selector--presets .bg-option.active {
+    transform: none;
+    border-color: rgba(255, 255, 255, 0.95);
+    box-shadow:
+        0 0 0 1px rgba(107, 142, 201, 0.45),
+        0 0 14px rgba(107, 142, 201, 0.35);
+}
+#preview-panel .bg-selector--presets .bg-option:hover {
+    transform: translateY(-1px);
+}
+.bg-preset-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    margin-top: 12px;
+}
+.bg-preset-actions .bg-action-btn {
+    margin-top: 0 !important;
+}
+.bg-preset-actions .bg-action-btn--resources {
+    margin-top: 12px !important;
+}
+.bg-preset-actions .bg-privacy-hint {
     margin-top: 10px;
+}
+.bg-action-btn--resources {
+    margin-top: 0;
     border-color: rgba(186, 134, 220, 0.45) !important;
     color: #e1bee7 !important;
     background: linear-gradient(145deg, rgba(156, 89, 182, 0.12) 0%, rgba(12, 14, 22, 0.4) 100%) !important;
@@ -4692,12 +4885,14 @@ mark { background:rgba(255,215,0,.38); color:inherit; padding:0 2px; border-radi
     background: linear-gradient(145deg, rgba(156, 89, 182, 0.22) 0%, rgba(12, 14, 22, 0.35) 100%) !important;
     box-shadow: 0 4px 14px rgba(156, 89, 182, 0.18);
 }
-#upload-bg-btn.bg-action-btn {
+#upload-bg-btn.bg-action-btn,
+.bg-action-btn--upload {
     border-color: rgba(100, 181, 246, 0.45) !important;
     color: #bbdefb !important;
     background: linear-gradient(145deg, rgba(66, 165, 245, 0.12) 0%, rgba(12, 14, 22, 0.4) 100%) !important;
 }
-#upload-bg-btn.bg-action-btn:hover {
+#upload-bg-btn.bg-action-btn:hover,
+.bg-action-btn--upload:hover {
     border-color: rgba(129, 212, 250, 0.65) !important;
     background: linear-gradient(145deg, rgba(66, 165, 245, 0.22) 0%, rgba(12, 14, 22, 0.35) 100%) !important;
     box-shadow: 0 4px 14px rgba(66, 165, 245, 0.18);
@@ -5025,7 +5220,10 @@ body[data-theme="light"] .worship-console-wallpaper-thumb {
 }
 .card-vignette-radial,
 .mini-preview-vignette-radial,
-#projection-vignette-radial {
+.gallery-card-projection-mask,
+.mini-preview-projection-mask,
+#projection-vignette-radial,
+#projection-bg-mask {
     pointer-events: none;
 }
 .adv-drawer-card {
@@ -5219,19 +5417,6 @@ body[data-theme="light"] .worship-console-wallpaper-thumb {
     pointer-events: none;
 }
 
-/* 快速预览：抽屉内「暗角 / 模糊 / 行距」即时视觉（CSS 变量） */
-#mini-preview::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    pointer-events: none;
-    z-index: 0;
-    background: rgba(0, 0, 0, var(--adv-mini-readability, 0));
-    backdrop-filter: blur(calc(var(--adv-mini-blur-px, 0) * 1px));
-    -webkit-backdrop-filter: blur(calc(var(--adv-mini-blur-px, 0) * 1px));
-    transition: background 0.15s ease, backdrop-filter 0.15s ease;
-}
 #mini-preview .mini-preview-bg-video {
     z-index: 1 !important;
 }
@@ -5362,7 +5547,39 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
     font-size:0.9rem;
 }
 .bg-option[data-bg="cross-glow"]::before { content:'✝'; color: rgba(212,175,55,0.55); }
-.bg-option[data-bg="gradient"] { background: radial-gradient(circle at 30% 30%, #1a2a4a, #000); }
+.bg-option[data-bg="gradient"] { background: linear-gradient(145deg, #1a2f59 0%, #0a0f1d 100%); }
+.bg-option[data-bg="deep-navy"],
+.bg-option[data-bg="dawn-glow"] {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.bg-option[data-bg="deep-navy"] {
+    background: linear-gradient(145deg, #061018 0%, #143052 48%, #0a1a30 100%);
+}
+.bg-option[data-bg="deep-navy"]::before {
+    content: "🌊";
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    font-size: 0.95rem;
+    opacity: 0.55;
+}
+.bg-option[data-bg="dawn-glow"] {
+    background: linear-gradient(145deg, #1a1028 0%, #5a3048 42%, #c87840 100%);
+}
+.bg-option[data-bg="dawn-glow"]::before {
+    content: "🌅";
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    font-size: 0.95rem;
+    opacity: 0.7;
+}
 
 /* ========== 纯 CSS 动态背景（投屏 / 卡片 / 快速预览） ========== */
 @keyframes floatUp {
@@ -5509,19 +5726,6 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
         linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.07) 20%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0.07) 80%, transparent 100%) center / 100% 1.5px no-repeat;
     opacity: 0.5;
     pointer-events: none;
-}
-.bg-option[data-bg="image"] {
-    background: linear-gradient(145deg, rgba(42, 48, 68, 0.95) 0%, rgba(22, 26, 38, 0.98) 100%);
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'%3E%3Crect x='4' y='4' width='16' height='16' rx='3' stroke='%23a8b4cc' stroke-width='1.5' stroke-dasharray='3 2'/%3E%3Cpath d='M12 8v8M9 11l3-3 3 3' stroke='%23d4af37' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-    background-size: 58%;
-    background-position: center;
-    background-repeat: no-repeat;
-    border-style: dashed;
-    border-color: rgba(168, 180, 204, 0.45);
-}
-.bg-option[data-bg="image"]:hover {
-    border-color: rgba(212, 175, 55, 0.55);
-    box-shadow: 0 0 14px rgba(212, 175, 55, 0.2);
 }
 .bg-privacy-hint {
     font-size:0.68rem;
@@ -8902,9 +9106,16 @@ body.leader-note-modal-open {
     word-break: break-word;
 }
 
-#monitor-lyric-anim {
+#monitor-lyric-anim,
+#layout-page-gallery .gallery-card-lyric-anim {
     width: 100%;
     transform-origin: center center;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+}
+#monitor-lyric-anim.lyric-trans-animating,
+#layout-page-gallery .gallery-card-lyric-anim.lyric-trans-animating {
+    will-change: opacity, transform;
 }
 
 #projection-lyric-anim {
@@ -8998,18 +9209,57 @@ body.leader-note-modal-open {
     order: -1 !important;
 }
 
+/* 翻页落位后：仅金边光晕收束，不缩放卡片（避免背景在框内跳动） */
 @keyframes galleryCardSwitchPulse {
     0% {
-        transform: scale(0.96);
-    }
-    45% {
-        transform: scale(1.045);
         box-shadow:
-            0 0 0 3px rgba(212, 175, 55, 0.42),
-            0 14px 40px rgba(0, 0, 0, 0.38);
+            0 0 0 2px rgba(212, 175, 55, 0.48),
+            0 4px 16px rgba(212, 175, 55, 0.14);
+    }
+    42% {
+        box-shadow:
+            0 0 0 1px rgba(212, 175, 55, 0.38),
+            0 10px 28px rgba(0, 0, 0, 0.3);
+    }
+    72% {
+        box-shadow:
+            0 0 0 1px rgba(212, 175, 55, 0.36),
+            0 8px 26px rgba(0, 0, 0, 0.33);
     }
     100% {
-        transform: scale(1);
+        box-shadow:
+            0 0 0 1px rgba(212, 175, 55, 0.35),
+            0 8px 28px rgba(0, 0, 0, 0.35);
+    }
+}
+
+@keyframes galleryGoldHandoffOut {
+    0% {
+        border-color: #d4af37;
+        box-shadow:
+            0 0 0 1px rgba(212, 175, 55, 0.35),
+            0 8px 28px rgba(0, 0, 0, 0.35);
+        outline-color: rgba(212, 175, 55, 0.45);
+    }
+    100% {
+        border-color: rgba(255, 255, 255, 0.12);
+        box-shadow: none;
+        outline-color: transparent;
+    }
+}
+
+@keyframes galleryGoldHandoffIn {
+    0% {
+        border-color: rgba(255, 255, 255, 0.12);
+        box-shadow: none;
+        outline-color: transparent;
+    }
+    100% {
+        border-color: #d4af37;
+        box-shadow:
+            0 0 0 1px rgba(212, 175, 55, 0.35),
+            0 8px 28px rgba(0, 0, 0, 0.35);
+        outline-color: rgba(212, 175, 55, 0.45);
     }
 }
 
@@ -9029,23 +9279,81 @@ body.leader-note-modal-open {
     justify-content: flex-start !important;
     align-items: stretch !important;
     scroll-snap-align: none !important;
+    position: relative;
+    padding: 10px 12px;
+    border-radius: 16px;
+    border: 2px solid rgba(255, 255, 255, 0.12);
+    cursor: pointer;
+    overflow: hidden;
+    flex-shrink: 0;
     transform-origin: center center;
     transition:
-        border-color 0.22s ease,
-        box-shadow 0.22s ease,
-        transform 0.22s ease;
+        border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+        box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+        opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+        transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* 翻页/点击当前页：短暂强调（与 is-active 金边配合） */
-#layout-page-gallery .gallery-page-card.gallery-card-switch-pulse {
-    animation: galleryCardSwitchPulse 0.42s cubic-bezier(0.33, 1.18, 0.52, 1) both;
+#layout-page-gallery .gallery-page-card.is-active {
+    z-index: 4;
+    border-color: #d4af37;
+    box-shadow:
+        0 0 0 1px rgba(212, 175, 55, 0.35),
+        0 8px 28px rgba(0, 0, 0, 0.35);
+    outline: 2px solid rgba(212, 175, 55, 0.45);
+    outline-offset: 3px;
+}
+
+/* 翻页金边交接：旧卡淡出、新卡淡入，金边始终贴在卡片上 */
+#layout-page-gallery .gallery-page-card.gallery-morph-source-handoff {
+    z-index: 5;
+    animation: galleryGoldHandoffOut 0.38s cubic-bezier(0.22, 0.92, 0.28, 1) both;
+}
+#layout-page-gallery .gallery-page-card.is-active.gallery-highlight-enter {
     z-index: 6;
-    position: relative;
+    animation: galleryGoldHandoffIn 0.42s cubic-bezier(0.18, 0.92, 0.28, 1) both;
+}
+
+/* 悬停：略加强反馈，仍克制、不暗示「已选中」 */
+#layout-page-gallery .gallery-page-card:not(.is-active):not(.gallery-page-card--dragging):hover {
+    border-color: rgba(255, 255, 255, 0.3);
+    box-shadow:
+        0 4px 18px rgba(0, 0, 0, 0.22),
+        0 0 0 1px rgba(255, 255, 255, 0.07);
+    transform: translateY(-2px);
+}
+
+#layout-page-gallery .gallery-page-card.is-active:not(.gallery-page-card--dragging):not(.gallery-highlight-enter):hover {
+    box-shadow:
+        0 0 0 2px rgba(212, 175, 55, 0.42),
+        0 10px 32px rgba(0, 0, 0, 0.38);
+    transform: translateY(-1px);
+}
+
+#layout-page-gallery .gallery-page-card:active:not(.gallery-page-card--dragging) {
+    opacity: 0.98;
+}
+
+/* 翻页落位脉冲 / 无交接来源时的回退 */
+#layout-page-gallery .gallery-page-card.gallery-card-switch-pulse {
+    animation: galleryCardSwitchPulse 0.52s cubic-bezier(0.18, 0.92, 0.28, 1) both;
+    z-index: 6;
 }
 
 @media (prefers-reduced-motion: reduce) {
     #layout-page-gallery .gallery-page-card {
-        transition: border-color 0.15s ease, box-shadow 0.15s ease;
+        transition: border-color 0.12s ease, box-shadow 0.12s ease;
+    }
+    #layout-page-gallery .gallery-page-card:not(.is-active):hover,
+    #layout-page-gallery .gallery-page-card.is-active:hover {
+        transform: none;
+    }
+    #layout-page-gallery .gallery-page-card:active:not(.gallery-page-card--dragging) {
+        opacity: 1;
+    }
+    #layout-page-gallery .gallery-page-card.gallery-morph-source-handoff,
+    #layout-page-gallery .gallery-page-card.gallery-highlight-enter {
+        animation: none;
     }
     #layout-page-gallery .gallery-page-card.gallery-card-switch-pulse {
         animation: none;
@@ -9148,11 +9456,14 @@ body.leader-note-modal-open {
 
 /* 页面画廊 · 播放顺序：拖拽与复制动效 */
 #layout-page-gallery .gallery-page-card.gallery-page-card--dragging {
-    opacity: 0.55;
-    transform: scale(0.965);
+    opacity: 0.72;
     cursor: grabbing;
     z-index: 8;
-    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45) !important;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.32) !important;
+    transition:
+        border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+        box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+        opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 #layout-page-gallery .gallery-page-card.gallery-page-card--drop-before,
 #layout-page-gallery .gallery-page-card.gallery-page-card--drop-after {
@@ -9202,19 +9513,14 @@ body.leader-note-modal-open {
 }
 @keyframes galleryPlaybackCopyPop {
     0% {
-        transform: scale(0.92);
-        opacity: 0.65;
-    }
-    55% {
-        transform: scale(1.03);
+        opacity: 0.78;
     }
     100% {
-        transform: scale(1);
         opacity: 1;
     }
 }
 #layout-page-gallery .gallery-page-card.gallery-page-card--copy-pop {
-    animation: galleryPlaybackCopyPop 0.38s ease-out;
+    animation: galleryPlaybackCopyPop 0.26s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -9860,6 +10166,51 @@ body.leader-note-modal-open {
     border: 1px solid rgba(255, 255, 255, 0.08);
     box-sizing: border-box;
 }
+.setlist-name-dup-hint {
+    margin: 8px 0 0;
+    padding: 8px 10px;
+    border-radius: 8px;
+    font-size: 0.78rem;
+    line-height: 1.45;
+    color: rgba(255, 210, 140, 0.96);
+    background: rgba(180, 120, 40, 0.14);
+    border: 1px solid rgba(212, 160, 60, 0.32);
+}
+.setlist-card__tag {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 6px;
+    border-radius: 999px;
+    font-size: 0.62rem;
+    font-weight: 600;
+    vertical-align: middle;
+    color: rgba(200, 215, 240, 0.95);
+    background: rgba(74, 111, 165, 0.22);
+    border: 1px solid rgba(107, 142, 201, 0.28);
+}
+.local-data-volume-banner {
+    margin: 0 0 12px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    font-size: 0.76rem;
+    line-height: 1.55;
+}
+.local-data-volume-banner--warn {
+    color: rgba(245, 230, 200, 0.95);
+    background: rgba(212, 175, 55, 0.1);
+    border: 1px solid rgba(212, 175, 55, 0.32);
+}
+.local-data-volume-banner--critical {
+    color: rgba(255, 210, 170, 0.98);
+    background: rgba(180, 90, 50, 0.14);
+    border: 1px solid rgba(220, 130, 70, 0.35);
+}
+[data-theme="light"] .local-data-volume-banner--warn {
+    color: #5a4a20;
+}
+[data-theme="light"] .local-data-volume-banner--critical {
+    color: #6a4020;
+}
 .setlist-card {
     padding: 12px 12px 10px;
     border-radius: 12px;
@@ -10074,4 +10425,255 @@ body.leader-note-modal-open {
     .bg-option.active {
         transform: none;
     }
+}
+
+/* ========== 开场动画（主控台） ========== */
+body.intro-active {
+    overflow: hidden;
+}
+body.intro-active #app {
+    pointer-events: none;
+}
+
+.worship-intro {
+    --intro-ink: rgba(255, 255, 255, 0.13);
+    --intro-lit: #ffffff;
+    position: fixed;
+    inset: 0;
+    z-index: 9500;
+    background: #000;
+    cursor: pointer;
+    transition: opacity 0.28s ease;
+    font-family: var(--worship-app-font-family);
+    visibility: hidden;
+}
+body.intro-active .worship-intro {
+    visibility: visible;
+}
+.worship-intro.is-done {
+    pointer-events: none;
+    opacity: 0;
+}
+
+.worship-intro .curtain {
+    position: absolute;
+    top: 0;
+    width: 50%;
+    height: 100%;
+    overflow: hidden;
+    will-change: transform;
+    background: #000;
+    backface-visibility: hidden;
+}
+.worship-intro .curtain-left { left: 0; }
+.worship-intro .curtain-right { right: 0; }
+
+.worship-intro .curtain-edge {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 40px;
+    pointer-events: none;
+    opacity: 0.45;
+}
+.worship-intro .curtain-left .curtain-edge {
+    right: 0;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.04));
+}
+.worship-intro .curtain-right .curtain-edge {
+    left: 0;
+    background: linear-gradient(270deg, transparent, rgba(255, 255, 255, 0.04));
+}
+
+.worship-intro .curtain-seam {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    width: 1px;
+    margin-left: -0.5px;
+    background: rgba(255, 255, 255, 0.07);
+    z-index: 5;
+    pointer-events: none;
+}
+
+.worship-intro .content-anchor {
+    position: absolute;
+    top: 50%;
+    transform: translate(-50%, -50%) scale(1.22);
+    pointer-events: none;
+}
+.worship-intro .curtain-left .content-anchor { left: 100%; }
+.worship-intro .curtain-right .content-anchor { left: 0; }
+
+.worship-intro .cross-unit {
+    position: relative;
+    height: clamp(520px, 84vh, 780px);
+    min-width: min(96vw, 940px);
+}
+
+.worship-intro .vstem {
+    position: absolute;
+    left: 50%;
+    top: 0;
+    bottom: 0;
+    width: clamp(14px, 2.8vw, 24px);
+    transform: translateX(-50%);
+    border-radius: 999px;
+    background: var(--intro-ink);
+    overflow: hidden;
+    z-index: 1;
+}
+
+.worship-intro .vfill {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 0%;
+    background: var(--intro-lit);
+    box-shadow: 0 0 14px rgba(255, 255, 255, 0.22);
+    border-radius: 999px;
+}
+.worship-intro .vfill::before,
+.worship-intro .vfill::after {
+    content: "";
+    position: absolute;
+    left: -100%;
+    width: 300%;
+    pointer-events: none;
+}
+.worship-intro .vfill::before {
+    top: -8px;
+    height: 16px;
+    background: radial-gradient(ellipse 42% 100% at 50% 100%, rgba(255, 255, 255, 0.95) 0%, transparent 68%);
+    animation: worshipIntroWaveA 1.7s ease-in-out infinite;
+}
+.worship-intro .vfill::after {
+    top: -5px;
+    height: 11px;
+    background: radial-gradient(ellipse 38% 100% at 50% 100%, rgba(255, 255, 255, 0.65) 0%, transparent 62%);
+    animation: worshipIntroWaveB 2.3s ease-in-out infinite reverse;
+}
+@keyframes worshipIntroWaveA {
+    0%, 100% { transform: translateX(0); }
+    50% { transform: translateX(6%); }
+}
+@keyframes worshipIntroWaveB {
+    0%, 100% { transform: translateX(0); }
+    50% { transform: translateX(-5%); }
+}
+
+.worship-intro .cross-row {
+    position: absolute;
+    z-index: 2;
+    top: 26%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.worship-intro .stem-slot {
+    width: clamp(14px, 2.8vw, 24px);
+    flex-shrink: 0;
+}
+
+.worship-intro .word {
+    position: relative;
+    font-size: clamp(2.1rem, 10.5vw, 6rem);
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: 0.02em;
+}
+.worship-intro .word-dim {
+    display: flex;
+    align-items: center;
+    color: var(--intro-ink);
+}
+.worship-intro .word-lit {
+    position: absolute;
+    left: 0;
+    top: 0;
+    display: flex;
+    align-items: center;
+    pointer-events: none;
+}
+.worship-intro .word-lit .ch-slot { --fill: 0; }
+.worship-intro .word-lit .ch-slot.is-empty { visibility: hidden; }
+
+.worship-intro .word-left .word-lit .ch-slot {
+    -webkit-mask-image: linear-gradient(
+        to left,
+        #000 0%,
+        #000 calc(var(--fill) * 100% - 1%),
+        rgba(0, 0, 0, 0.7) calc(var(--fill) * 100% + 6%),
+        transparent calc(var(--fill) * 100% + 16%)
+    );
+    mask-image: linear-gradient(
+        to left,
+        #000 0%,
+        #000 calc(var(--fill) * 100% - 1%),
+        rgba(0, 0, 0, 0.7) calc(var(--fill) * 100% + 6%),
+        transparent calc(var(--fill) * 100% + 16%)
+    );
+}
+.worship-intro .word-right .word-lit .ch-slot {
+    -webkit-mask-image: linear-gradient(
+        to right,
+        #000 0%,
+        #000 calc(var(--fill) * 100% - 1%),
+        rgba(0, 0, 0, 0.7) calc(var(--fill) * 100% + 6%),
+        transparent calc(var(--fill) * 100% + 16%)
+    );
+    mask-image: linear-gradient(
+        to right,
+        #000 0%,
+        #000 calc(var(--fill) * 100% - 1%),
+        rgba(0, 0, 0, 0.7) calc(var(--fill) * 100% + 6%),
+        transparent calc(var(--fill) * 100% + 16%)
+    );
+}
+.worship-intro .word-lit .ch-slot.is-done {
+    -webkit-mask-image: none;
+    mask-image: none;
+}
+.worship-intro .ch-glyph { color: var(--intro-lit); }
+
+.intro-click-hint {
+    position: fixed;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 9502;
+    margin: 0;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.22);
+    pointer-events: none;
+    font-family: var(--worship-app-font-family);
+    visibility: hidden;
+}
+body.intro-active .intro-click-hint {
+    visibility: visible;
+}
+.intro-click-hint[hidden] {
+    display: none;
+}
+
+@media (max-width: 520px) {
+    .worship-intro .content-anchor {
+        transform: translate(-50%, -50%) scale(1.08);
+    }
+    .worship-intro .word { font-size: clamp(1.7rem, 8.5vw, 2.6rem); }
+    .worship-intro .cross-unit {
+        height: clamp(380px, 68vh, 520px);
+        min-width: 98vw;
+    }
+    .worship-intro .cross-row { top: 25%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .worship-intro .vfill::before,
+    .worship-intro .vfill::after { animation: none; }
 }

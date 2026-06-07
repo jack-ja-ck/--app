@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="lܕO">
+  <title>lܕO</title>
+  <path fill="#000000" d="M228 0h568c126 0 228 102 228 228v568c0 126-102 228-228 228H228C102 1024 0 922 0 796V228C0 102 102 0 228 0z"/>
+  <path fill="#FFFFFF" d="M464 232h96v72h148v80H560v224a96 96 0 0 1-96-96V384H316v-80h148v-72z"/>
+</svg>

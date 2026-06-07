@@ -37,6 +37,27 @@
     })();
     </script>
     <title>敬拜投屏 · 专业版</title>
+    <meta name="description" content="敬拜投屏：教会敬拜歌词管理、分页编辑与多屏投屏工具。支持诗库、流程编排、主领分享与 PWA 离线使用。">
+    <meta name="keywords" content="敬拜投屏,教会投屏,歌词投屏,敬拜歌词,PWA,主领,诗库">
+    <meta name="author" content="敬拜投屏">
+    <link rel="canonical" href="https://jack-ja-ck.github.io/--app/">
+    <meta property="og:type" content="website">
+    <meta property="og:locale" content="zh_CN">
+    <meta property="og:site_name" content="敬拜投屏">
+    <meta property="og:title" content="敬拜投屏 · 专业版">
+    <meta property="og:description" content="教会敬拜歌词管理、分页编辑与多屏投屏工具，支持诗库、流程编排与主领分享。">
+    <meta property="og:url" content="https://jack-ja-ck.github.io/--app/">
+    <meta property="og:image" content="https://jack-ja-ck.github.io/--app/icons/android-chrome-512x512.png">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="敬拜投屏 · 专业版">
+    <meta name="twitter:description" content="教会敬拜歌词管理、分页编辑与多屏投屏工具。">
+    <meta name="twitter:image" content="https://jack-ja-ck.github.io/--app/icons/android-chrome-512x512.png">
+    <link rel="icon" href="./icons/favicon.ico" sizes="any">
+    <link rel="icon" type="image/svg+xml" href="./icons/favicon.svg">
+    <link rel="icon" type="image/png" sizes="16x16" href="./icons/favicon-16x16.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="48x48" href="./icons/favicon-48x48.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="./icons/apple-touch-icon.png">
     <link rel="stylesheet" href="style.css">
     <style id="leader-panel-modal-styles">
         #leader-panel-modal,#leader-backup-modal{position:fixed;inset:0;z-index:100050;display:none;align-items:center;justify-content:center;padding:24px;background:rgba(0,0,0,0.62);box-sizing:border-box}
@@ -204,6 +225,7 @@
     <script src="js/ui.js"></script>
     <script src="js/fonts.js"></script>
     <script src="js/font-loader.js"></script>
+    <script src="js/intro.js" defer></script>
     <script src="app.js" defer></script>
     <script>
       (function () {
@@ -244,6 +266,22 @@
     <!-- Cloudflare Web Analytics --><script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "9b05bbaaef434bbe831af6940a2835a8"}'></script><!-- End Cloudflare Web Analytics -->
 </head>
 <body data-theme="dark">
+<div class="seo-intro" aria-hidden="true">
+    <h1>敬拜投屏 · 专业版</h1>
+    <p>教会敬拜歌词管理与投屏 Web 应用：诗库编辑、歌词分页、多屏投屏、主领流程与二维码分享，可安装为 PWA 离线使用。</p>
+</div>
+<div id="intro" class="worship-intro" role="dialog" aria-modal="true" aria-label="欢迎使用敬拜投屏" title="点击任意处进入">
+    <div class="curtain curtain-left" id="curtainL">
+        <div class="curtain-edge"></div>
+        <div class="content-anchor" id="anchorL"></div>
+    </div>
+    <div class="curtain-seam" id="curtainSeam"></div>
+    <div class="curtain curtain-right" id="curtainR">
+        <div class="curtain-edge"></div>
+        <div class="content-anchor" id="anchorR"></div>
+    </div>
+</div>
+<p class="intro-click-hint" id="intro-click-hint">点击屏幕进入</p>
 <div id="app">
     <!-- 左侧：诗歌管理区 -->
     <div id="song-library" class="console-zone console-zone--library">
@@ -288,6 +326,13 @@
         <button id="batch-import-btn" class="small-btn" style="margin-top:8px;">📋 批量导入歌词</button>
     </div>
 
+    <div id="song-context-menu" class="song-context-menu" hidden role="menu" aria-label="诗歌操作">
+        <button type="button" class="song-context-menu-item" data-action="edit" role="menuitem">编辑</button>
+        <button type="button" class="song-context-menu-item" data-action="copy-style" role="menuitem">复制投屏样式到…</button>
+        <button type="button" class="song-context-menu-item" data-action="copy" role="menuitem">复制诗歌</button>
+        <button type="button" class="song-context-menu-item" data-action="delete" role="menuitem">删除</button>
+    </div>
+
     <div class="resize-handle" id="resize1"></div>
 
     <!-- 中间：编辑与预览区 -->
@@ -312,7 +357,7 @@
                                     <button type="button" class="help-menu-item" role="menuitem" data-help-action="shortcuts">⌨️ 快捷键</button>
                                 </div>
                             </div>
-                            <button type="button" id="pwa-install-btn" class="editor-action-bar-btn pwa-install-btn gallery-status-utility-btn" style="display:none" title="把网站固定到桌面（非应用商店 App，点击后会说明）"><span class="editor-action-bar-btn__icon" aria-hidden="true">📲</span><span class="editor-action-bar-btn__text">安装App</span></button>
+                            <button type="button" id="pwa-install-btn" class="editor-action-bar-btn pwa-install-btn gallery-status-utility-btn" style="display:none" title="把网站固定到桌面（非应用商店 App，点击后会说明）"><span class="editor-action-bar-btn__icon worship-app-mark-wrap" aria-hidden="true"><img class="worship-app-mark worship-app-mark--light" src="./icons/logo.svg" width="20" height="20" alt=""><img class="worship-app-mark worship-app-mark--dark" src="./icons/logo-dark.svg" width="20" height="20" alt="" hidden></span><span class="editor-action-bar-btn__text">安装App</span></button>
                             <div class="gallery-toolbar-zoom gallery-toolbar-zoom--cards" role="group" aria-label="页面画廊缩放">
                                 <span class="gallery-toolbar-zoom-label">画廊</span>
                                 <button type="button" id="gallery-zoom-out" class="gallery-toolbar-zoom-btn" title="缩小页面画廊">−</button>
@@ -396,6 +441,7 @@
             <div class="editor-lyrics-drawer-body" id="layout-editor-sheet">
                 <div class="editor-title-row">
                     <input type="text" id="song-title-input" class="editor-song-title-input" placeholder="请输入歌名..." value="奇异恩典" aria-label="歌名">
+                    <button type="button" id="song-page-transition-pill" class="song-page-transition-pill" title="当前诗歌翻页转场，点击打开高级编辑">✨ 无过渡</button>
                     <div class="editor-font-tools" aria-label="编辑区字号">
                         <button type="button" id="editor-font-decrease" class="editor-font-btn" title="减小编辑区字号" aria-label="减小字号">A-</button>
                         <span id="editor-font-size-display" aria-live="polite">16</span>
@@ -434,7 +480,7 @@
             <span class="adv-drawer-open-text">高级编辑</span>
         </button>
         <div class="projection-settings-flex-fill">
-        <div class="setting-group bg-panel-group">
+        <div class="setting-group bg-panel-group" data-bg-tab-active="preset">
             <label class="setting-label-with-icon">
                 <span class="ui-icon ui-icon--bg" aria-hidden="true">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -450,7 +496,7 @@
                 <button type="button" class="bg-tab" data-bg-tab="shared" role="tab" aria-selected="false">共享背景</button>
             </div>
             <div id="bg-tab-preset" class="bg-tab-panel active" role="tabpanel">
-                <div class="bg-selector">
+                <div class="bg-selector bg-selector--presets" role="group" aria-label="预设背景">
                     <div class="bg-option active" data-bg="solid-black" title="纯黑"></div>
                     <div class="bg-option" data-bg="solid-white" title="纯白"></div>
                     <div class="bg-option" data-bg="solid-gray" title="纯灰"></div>
@@ -458,20 +504,10 @@
                     <div class="bg-option" data-bg="gentle-light" title="柔和光流"></div>
                     <div class="bg-option" data-bg="starry-night" title="静谧星空"></div>
                     <div class="bg-option" data-bg="cross-glow" title="十字光晕"></div>
-                    <div class="bg-option" data-bg="gradient" title="渐变"></div>
-                    <div class="bg-option" data-bg="image" id="upload-bg-trigger" title="从文件上传"></div>
-                    <input type="file" id="bg-image-input" multiple accept="image/png,image/jpeg,image/jpg,image/gif,image/bmp,image/webp,video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov" hidden>
+                    <div class="bg-option" data-bg="gradient" title="深蓝渐变"></div>
+                    <div class="bg-option" data-bg="deep-navy" title="藏青渐变"></div>
+                    <div class="bg-option" data-bg="dawn-glow" title="晨曦暖光"></div>
                 </div>
-                <button type="button" id="upload-bg-btn" class="btn-outline bg-action-btn">
-                    <span class="ui-icon ui-icon--upload" aria-hidden="true">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M12 15V4m0 0l4 4m-4-4-4 4" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
-                            <path d="M5 19h14a2 2 0 0 0 2-2v-1H3v1a2 2 0 0 0 2 2z" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
-                        </svg>
-                    </span>
-                    <span class="bg-action-btn__text">上传背景图片</span>
-                </button>
-                <p class="bg-privacy-hint">您上传的背景默认为私密，可在「我的背景」中共享到云端。</p>
             </div>
             <div id="bg-tab-mine" class="bg-tab-panel" role="tabpanel">
                 <div id="my-backgrounds-container" class="my-backgrounds"></div>
@@ -480,17 +516,30 @@
             <div id="bg-tab-shared" class="bg-tab-panel" role="tabpanel">
                 <div id="shared-backgrounds-container" class="my-backgrounds shared-cloud-backgrounds" aria-label="云端共享背景"></div>
             </div>
-            <button type="button" id="free-bg-link" class="btn-outline bg-action-btn bg-action-btn--resources">
-                <span class="ui-icon ui-icon--resources" aria-hidden="true">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <rect x="3" y="3" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/>
-                        <rect x="14" y="3" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/>
-                        <rect x="3" y="14" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/>
-                        <path d="M14 17h7M17.5 14v7" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
-                    </svg>
-                </span>
-                <span class="bg-action-btn__text">免费背景素材</span>
-            </button>
+            <div class="bg-preset-actions" id="bg-upload-actions">
+                <input type="file" id="bg-image-input" multiple accept="image/png,image/jpeg,image/jpg,image/gif,image/bmp,image/webp,video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov" hidden>
+                <button type="button" id="upload-bg-btn" class="btn-outline bg-action-btn bg-action-btn--upload">
+                    <span class="ui-icon ui-icon--upload" aria-hidden="true">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M12 15V4m0 0l4 4m-4-4-4 4" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M5 19h14a2 2 0 0 0 2-2v-1H3v1a2 2 0 0 0 2 2z" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+                        </svg>
+                    </span>
+                    <span class="bg-action-btn__text">上传背景图片</span>
+                </button>
+                <button type="button" id="free-bg-link" class="btn-outline bg-action-btn bg-action-btn--resources">
+                    <span class="ui-icon ui-icon--resources" aria-hidden="true">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <rect x="3" y="3" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/>
+                            <rect x="14" y="3" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/>
+                            <rect x="3" y="14" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/>
+                            <path d="M14 17h7M17.5 14v7" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+                        </svg>
+                    </span>
+                    <span class="bg-action-btn__text">免费背景素材</span>
+                </button>
+                <p class="bg-privacy-hint">您上传的背景默认为私密，可在「我的背景」中共享到云端。</p>
+            </div>
         </div>
         <div class="setting-group">
             <label>⏱️ 自动播放</label>
@@ -646,12 +695,7 @@
                             <button type="button" class="adv-drawer-acc-trigger" aria-expanded="true"><span class="adv-drawer-acc-trigger-label"><span class="ui-icon ui-icon--bg-fine" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="1.75"/><path d="M12 8v4l2.5 2.5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/></svg></span>背景微调</span><span class="adv-drawer-acc-chevron" aria-hidden="true"></span></button>
                             <div class="adv-drawer-acc-panel">
                                 <div class="adv-drawer-acc-panel-inner adv-drawer-card-body" id="adv-bg-fine-body">
-                                    <p class="adv-bg-fine-scope-hint">以下设置主要影响投屏画面与歌词预览</p>
                                     <div id="adv-projection-mask-slot"></div>
-                                    <label class="adv-drawer-field-label" for="adv-lyric-overlay-opacity">快速预览暗角浓度</label>
-                                    <input type="range" id="adv-lyric-overlay-opacity" class="adv-range" min="0" max="55" value="0" step="1" title="叠在预览上的半透明层">
-                                    <label class="adv-drawer-field-label" for="adv-lyric-layer-blur">快速预览毛玻璃模糊</label>
-                                    <input type="range" id="adv-lyric-layer-blur" class="adv-range" min="0" max="20" value="0" step="1" title="作用于预览区叠层">
                                     <label class="adv-drawer-field-label" for="vignette-shape-select">局部亮度 · 渐变形状</label>
                                     <select id="vignette-shape-select">
                                         <option value="circle" selected>圆形</option>
@@ -668,7 +712,8 @@
                             <button type="button" class="adv-drawer-acc-trigger" aria-expanded="true"><span>✨ 转场特效</span><span class="adv-drawer-acc-chevron" aria-hidden="true"></span></button>
                             <div class="adv-drawer-acc-panel">
                                 <div class="adv-drawer-acc-panel-inner adv-drawer-card-body">
-                                    <label class="adv-drawer-field-label" for="page-transition-select">翻页动画</label>
+                                    <p id="adv-page-transition-scope" class="adv-bg-fine-scope-hint">以下翻页转场仅作用于当前诗歌。同一首内翻页时使用此处设置；切换到另一首诗歌时，由播放列表的切歌淡入淡出控制。</p>
+                                    <label class="adv-drawer-field-label" for="page-transition-select">翻页动画（页内）</label>
                                     <select id="page-transition-select">
                                         <option value="none" selected>无过渡</option>
                                         <option value="fade">淡入淡出</option>
@@ -685,6 +730,7 @@
                                     </select>
                                     <label class="adv-drawer-field-label" for="page-transition-speed-slider">动画速度 <span id="page-transition-speed-val">0.6</span> 秒</label>
                                     <input type="range" id="page-transition-speed-slider" class="adv-range" min="0.3" max="1.5" value="0.6" step="0.1" title="翻页过渡时长">
+                                    <button type="button" id="page-transition-restore-default-btn" class="btn-outline adv-page-transition-restore-btn">↩ 恢复默认转场</button>
                                 </div>
                             </div>
                         </section>
@@ -813,8 +859,8 @@
 <li><b>排序</b>：拖拽播放列表中的诗歌上下调整顺序</li>
 <li><b>删除</b>：点击诗歌旁的「✕」</li>
 <li><b>开始播放</b>：点击「▶ 开始播放」</li>
-<li><b>保存歌单</b>：点击「💾 保存歌单」将当前播放顺序命名保存到本机，并附带保存当时的<b>每首背景、垂直位置、遮罩/字透明度</b>以及<b>全局字体、字号、颜色、描边、分页行数、晕影、翻页动画</b>等，便于日后一键还原（列表变更时仍会同步到当前播放列表存储）</li>
-<li><b>我的歌单</b>：点击「📋 我的歌单」打开已保存列表，选择「加载」即恢复顺序与上述外观设置，并跳到第一首</li>
+<li><b>保存歌单</b>：点击「💾 保存歌单」将当前播放顺序命名保存到本机，并附带保存当时的<b>每首背景、垂直位置、遮罩/字透明度、翻页转场</b>以及<b>全局字体、字号、颜色、描边、分页行数、晕影</b>等。同名歌单会提示是否<b>覆盖保存</b>；若存储空间不足会自动压缩背景大图后再试。歌单、诗歌存档或诗歌库数量较多时，系统会提醒清理或导出备份</li>
+<li><b>我的歌单</b>：点击「📋 我的歌单」打开已保存列表，选择「加载」即恢复顺序与上述外观设置，并跳到第一首；已压缩的歌单会标注「已压缩」</li>
 </ul>
 
 <h4>3. 本机诗歌与「搜索我的诗歌」</h4>
@@ -1177,8 +1223,9 @@
             <strong>说明：</strong>这不是从应用商店下载的独立 App，而是浏览器把<strong>本网站</strong>固定到桌面或开始菜单的快捷方式；打开后仍是网页，功能与在浏览器中访问相同。
         </p>
         <div class="pwa-install-guide__store-card">
-            <div class="pwa-install-guide__icon-wrap">
-                <img class="pwa-install-guide__icon-img" src="./icon-192.png" width="56" height="56" alt="" decoding="async">
+            <div class="pwa-install-guide__icon-wrap worship-app-mark-wrap worship-app-mark-wrap--lg">
+                <img class="worship-app-mark worship-app-mark--light" src="./icons/logo.svg" width="56" height="56" alt="" decoding="async">
+                <img class="worship-app-mark worship-app-mark--dark" src="./icons/logo-dark.svg" width="56" height="56" alt="" decoding="async" hidden>
             </div>
             <div class="pwa-install-guide__store-meta">
                 <p class="pwa-install-guide__app-name">敬拜投屏·专业版</p>
@@ -1187,7 +1234,7 @@
                     <span class="pwa-install-guide__badge">网页快捷方式</span>
                     <span class="pwa-install-guide__badge">非商店 App</span>
                 </p>
-                <p class="pwa-install-guide__store-note">流程与在 Chrome / Edge 中「安装此站点」、或在手机应用商店点「获取」相似：由浏览器完成安装，无需单独下载 .exe 安装包。</p>
+                <p class="pwa-install-guide__store-note">流程与在 Chrome / Edge 中「安装此站点」、或在手机应用商店点「获取」相似：由浏览器完成安装，无需单独下载 .exe 安装包。若曾安装过旧版、图标未更新，请先删除旧快捷方式，在本页 <strong>Ctrl+F5</strong> 硬性刷新后再重新安装。</p>
             </div>
         </div>
         <h2 id="pwa-install-guide-title" class="pwa-install-guide__title">获取此应用</h2>
@@ -1250,6 +1297,28 @@
     var copyBtn = document.getElementById("pwa-install-guide-copy");
     var COPY_LINK_LABEL = "复制链接（换设备或换浏览器时用）";
     if (!installBtn) return;
+
+    function syncWorshipAppMarkTheme() {
+        var onLight = document.body.getAttribute("data-theme") === "light";
+        document.querySelectorAll(".worship-app-mark--light").forEach(function (img) {
+            img.hidden = onLight;
+        });
+        document.querySelectorAll(".worship-app-mark--dark").forEach(function (img) {
+            img.hidden = !onLight;
+        });
+    }
+    syncWorshipAppMarkTheme();
+    if (typeof MutationObserver !== "undefined") {
+        var themeObs = new MutationObserver(function (muts) {
+            for (var i = 0; i < muts.length; i++) {
+                if (muts[i].attributeName === "data-theme") {
+                    syncWorshipAppMarkTheme();
+                    break;
+                }
+            }
+        });
+        themeObs.observe(document.body, { attributes: true, attributeFilter: ["data-theme"] });
+    }
 
     function isStandalone() {
         return window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
@@ -1568,9 +1637,10 @@
     <h3 id="setlist-name-modal-title" style="margin:0 0 8px; color:#f5e6c8; font-size:1.1rem;">💾 保存歌单</h3>
     <p style="margin:0 0 16px; color:rgba(255,255,255,0.55); font-size:0.85rem;">请为本次敬拜歌单命名</p>
     <input id="setlist-name-input" type="text" placeholder="例如：主日敬拜 5月第2周" style="width:100%; padding:10px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.2); background:rgba(0,0,0,0.3); color:#fff; font-size:15px; box-sizing:border-box;">
+    <p id="setlist-name-dup-hint" class="setlist-name-dup-hint" hidden role="status">⚠️ 已存在同名歌单，保存时将询问是否覆盖。</p>
     <div class="setlist-name-modal-hints" role="note">
       💡 歌单数据仅保存在您的浏览器本地，不上传云端<br>
-      📦 每条歌单位占用极少空间（约几百字节）
+      📦 同名歌单可覆盖保存；若空间不足会自动压缩背景大图后再试
     </div>
     <div style="display:flex; gap:10px; justify-content:flex-end;">
       <button type="button" id="setlist-name-cancel" style="padding:8px 20px; border-radius:8px; border:1px solid rgba(255,255,255,0.2); background:transparent; color:rgba(255,255,255,0.7); cursor:pointer;">取消</button>

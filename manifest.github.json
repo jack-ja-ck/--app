@@ -8,21 +8,33 @@
   "scope": "https://jack-ja-ck.github.io/--app/",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#0a0f1f",
+  "background_color": "#ffffff",
   "theme_color": "#0a0f1f",
   "prefer_related_applications": false,
   "icons": [
     {
-      "src": "https://jack-ja-ck.github.io/--app/icon-192.png",
+      "src": "https://jack-ja-ck.github.io/--app/icons/android-chrome-192x192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "https://jack-ja-ck.github.io/--app/icon-512.png",
+      "src": "https://jack-ja-ck.github.io/--app/icons/android-chrome-512x512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
+    },
+    {
+      "src": "https://jack-ja-ck.github.io/--app/icons/android-chrome-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "https://jack-ja-ck.github.io/--app/icons/android-chrome-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }

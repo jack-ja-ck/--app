@@ -5,12 +5,12 @@
     var TEXT_BRIGHT_START = 70;
     var CHAR_COUNT = 4;
     var CHAR_GAP = 0.05;
-    var MIN_SHOW = 4500;
-    var HOLD = 350;
-    var CURTAIN_DURATION = 2000;
+    var INTRO_TOTAL_MS = 5000;
+    var MAIN_ANIM_MS = 3000;
+    var HOLD_MS = 200;
+    var CURTAIN_MS = INTRO_TOTAL_MS - MAIN_ANIM_MS - HOLD_MS;
+    var CLICK_UNLOCK_MS = INTRO_TOTAL_MS;
     var CURTAIN_EASE = "cubic-bezier(0.22, 1, 0.36, 1)";
-    var MAX_BOOT_WAIT = 20000;
-    var LERP = 0.11;
     var TEXT = "欢迎使用";
     var TEXT2 = "敬拜投屏";
 
@@ -46,10 +46,8 @@
 
     var running = false;
     var aborted = false;
-    var appReady = false;
-    var bootProgress = 0;
-    var displayProgress = 0;
     var introFinished = false;
+    var introStartTime = 0;
     var timers = [];
     var rafId = 0;
     var curtainRaf = 0;
@@ -256,12 +254,30 @@
         applyLoadProgress(0);
     }
 
-    function setBootProgress(p) {
-        bootProgress = Math.max(bootProgress, Math.min(1, Number(p) || 0));
-        if (bootProgress >= 0.999) appReady = true;
+    function setBootProgress(_p) {
+        /* 保留 API；开场动画改为固定时间轴，不再跟随加载进度 */
     }
 
-    function animateLoadUntilReady() {
+    function canSkipIntro() {
+        return performance.now() - introStartTime >= CLICK_UNLOCK_MS;
+    }
+
+    function unlockIntroClick() {
+        if (!running || aborted || !intro) return;
+        intro.classList.add("intro-click-unlocked");
+        intro.setAttribute("title", "点击任意处进入");
+        if (clickHint) clickHint.hidden = false;
+    }
+
+    function lockIntroClick() {
+        if (intro) {
+            intro.classList.remove("intro-click-unlocked");
+            intro.setAttribute("title", "欢迎使用敬拜投屏");
+        }
+        if (clickHint) clickHint.hidden = true;
+    }
+
+    function animateMainTimeline() {
         return new Promise(function (resolve) {
             if (aborted) {
                 resolve();
@@ -275,28 +291,12 @@
                     return;
                 }
                 var elapsed = now - start;
-                var timeCap = Math.min(1, elapsed / MIN_SHOW);
-                var target = elapsed < MIN_SHOW ? Math.min(bootProgress, timeCap) : bootProgress;
-
-                displayProgress += (target - displayProgress) * LERP;
-                if (Math.abs(target - displayProgress) < 0.002) {
-                    displayProgress = target;
-                }
-
-                applyLoadProgress(easeLiquid(displayProgress));
-
-                if (
-                    appReady &&
-                    bootProgress >= 0.999 &&
-                    elapsed >= MIN_SHOW &&
-                    displayProgress >= 0.995
-                ) {
+                var p = Math.min(1, elapsed / MAIN_ANIM_MS);
+                applyLoadProgress(easeLiquid(p));
+                if (p >= 1) {
                     applyLoadProgress(1);
                     resolve();
                     return;
-                }
-                if (!appReady && elapsed >= MAX_BOOT_WAIT) {
-                    setBootProgress(1);
                 }
                 rafId = requestAnimationFrame(tick);
             }
@@ -310,7 +310,7 @@
                 resolve();
                 return;
             }
-            var dur = durationMs || CURTAIN_DURATION;
+            var dur = durationMs || CURTAIN_MS;
             var settled = false;
 
             function settle() {
@@ -438,14 +438,14 @@
         if (running || !intro) return;
         running = true;
         aborted = false;
-        appReady = false;
-        bootProgress = 0;
-        displayProgress = 0;
+        introStartTime = performance.now();
         intro.classList.remove("is-done");
         intro.removeAttribute("aria-hidden");
         intro.style.opacity = "";
         document.body.classList.add("intro-active");
+        lockIntroClick();
         resetVisuals();
+        timers.push(setTimeout(unlockIntroClick, CLICK_UNLOCK_MS));
 
         if (global.matchMedia && global.matchMedia("(prefers-reduced-motion: reduce)").matches) {
             applyLoadProgress(1);
@@ -454,13 +454,13 @@
             return;
         }
 
-        await animateLoadUntilReady();
+        await animateMainTimeline();
         if (aborted) return;
-        await wait(HOLD);
+        await wait(HOLD_MS);
         if (aborted) return;
         await prepareCurtainReveal();
         if (aborted) return;
-        await animateCurtain(CURTAIN_DURATION);
+        await animateCurtain(CURTAIN_MS);
         if (!aborted) finishIntro(false);
     }
 
@@ -475,7 +475,7 @@
         if (!intro || !curtainL || !curtainR || !anchorL || !anchorR) return false;
         buildCrossMarkup();
         intro.addEventListener("click", function () {
-            if (running) enterNow();
+            if (running && canSkipIntro()) enterNow();
         });
         return true;
     }

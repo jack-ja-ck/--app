@@ -10493,7 +10493,7 @@ body.intro-active.intro-reveal #app {
     inset: 0;
     z-index: 9500;
     background: #000;
-    cursor: pointer;
+    cursor: default;
     transition: opacity 0.32s cubic-bezier(0.33, 0.02, 0.15, 1);
     font-family: var(--worship-app-font-family);
     visibility: hidden;
@@ -10514,6 +10514,9 @@ body.intro-curtain-animating #preview-panel {
 body.intro-curtain-animating .worship-intro .vfill::before,
 body.intro-curtain-animating .worship-intro .vfill::after {
     animation-play-state: paused;
+}
+.worship-intro.intro-click-unlocked {
+    cursor: pointer;
 }
 .worship-intro.is-done {
     pointer-events: none;

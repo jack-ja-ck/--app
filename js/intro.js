@@ -5,9 +5,9 @@
     var TEXT_BRIGHT_START = 70;
     var CHAR_COUNT = 4;
     var CHAR_GAP = 0.05;
-    var INTRO_TOTAL_MS = 5000;
-    var MAIN_ANIM_MS = 3000;
-    var HOLD_MS = 200;
+    var INTRO_TOTAL_MS = 7000;
+    var MAIN_ANIM_MS = 5000;
+    var HOLD_MS = 300;
     var CURTAIN_MS = INTRO_TOTAL_MS - MAIN_ANIM_MS - HOLD_MS;
     var CLICK_UNLOCK_MS = INTRO_TOTAL_MS;
     var CURTAIN_EASE = "cubic-bezier(0.22, 1, 0.36, 1)";

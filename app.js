@@ -4060,6 +4060,67 @@
         $("lyric-template-modal")?.classList.remove("is-open");
     }
 
+    /** 将诗歌存档样式写入 state.ui；无 ui 快照的旧存档回退 songVisual */
+    function applyLyricTemplateToUiState(tpl) {
+        if (tpl.ui && typeof tpl.ui === "object") {
+            state.ui = { ...state.ui, ...tpl.ui };
+        } else if (tpl.songVisual && typeof tpl.songVisual === "object") {
+            const sv = tpl.songVisual;
+            if (Number.isFinite(Number(sv.overlayOpacityPct))) {
+                state.ui.overlayOpacityPct = clamp(Number(sv.overlayOpacityPct), 0, 80);
+            }
+            if (Number.isFinite(Number(sv.fontOpacityPct))) {
+                state.ui.fontOpacityPct = clamp(Number(sv.fontOpacityPct), 20, 100);
+            }
+            if (Number.isFinite(Number(sv.posY))) {
+                state.ui.posY = clamp(Number(sv.posY), 20, 70);
+            }
+            if (sv.pageTransition != null && String(sv.pageTransition).trim()) {
+                state.ui.pageTransition = canonicalPageTransition(sv.pageTransition);
+                if (Number.isFinite(Number(sv.pageTransitionSpeed))) {
+                    state.ui.pageTransitionSpeed = clamp(Number(sv.pageTransitionSpeed), 0.3, 1.5);
+                }
+            }
+        }
+        if (!state.ui.bgImageId) state.ui.bgImageId = "";
+        if (state.ui.bgMediaType !== "video" && state.ui.bgMediaType !== "image") {
+            state.ui.bgMediaType = "image";
+        }
+        if (Number.isFinite(Number(state.ui.lineHeight))) {
+            document.documentElement.style.setProperty(
+                "--adv-preview-line-height",
+                String(clamp(Number(state.ui.lineHeight), ADV_LINE_HEIGHT_MIN, ADV_LINE_HEIGHT_MAX))
+            );
+        }
+        normalizeLegacyBgImageReference();
+    }
+
+    function buildLyricTemplateSongVisualSnapshot(song) {
+        if (!song) return {};
+        const vis = {
+            overlayOpacityPct: resolveSongPresentationField(song, "overlayOpacityPct"),
+            fontOpacityPct: resolveSongPresentationField(song, "fontOpacityPct"),
+            posY: resolveSongPresentationField(song, "posY")
+        };
+        if (songHasOwnPageTransition(song)) {
+            vis.pageTransition = song.pageTransition;
+            vis.pageTransitionSpeed = song.pageTransitionSpeed;
+        }
+        return vis;
+    }
+
+    function deleteLyricTemplate(tplId) {
+        const list = getLyricTemplates();
+        const tpl = list.find((t) => String(t.id) === String(tplId));
+        if (!tpl) return;
+        const name = String(tpl.name || "未命名存档").trim() || "未命名存档";
+        if (!window.confirm(`确定删除诗歌存档「${name}」？\n此操作不可撤销。`)) return;
+        const next = list.filter((t) => String(t.id) !== String(tplId));
+        if (!saveLyricTemplates(next)) return;
+        renderLyricTemplateModalList();
+        showToast("已删除诗歌存档", $("new-from-template-btn"));
+    }
+
     let lyricTemplateSaveModalResolve = null;
 
     function closeLyricTemplateSaveNameModal(result) {
@@ -4232,6 +4293,7 @@
         }
         tpls.forEach((tpl) => {
             const li = document.createElement("li");
+            li.className = "lyric-template-list-row";
             const btn = document.createElement("button");
             btn.type = "button";
             btn.className = "lyric-template-item";
@@ -4240,7 +4302,17 @@
             const ds = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
             btn.innerHTML = `<span>${title}</span><span class="lyric-template-item-meta">${ds}</span>`;
             btn.addEventListener("click", () => createSongFromLyricTemplate(tpl));
+            const delBtn = document.createElement("button");
+            delBtn.type = "button";
+            delBtn.className = "small-btn lyric-template-item-del";
+            delBtn.textContent = "删除";
+            delBtn.setAttribute("aria-label", `删除存档 ${tpl.name || ""}`);
+            delBtn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                deleteLyricTemplate(tpl.id);
+            });
             li.appendChild(btn);
+            li.appendChild(delBtn);
             ul.appendChild(li);
         });
     }
@@ -4283,25 +4355,22 @@
         openLyricTemplateSaveNameModal(defaultName).then((nameRes) => {
             if (nameRes == null) return;
             const nm = String(nameRes).trim() || defaultName;
+            persistCurrentSongPresentationFromUi(state.currentSongId);
+            const snapSong = currentSong();
             let uiSnap;
             try {
                 uiSnap = JSON.parse(JSON.stringify(state.ui));
             } catch (_e) {
                 uiSnap = { ...state.ui };
             }
+            uiSnap.lineHeight = getAdvPreviewLineHeightNumber();
             const tpl = {
                 id: "tpl_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8),
                 name: nm,
                 createdAt: Date.now(),
                 lyrics: lyricsToSave,
                 ui: uiSnap,
-                songVisual: {
-                    overlayOpacityPct: song.overlayOpacityPct,
-                    fontOpacityPct: song.fontOpacityPct,
-                    posY: song.posY,
-                    pageTransition: songHasOwnPageTransition(song) ? song.pageTransition : undefined,
-                    pageTransitionSpeed: songHasOwnPageTransition(song) ? song.pageTransitionSpeed : undefined
-                },
+                songVisual: buildLyricTemplateSongVisualSnapshot(snapSong),
                 meta: {
                     key: song.key || "",
                     tempo: song.tempo || "",
@@ -4334,48 +4403,27 @@
             notes: tpl.meta && typeof tpl.meta === "object" ? String(tpl.meta.notes || "") : "",
             tags: tpl.meta && typeof tpl.meta === "object" ? String(tpl.meta.tags || "") : ""
         };
-        if (tpl.songVisual && typeof tpl.songVisual === "object") {
-            if (Number.isFinite(Number(tpl.songVisual.overlayOpacityPct))) {
-                song.overlayOpacityPct = clamp(Number(tpl.songVisual.overlayOpacityPct), 0, 80);
-            }
-            if (Number.isFinite(Number(tpl.songVisual.fontOpacityPct))) {
-                song.fontOpacityPct = clamp(Number(tpl.songVisual.fontOpacityPct), 20, 100);
-            }
-            if (Number.isFinite(Number(tpl.songVisual.posY))) {
-                song.posY = clamp(Number(tpl.songVisual.posY), 20, 70);
-            }
-            if (tpl.songVisual.pageTransition != null && String(tpl.songVisual.pageTransition).trim()) {
-                song.pageTransition = canonicalPageTransition(tpl.songVisual.pageTransition);
-                if (Number.isFinite(Number(tpl.songVisual.pageTransitionSpeed))) {
-                    song.pageTransitionSpeed = clamp(Number(tpl.songVisual.pageTransitionSpeed), 0.3, 1.5);
-                }
-            }
-        }
         const idx = Math.max(0, state.songs.findIndex((s) => s.id === state.currentSongId));
         if (!isDisplay && !isLeader) {
             persistSongBackgroundFromUi(state.currentSongId);
         }
         state.songs.splice(idx + 1, 0, song);
-        saveSongs();
-        if (tpl.ui && typeof tpl.ui === "object") {
-            state.ui = { ...state.ui, ...tpl.ui };
-            if (!state.ui.bgImageId) state.ui.bgImageId = "";
-            if (state.ui.bgMediaType !== "video" && state.ui.bgMediaType !== "image") {
-                state.ui.bgMediaType = "image";
-            }
+        state.currentSongId = song.id;
+        applyLyricTemplateToUiState(tpl);
+        if (!isDisplay && !isLeader) {
+            persistCurrentSongPresentationFromUi(song.id);
         }
         normalizeSongPresentationOverrides(song);
-        normalizeLegacyBgImageReference();
-        state.currentSongId = song.id;
+        hydrateCurrentSongBackgroundIntoUi();
         hydrateCurrentSongTypographyIntoUi();
         syncPosYFromCurrentSong();
         syncOverlayFontOpacityFromCurrentSong();
         syncPageTransitionFromCurrentSong();
-        if (!isDisplay && !isLeader) {
-            persistSongBackgroundFromUi(song.id);
-            saveSongs();
-        }
         state.currentPage = 0;
+        saveSongs();
+        saveSettings();
+        captureEditorPersistBaseline();
+        capturePresentationStyleBaseline();
         updateUIFromState();
         syncSongToEditor();
         renderSongList();
@@ -8519,7 +8567,7 @@
     /*
      * ========== 页面画廊 · 不变量（改切歌/歌词/背景/分页请先读） ==========
      * 1. 切歌：须先 syncSongToEditor，再 renderPageGallery（或 syncPageGallerySelectionFast）。
-     * 2. 多首连播：禁止增量 patch，必须全量 renderPageGallery。
+     * 2. 多首连播：结构签名不变时允许增量 patch；结构变化须全量 renderPageGallery。
      * 3. 当前诗歌分页：编辑器未同步（_galleryEditorSyncedSongId）时用 song.lyrics，不用 textarea。
      * 4. 非当前诗歌：读持久化 song 字段，不读全局 state.ui 背景/字体默认值。
      * 5. 选中态：仅改边框/颜色/交互，不改变区块占位（见 style.css 画廊段）。
@@ -9362,7 +9410,6 @@
     function pageGalleryPatchBlockReason(gal, songIdsOrdered) {
         if (!gal) return "no-gallery-root";
         if (!songIdsOrdered?.length) return "empty-playlist";
-        if (songIdsOrdered.length > 1) return "multi-song-playlist";
         if (!gal.querySelector(".gallery-page-card")) return "no-existing-cards";
         const newSig = computePageGalleryStructureSig(songIdsOrdered);
         if (gal.dataset.galleryStructSig !== newSig) return "structure-signature-changed";
@@ -9389,7 +9436,14 @@
             }
             return false;
         }
-        return verifyPageGalleryCardCounts(gal, songIdsOrdered, context);
+        if (!verifyPageGalleryCardCounts(gal, songIdsOrdered, context)) {
+            if (pageGalleryDebugEnabled()) {
+                console.warn(`[page-gallery] patch 校验失败 (${context})`);
+            }
+            return false;
+        }
+        gal.dataset.galleryStructSig = computePageGalleryStructureSig(songIdsOrdered);
+        return true;
     }
 
     function applyGalleryCardVideoMode(card, plSong, mode) {
@@ -9560,12 +9614,10 @@
             cancelAnimationFrame(scheduleGalleryCardSwitchAnimation._raf);
         }
         scheduleGalleryCardSwitchAnimation._raf = requestAnimationFrame(() => {
-            scheduleGalleryCardSwitchAnimation._raf = requestAnimationFrame(() => {
-                scheduleGalleryCardSwitchAnimation._raf = 0;
-                const gal = $("layout-page-gallery");
-                runGalleryCardSwitchAnimation(gal);
-                if (!isLyricPageTransBusy()) runGalleryActiveLyricEnterOnly(gal);
-            });
+            scheduleGalleryCardSwitchAnimation._raf = 0;
+            const gal = $("layout-page-gallery");
+            runGalleryCardSwitchAnimation(gal);
+            if (!isLyricPageTransBusy()) runGalleryActiveLyricEnterOnly(gal);
         });
     }
 
@@ -9659,20 +9711,17 @@
         const parts = [];
         parts.push(songIdsOrdered.join(","));
         parts.push(String(state.ui.defaultLines));
-        const curSid = String(state.currentSongId || "");
         songIdsOrdered.forEach((sid) => {
             const plSong = state.songs.find((s) => String(s.id) === String(sid));
             if (!plSong) {
                 parts.push("x:0");
                 return;
             }
-            const isCurrent = String(sid) === curSid;
-            const lyricsSrc = getGalleryLyricsSrcForSong(plSong, isCurrent);
+            /* 仅用持久化歌词/分页计结构，勿含「当前诗」UI 态，切歌时签名才稳定、可增量 patch */
+            const lyricsSrc = String(plSong.lyrics ?? "");
             const pages = splitPages(lyricsSrc, state.ui.defaultLines);
-            const seq = getPlaybackSequenceForSong(plSong, isCurrent);
-            parts.push(
-                `${sid}:${pages.length}:${playbackSequenceSignature(seq)}:${pageGalleryPresentationStyleKey(plSong)}`
-            );
+            const seq = getPlaybackSequenceForSong(plSong, false);
+            parts.push(`${sid}:${pages.length}:${playbackSequenceSignature(seq)}`);
         });
         return parts.join("\x1e");
     }
@@ -9899,6 +9948,7 @@
         refreshGalleryAllCardsPresentation(gal, { forceBackground: songSwitched });
         syncGalleryAllSectionVideoModes(gal);
         refreshGallerySectionPageIndicators();
+        refreshGallerySongTransitionSlots(gal);
         if (!isLyricPageTransBusy()) {
             requestAnimationFrame(() => relayoutGalleryLyricVerticalPads());
         }
@@ -10078,6 +10128,21 @@
         headMain.appendChild(slot);
     }
 
+    /** 切歌增量 patch 后刷新各分区转场 pill（当前诗可点 / 非当前只读） */
+    function refreshGallerySongTransitionSlots(gal) {
+        if (!gal) return;
+        const curSid = String(state.currentSongId || "");
+        gal.querySelectorAll(":scope > .gallery-song-section").forEach((sec, songOrd) => {
+            const sid = sec.getAttribute("data-song-id") || "";
+            const plSong = state.songs.find((s) => String(s.id) === String(sid));
+            if (!plSong) return;
+            const headMain = sec.querySelector(".gallery-song-section-head-main");
+            if (!headMain) return;
+            headMain.querySelector(".gallery-song-transition-slot")?.remove();
+            appendGallerySongTransitionSlot(headMain, plSong, String(sid) === curSid, songOrd);
+        });
+    }
+
     /**
      * 切歌/翻页时优先增量更新画廊选中态（不重绘整棵 DOM），失败时由 renderPageGallery 全量重建。
      * @returns {boolean} 是否已增量 patch 成功
@@ -10092,7 +10157,9 @@
         scrollGalleryActiveIntoView(gal);
         scheduleGalleryCardSwitchAnimation();
         refreshGallerySectionPageIndicators();
+        refreshGallerySongTransitionSlots(gal);
         bindGalleryPlaybackCardsInGal(gal);
+        markGalleryRenderedSwitchKey(gal);
         requestAnimationFrame(() => relayoutGalleryLyricVerticalPads());
         return true;
     }
@@ -10377,7 +10444,7 @@
         state.songs.splice(Math.max(0, idx + 1), 0, copy);
         saveSongs();
         hideSongContextMenu();
-        switchSong(copy.id);
+        switchSong(copy.id, { fromLibrary: true });
         showToast("已复制诗歌", $("add-song-btn"));
     }
 
@@ -10634,7 +10701,7 @@ ${deleteBtnHtml}
             if (String(song.id) !== String(state.currentSongId || "")) {
                 updateSongListActiveHighlight(state.currentSongId, song.id);
             }
-            switchSong(song.id);
+            switchSong(song.id, { fromLibrary: true });
         };
 
         row.addEventListener("click", (e) => {
@@ -10926,8 +10993,16 @@ ${deleteBtnHtml}
             li.innerHTML = `<span>${escapeHtml(song.title || "未命名")}</span><button class="playlist-remove-btn" title="移出" aria-label="移出播放列表">✕</button>`;
             li.addEventListener("click", (e) => {
                 if (e.target.closest(".playlist-remove-btn")) return;
+                state.playlist.running = true;
                 state.playlist.activeIndex = idx;
-                savePlaylist();
+                updatePlaylistActiveHighlight();
+                queueMicrotask(() => {
+                    try {
+                        savePlaylist();
+                    } catch (_e) {
+                        /* ignore */
+                    }
+                });
                 switchSong(song.id, { page: 0 });
             });
             li.querySelector(".playlist-remove-btn")?.addEventListener("click", (e) => {
@@ -13991,7 +14066,7 @@ ${deleteBtnHtml}
             if (o.rebuildPlaylist) renderPlaylist();
             else updatePlaylistActiveHighlight();
             if (pageOnlyNav || lineOnlyFlip) {
-                scheduleBroadcastStateDebounced(70);
+                scheduleBroadcastStateDebounced(45);
             } else {
                 broadcastState();
             }
@@ -14168,44 +14243,44 @@ ${deleteBtnHtml}
         const gen = ++songSwitchGen;
         const prevSongId = state.currentSongId;
         libraryPendingDeleteId = "";
+        const songChanged = String(prevSongId || "") !== String(songId || "");
+
+        const fromLibrary = !!(opts && opts.fromLibrary);
 
         updateSongListActiveHighlight(prevSongId, songId);
+        if (!fromLibrary) updatePlaylistActiveHighlight();
 
         if (!isDisplay && !isLeader) {
             syncEditorToSong();
             persistCurrentSongPresentationFromUi(state.currentSongId);
-            try {
-                saveSongs();
-            } catch (_persistSave) {
-                /* ignore */
-            }
+            queueMicrotask(() => {
+                try {
+                    saveSongs();
+                } catch (_persistSave) {
+                    /* ignore */
+                }
+            });
         }
         state.currentSongId = songId;
-        if (String(prevSongId || "") !== String(songId || "")) {
-            state._pendingSongSwitchAnim = true;
-        }
+        if (songChanged) state._pendingSongSwitchAnim = true;
         const song = state.songs.find((s) => String(s.id) === String(songId));
         const stepCount = song ? Math.max(1, getPlaybackSequenceForSong(song, true).length) : 1;
         const wantPage = opts && opts.page != null && Number.isFinite(Number(opts.page)) ? Math.floor(Number(opts.page)) : 0;
         state.currentPage = clamp(wantPage, 0, Math.max(0, stepCount - 1));
-        updatePlaylistActiveHighlight();
         syncPageIndicatorFromState(stepCount);
 
-        const songChanged = String(prevSongId || "") !== String(songId || "");
         if (!isDisplay && !isLeader) {
             hydrateCurrentSongBackgroundIntoUi();
             hydrateCurrentSongTypographyIntoUi();
             if (songChanged) syncSongToEditor();
         }
         if (songChanged) markPageNavChaseIfBusy();
+
         const gal = document.getElementById("layout-page-gallery");
-        if (songChanged) {
-            if (gal) delete gal.dataset.galleryStructSig;
-        } else if (!syncPageGallerySelectionFast()) {
-            requestAnimationFrame(() => {
-                if (gen !== songSwitchGen) return;
-                renderPageGallery();
-            });
+        let galleryPatched = false;
+        if (gal) {
+            captureGalleryActiveFlowOrigin(gal);
+            galleryPatched = syncPageGallerySelectionFast();
         }
 
         const applySwitchUi = () => {
@@ -14215,20 +14290,20 @@ ${deleteBtnHtml}
             syncPageTransitionFromCurrentSong();
             updateUIFromState();
             if (!isDisplay && !isLeader) {
-                syncSongToEditor();
                 captureEditorPersistBaseline();
                 capturePresentationStyleBaseline();
             }
-            if (songChanged) {
-                if (gal) delete gal.dataset.galleryStructSig;
+            if (!galleryPatched && !syncPageGallerySelectionFast()) {
                 renderPageGallery();
             }
-            updateSpeakerCards({ skipGallery: true });
-            renderMiniPreview();
-            scheduleBroadcastStateDebounced(100);
+            updateSpeakerCards({ skipGallery: true, pageOnly: !songChanged });
+            renderMiniPreview(songChanged ? undefined : { pageOnly: true });
+            scheduleBroadcastStateDebounced(fromLibrary ? 50 : songChanged ? 60 : 40);
         };
 
-        if (typeof requestAnimationFrame === "function") {
+        if (fromLibrary) {
+            applySwitchUi();
+        } else if (typeof requestAnimationFrame === "function") {
             requestAnimationFrame(applySwitchUi);
         } else {
             applySwitchUi();
@@ -16751,12 +16826,20 @@ ${deleteBtnHtml}
         saveSongs();
         saveSettings();
         const payload = {
+            exportVersion: 2,
             songs: state.songs,
             settings: {
                 currentSongId: state.currentSongId,
                 currentPage: state.currentPage,
                 sizePreset: state.sizePreset,
                 ui: state.ui
+            },
+            lyricTemplates: getLyricTemplates(),
+            savedSetlists: loadSavedSetlists(),
+            playlist: {
+                items: [...state.playlist.items],
+                running: !!state.playlist.running,
+                activeIndex: state.playlist.activeIndex
             }
         };
         const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
@@ -16778,9 +16861,34 @@ ${deleteBtnHtml}
                 showToast("导入失败", $("import-data-btn"));
                 return;
             }
-            state.songs = data.songs;
+            const n = data.songs.length;
+            const extras = [];
+            if (Array.isArray(data.lyricTemplates) && data.lyricTemplates.length) {
+                extras.push(`诗歌存档 ${data.lyricTemplates.length} 条`);
+            }
+            if (Array.isArray(data.savedSetlists) && data.savedSetlists.length) {
+                extras.push(`歌单 ${data.savedSetlists.length} 条`);
+            }
+            const extraLine = extras.length ? `\n含：${extras.join("、")}。` : "";
+            if (
+                !window.confirm(
+                    `将用导入文件中的 ${n} 首诗歌替换本机曲库与界面设置。${extraLine}\n当前未导出的编辑不会保留。\n\n确定导入？`
+                )
+            ) {
+                return;
+            }
+            const normalized = data.songs.map(normalizeRecoveredSongRow).filter(Boolean);
+            if (!normalized.length) {
+                showToast("导入失败：无有效诗歌", $("import-data-btn"));
+                return;
+            }
+            state.songs = normalized;
+            state.songs.forEach((s) => normalizeSongPresentationOverrides(s));
             const settings = data.settings || {};
             state.currentSongId = settings.currentSongId || state.songs[0].id;
+            if (!state.songs.some((s) => s.id === state.currentSongId)) {
+                state.currentSongId = state.songs[0].id;
+            }
             state.currentPage = Number.isFinite(settings.currentPage) ? settings.currentPage : 0;
             state.sizePreset = settings.sizePreset || "M";
             if (settings.ui && typeof settings.ui === "object") {
@@ -16790,9 +16898,48 @@ ${deleteBtnHtml}
                 state.ui.fontWeight = "700";
             }
             if (!state.ui.bgImageId) state.ui.bgImageId = "";
+            if (state.ui.bgMediaType !== "video" && state.ui.bgMediaType !== "image") {
+                state.ui.bgMediaType = "image";
+            }
+            if (Number.isFinite(Number(state.ui.lineHeight))) {
+                document.documentElement.style.setProperty(
+                    "--adv-preview-line-height",
+                    String(clamp(Number(state.ui.lineHeight), ADV_LINE_HEIGHT_MIN, ADV_LINE_HEIGHT_MAX))
+                );
+            }
+            if (data.playlist && Array.isArray(data.playlist.items)) {
+                state.playlist.items = data.playlist.items.slice();
+                state.playlist.running = !!data.playlist.running && state.playlist.items.length > 0;
+                state.playlist.activeIndex = Number.isFinite(Number(data.playlist.activeIndex))
+                    ? Number(data.playlist.activeIndex)
+                    : 0;
+                reconcilePlaylistState();
+            }
+            if (Array.isArray(data.lyricTemplates)) {
+                saveLyricTemplates(data.lyricTemplates.slice(0, 40));
+            }
+            if (Array.isArray(data.savedSetlists) && data.savedSetlists.length) {
+                tryPersistSavedSetlists(data.savedSetlists);
+            }
             normalizeLegacyBgImageReference();
             refreshBackgroundDefaultsFromUi();
             hydrateCurrentSongBackgroundIntoUi();
+            hydrateCurrentSongTypographyIntoUi();
+            syncPosYFromCurrentSong();
+            syncOverlayFontOpacityFromCurrentSong();
+            syncPageTransitionFromCurrentSong();
+            const curSong = state.songs.find((s) => s.id === state.currentSongId);
+            if (curSong) {
+                const pc = splitPages(curSong.lyrics || "", state.ui.defaultLines);
+                state.currentPage = clamp(state.currentPage, 0, Math.max(0, pc.length - 1));
+            }
+            clearLyricDraft();
+            saveSongs();
+            saveSettings();
+            savePlaylist();
+            syncGlobalSongStoresFromState();
+            captureEditorPersistBaseline();
+            capturePresentationStyleBaseline();
             updateUIFromState();
             syncSongToEditor();
             renderSongList();
@@ -16800,7 +16947,7 @@ ${deleteBtnHtml}
             renderMiniPreview();
             renderPlaylist();
             broadcastState();
-            showCornerSuccessToast("✅ 已导入", $("import-data-btn"));
+            showCornerSuccessToast(`✅ 已导入 ${state.songs.length} 首诗歌并已保存`, $("import-data-btn"));
         };
         reader.readAsText(file, "utf-8");
     }
@@ -17512,7 +17659,7 @@ ${deleteBtnHtml}
                 const sid = contextMenuSongId;
                 hideSongContextMenu();
                 if (!sid) return;
-                if (action === "edit") switchSong(sid);
+                if (action === "edit") switchSong(sid, { fromLibrary: true });
                 else if (action === "copy") duplicateSong(sid);
                 else if (action === "copy-style") openCopyPresentationStyleModal(sid);
                 else if (action === "delete") {

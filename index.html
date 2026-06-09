@@ -298,7 +298,7 @@
         <div class="content-anchor" id="anchorR"></div>
     </div>
 </div>
-<p class="intro-click-hint" id="intro-click-hint" hidden>点击屏幕进入</p>
+<p class="intro-click-hint" id="intro-click-hint" hidden>点击屏幕进入 · 双击跳过至幕布</p>
 <div id="app">
     <!-- 左侧：诗歌管理区 -->
     <div id="song-library" class="console-zone console-zone--library">
@@ -526,12 +526,14 @@
                     <div class="bg-option" data-bg="dawn-glow" title="晨曦暖光"></div>
                 </div>
             </div>
-            <div id="bg-tab-mine" class="bg-tab-panel" role="tabpanel">
-                <div id="my-backgrounds-container" class="my-backgrounds"></div>
-                <p class="hint-text" style="margin-top:6px;">悬停可看大图；拖动 ⋮⋮ 排序；「设默认」标记常用背景；「共享」上传云端（仅图片）。</p>
+            <div id="bg-tab-mine" class="bg-tab-panel my-bg-tab" role="tabpanel">
+                <p class="my-bg-capacity hint-text" id="my-bg-capacity-hint" hidden></p>
+                <div id="my-backgrounds-container" class="my-backgrounds" role="list" aria-label="我的背景"></div>
+                <p class="my-bg-footnote hint-text">拖动 ⋮⋮ 排序；金边表示当前诗歌正在使用。</p>
             </div>
-            <div id="bg-tab-shared" class="bg-tab-panel" role="tabpanel">
+            <div id="bg-tab-shared" class="bg-tab-panel shared-bg-tab" role="tabpanel">
                 <div id="shared-backgrounds-container" class="my-backgrounds shared-cloud-backgrounds" aria-label="云端共享背景"></div>
+                <p class="shared-bg-status hint-text" id="shared-bg-status-hint" role="status" hidden></p>
             </div>
             <div class="bg-preset-actions" id="bg-upload-actions">
                 <input type="file" id="bg-image-input" multiple accept="image/png,image/jpeg,image/jpg,image/gif,image/bmp,image/webp,video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov" hidden>
@@ -557,15 +559,6 @@
                 </button>
                 <p class="bg-privacy-hint">您上传的背景默认为私密，可在「我的背景」中共享到云端。</p>
             </div>
-        </div>
-        <div class="setting-group">
-            <label>⏱️ 自动播放</label>
-            <div>
-                <input type="number" id="autoplay-interval" min="1" max="30" value="5"> 秒
-                <button id="autoplay-toggle" class="btn-outline btn">▶ 开始</button>
-                <button id="autoplay-stop" class="btn-outline btn">⏹️</button>
-            </div>
-            <div class="progress-bar"><div class="progress-fill" id="autoplay-progress"></div></div>
         </div>
         </div>
         <div class="projection-actions-row leader-projection-actions">
@@ -674,10 +667,10 @@
                                     <label class="adv-drawer-field-label" for="font-family-selector">字体选择</label>
                                     <select id="font-family-selector" class="adv-font-family-select adv-font-family-select--lyrics" aria-label="歌词字体"></select>
                                     <p class="adv-font-license-hint" role="note">字体均采用开源免费商用授权，无版权风险</p>
-                                    <label class="adv-drawer-field-label" for="font-slider">字号 <span id="font-val" class="adv-font-val">60</span> px</label>
+                                    <label class="adv-drawer-field-label" for="font-slider">字号 <span id="font-val" class="adv-font-val">80</span> px</label>
                                     <div class="adv-range-tick-wrap">
                                         <div class="adv-range-tick-bar" id="font-slider-tick-bar" aria-hidden="true"></div>
-                                        <input type="range" id="font-slider" class="adv-range" min="8" max="300" value="60" step="1">
+                                        <input type="range" id="font-slider" class="adv-range" min="8" max="300" value="80" step="1">
                                     </div>
                                     <p class="adv-range-ticks-caption">滑轨上金线为常用参考字号（约 60 / 88 / 120 px，随「超大模式」量程变化）</p>
                                     <label class="adv-font-mega-label"><input type="checkbox" id="font-mega-mode" aria-label="超大模式"> 超大模式（字号最高 500px）</label>
@@ -698,7 +691,7 @@
                                     </div>
                                     <p class="adv-range-ticks-caption">金线示常见舒适区（约 40% / 45%，依幕布与机位微调）</p>
                                     <label class="adv-drawer-field-label" for="adv-preview-line-height">行间距</label>
-                                    <input type="range" id="adv-preview-line-height" class="adv-range" min="1.2" max="2.4" value="1.65" step="0.05">
+                                    <input type="range" id="adv-preview-line-height" class="adv-range" min="1.2" max="2.4" value="1.8" step="0.05">
                                     <label class="adv-drawer-field-label" for="default-lines-input">默认行数（分页）</label>
                                     <div class="adv-drawer-inline-field">
                                         <input type="number" id="default-lines-input" min="1" max="20" value="4" style="width:4rem;">
@@ -797,12 +790,6 @@
                 </div>
             </div>
         </aside>
-    </div>
-</div>
-<div id="bg-hover-preview-overlay" class="bg-hover-preview-overlay" hidden aria-hidden="true">
-    <div class="bg-hover-preview-backdrop"></div>
-    <div class="bg-hover-preview-frame">
-        <div class="bg-hover-preview-inner" id="bg-hover-preview-inner"></div>
     </div>
 </div>
 <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>

@@ -75,6 +75,8 @@
     const UPLOADED_BACKGROUNDS_STORAGE = "uploaded_backgrounds";
     /** 「我的背景」本地槽位上限；超出时丢弃最旧（按 timestamp） */
     const UPLOADED_BACKGROUNDS_MAX = 4;
+    /** 「我的背景」中视频背景单独上限（视频占内存大，过多易卡顿） */
+    const UPLOADED_BACKGROUNDS_MAX_VIDEO = 2;
     /** 上传背景时超过此大小则提示用户（仍允许上传） */
     const BG_UPLOAD_WARN_IMAGE_BYTES = 8 * 1024 * 1024;
     const BG_UPLOAD_WARN_VIDEO_BYTES = 40 * 1024 * 1024;
@@ -150,6 +152,7 @@
     let _bgUseIdbFallbackLs = false;
     let _idbThemeBgCache = "";
     let _idbUploadedCache = [];
+    let _galleryLiveVideoByUrl = new Map();
     let _themeBgSlotsCache = [];
     let _themeBgActiveId = "";
     let _themeConsoleVideoDataUrl = "";
@@ -215,6 +218,19 @@
         const tx = db.transaction(IDB_STORE_UPLOADED, "readonly");
         const rows = await promiseReq(tx.objectStore(IDB_STORE_UPLOADED).getAll());
         return Array.isArray(rows) ? rows.filter((x) => x && x.id && x.imageData) : [];
+    }
+
+    async function idbDeleteUploaded(db, id) {
+        const tx = db.transaction(IDB_STORE_UPLOADED, "readwrite");
+        tx.objectStore(IDB_STORE_UPLOADED).delete(String(id || ""));
+        await promiseTx(tx);
+    }
+
+    async function idbPutUploaded(db, item) {
+        if (!item || !item.id || !item.imageData) return;
+        const tx = db.transaction(IDB_STORE_UPLOADED, "readwrite");
+        tx.objectStore(IDB_STORE_UPLOADED).put(item);
+        await promiseTx(tx);
     }
 
     async function idbWriteAllUploaded(db, list) {
@@ -438,6 +454,70 @@
         showToast("已删除主题背景", $("worship-console-wallpaper-preview") || $("theme-bg-grid"));
     }
 
+    function countUploadedBackgroundVideos(items) {
+        const list = Array.isArray(items) ? items : getUploadedBackgrounds();
+        return list.filter((x) => x && isUploadedItemVideo(x)).length;
+    }
+
+    function uploadedBackgroundCapacityMessage(mediaType, items) {
+        const list = Array.isArray(items) ? items : getUploadedBackgrounds();
+        const mt = mediaType === "video" ? "video" : "image";
+        if (list.length >= UPLOADED_BACKGROUNDS_MAX) {
+            return `「我的背景」已满 ${UPLOADED_BACKGROUNDS_MAX} 个，请先删除旧背景再上传`;
+        }
+        if (mt === "video" && countUploadedBackgroundVideos(list) >= UPLOADED_BACKGROUNDS_MAX_VIDEO) {
+            return `视频背景最多 ${UPLOADED_BACKGROUNDS_MAX_VIDEO} 个（占内存大易卡顿），请先删除旧视频`;
+        }
+        return "";
+    }
+
+    function canAddUploadedBackground(mediaType, items) {
+        return !uploadedBackgroundCapacityMessage(mediaType, items);
+    }
+
+    function releaseUploadedBackgroundVideoResources(imageData) {
+        const url = String(imageData || "").trim();
+        if (!url) return;
+        const pooled = _galleryLiveVideoByUrl.get(url);
+        if (pooled) {
+            try {
+                pooled.pause();
+            } catch (_e) {
+                /* ignore */
+            }
+            if (pooled._worshipVideoBlobUrl) {
+                try {
+                    URL.revokeObjectURL(pooled._worshipVideoBlobUrl);
+                } catch (_e2) {
+                    /* ignore */
+                }
+                delete pooled._worshipVideoBlobUrl;
+                delete pooled._worshipVideoBlobKey;
+            }
+            try {
+                pooled.removeAttribute("src");
+                pooled.load();
+            } catch (_e3) {
+                /* ignore */
+            }
+            try {
+                pooled.remove();
+            } catch (_e4) {
+                /* ignore */
+            }
+            _galleryLiveVideoByUrl.delete(url);
+        }
+    }
+
+    function clearActiveUploadedBgFromUi() {
+        state.ui.bgType = "solid-black";
+        state.ui.bgImage = "";
+        state.ui.bgImageId = "";
+        state.ui.bgMediaType = "image";
+        state.ui.lyricsBgShareToCloud = false;
+        saveSettings();
+    }
+
     function deleteUploadedBackgroundItem(itemId, opts) {
         const o = opts && typeof opts === "object" ? opts : {};
         const skipRender = !!o.skipRender;
@@ -451,15 +531,22 @@
             state.ui.bgType === "image" &&
             removed &&
             (state.ui.bgImageId === id || state.ui.bgImage === removed.imageData);
+        if (removed && isUploadedItemVideo(removed)) {
+            releaseUploadedBackgroundVideoResources(removed.imageData);
+        }
         saveUploadedBackgrounds(arr);
         pruneBgThumbUsageForId(id);
-        if (removed && String(state.ui.defaultUploadedBgId || "") === id) {
-            state.ui.defaultUploadedBgId = "";
-            saveSettings();
-        }
         if (wasActive) {
-            setBackground("solid-black");
-            saveSettings();
+            clearActiveUploadedBgFromUi();
+            requestAnimationFrame(() => {
+                try {
+                    updateUIFromState();
+                    updateAll();
+                    persistCurrentSongBgAfterUiChange();
+                } catch (_e) {
+                    /* ignore */
+                }
+            });
         }
         if (!skipRender) renderUploadedBackgrounds();
         if (!skipToast) showToast("已删除背景", $("my-backgrounds-container"));
@@ -468,6 +555,8 @@
     let _lyricBgDeletePopoverEl = null;
     let _lyricBgDeleteOutsideHandler = null;
     let _lyricBgDeleteEscHandler = null;
+    let _lyricBgDeleteBackdropEl = null;
+    let _lyricBgDeleteAnchorWrap = null;
 
     function removeLyricBgDeletePopover() {
         if (_lyricBgDeleteEscHandler) {
@@ -482,37 +571,70 @@
             _lyricBgDeletePopoverEl.remove();
             _lyricBgDeletePopoverEl = null;
         }
+        if (_lyricBgDeleteBackdropEl) {
+            _lyricBgDeleteBackdropEl.remove();
+            _lyricBgDeleteBackdropEl = null;
+        }
+        _lyricBgDeleteAnchorWrap = null;
     }
 
     function openLyricBgDeletePopover(wrap, itemId) {
         removeLyricBgDeletePopover();
+        _lyricBgDeleteAnchorWrap = wrap;
+
+        const backdrop = document.createElement("div");
+        backdrop.className = "lyric-bg-delete-dialog-backdrop";
+        backdrop.setAttribute("aria-hidden", "true");
+
         const panel = document.createElement("div");
-        panel.className = "lyric-bg-delete-popover";
+        panel.className = "lyric-bg-delete-dialog";
         panel.setAttribute("role", "dialog");
         panel.setAttribute("aria-modal", "true");
-        const p = document.createElement("p");
-        p.className = "lyric-bg-delete-popover-text";
-        p.id = "lyric-bg-delete-popover-desc";
-        p.textContent = "删除此背景？";
+        panel.setAttribute("aria-labelledby", "lyric-bg-delete-popover-title");
         panel.setAttribute("aria-describedby", "lyric-bg-delete-popover-desc");
+
+        const title = document.createElement("h3");
+        title.className = "lyric-bg-delete-dialog-title";
+        title.id = "lyric-bg-delete-popover-title";
+        title.textContent = "删除背景";
+
+        const p = document.createElement("p");
+        p.className = "lyric-bg-delete-dialog-text";
+        p.id = "lyric-bg-delete-popover-desc";
+        p.textContent = "确定删除此背景？删除后无法恢复。";
+
         const actions = document.createElement("div");
-        actions.className = "lyric-bg-delete-popover-actions";
-        const btnDel = document.createElement("button");
-        btnDel.type = "button";
-        btnDel.className = "lyric-bg-delete-popover-confirm";
-        btnDel.textContent = "删除";
+        actions.className = "lyric-bg-delete-dialog-actions";
         const btnCancel = document.createElement("button");
         btnCancel.type = "button";
-        btnCancel.className = "lyric-bg-delete-popover-cancel";
+        btnCancel.className = "lyric-bg-delete-dialog-cancel";
         btnCancel.textContent = "取消";
+        const btnDel = document.createElement("button");
+        btnDel.type = "button";
+        btnDel.className = "lyric-bg-delete-dialog-confirm";
+        btnDel.textContent = "删除";
         actions.appendChild(btnCancel);
         actions.appendChild(btnDel);
+        panel.appendChild(title);
         panel.appendChild(p);
         panel.appendChild(actions);
-        wrap.appendChild(panel);
+
+        document.body.appendChild(backdrop);
+        document.body.appendChild(panel);
+        _lyricBgDeleteBackdropEl = backdrop;
         _lyricBgDeletePopoverEl = panel;
 
+        requestAnimationFrame(() => {
+            backdrop.classList.add("is-visible");
+            panel.classList.add("is-visible");
+        });
+
         const cancel = () => removeLyricBgDeletePopover();
+        backdrop.addEventListener("click", (ev) => {
+            ev.preventDefault();
+            ev.stopPropagation();
+            cancel();
+        });
         btnCancel.addEventListener("click", (ev) => {
             ev.preventDefault();
             ev.stopPropagation();
@@ -521,12 +643,14 @@
         btnDel.addEventListener("click", (ev) => {
             ev.preventDefault();
             ev.stopPropagation();
+            const anchor = _lyricBgDeleteAnchorWrap;
             removeLyricBgDeletePopover();
-            beginLyricBgDeleteSequence(wrap, itemId);
+            if (anchor) beginLyricBgDeleteSequence(anchor, itemId);
+            else deleteUploadedBackgroundItem(itemId);
         });
 
         _lyricBgDeleteOutsideHandler = (e) => {
-            if (!panel.parentElement) return;
+            if (!panel.isConnected) return;
             if (panel.contains(e.target)) return;
             cancel();
         };
@@ -545,30 +669,38 @@
     }
 
     function beginLyricBgDeleteSequence(wrap, itemId) {
-        deleteUploadedBackgroundItem(itemId, { skipRender: true, skipToast: true });
-        wrap.classList.add("lyric-bg-thumb-wrap--deleting");
-        wrap.querySelectorAll(".lyric-bg-thumb-delete, .bg-share-icon").forEach((el) => el.remove());
+        if (!wrap || !wrap.isConnected) {
+            deleteUploadedBackgroundItem(itemId);
+            return;
+        }
+        removeLyricBgDeletePopover();
+        wrap.classList.add("lyric-bg-thumb-wrap--removing");
+        wrap.style.pointerEvents = "none";
+        deleteUploadedBackgroundItem(itemId, { skipRender: true, skipToast: false });
 
-        const bubble = document.createElement("div");
-        bubble.className = "lyric-bg-delete-success-bubble";
-        bubble.textContent = "✅ 已删除";
-        wrap.appendChild(bubble);
+        let done = false;
+        const removeDom = () => {
+            if (done) return;
+            done = true;
+            if (wrap.isConnected) wrap.remove();
+            renderUploadedBackgrounds();
+        };
 
-        window.setTimeout(() => {
-            bubble.remove();
-            wrap.classList.remove("lyric-bg-thumb-wrap--deleting");
-            wrap.classList.add("lyric-bg-thumb-wrap--dissolving");
-            wrap.addEventListener(
-                "animationend",
-                (ev) => {
-                    if (ev.target !== wrap) return;
-                    if (!String(ev.animationName || "").includes("dissolve-particles")) return;
-                    wrap.remove();
-                    renderUploadedBackgrounds();
-                },
-                { once: true }
-            );
-        }, 1500);
+        if (prefersReducedMotion()) {
+            removeDom();
+            return;
+        }
+
+        wrap.addEventListener(
+            "animationend",
+            (ev) => {
+                if (ev.target !== wrap) return;
+                if (!String(ev.animationName || "").includes("lyric-bg-shrink-out")) return;
+                removeDom();
+            },
+            { once: true }
+        );
+        window.setTimeout(removeDom, 240);
     }
 
     function themeBgSlotUploadToastAnchor() {
@@ -985,7 +1117,9 @@
     }
 
     function persistUploadedBackgroundsAsync(arr) {
-        _idbUploadedCache = normalizeUploadedBackgroundsArray(arr);
+        const prev = getUploadedBackgrounds();
+        const next = normalizeUploadedBackgroundsArray(arr);
+        _idbUploadedCache = next;
         if (_bgUseIdbFallbackLs) {
             try {
                 setStore(UPLOADED_BACKGROUNDS_STORAGE, _idbUploadedCache);
@@ -994,9 +1128,36 @@
             }
             return;
         }
+        const prevMap = new Map(prev.map((x) => [x.id, x]));
+        const nextMap = new Map(next.map((x) => [x.id, x]));
+        const deleteIds = prev.filter((x) => x && x.id && !nextMap.has(x.id)).map((x) => x.id);
+        const putItems = next.filter((x) => {
+            if (!x || !x.id) return false;
+            const o = prevMap.get(x.id);
+            if (!o) return true;
+            return (
+                o.imageData !== x.imageData ||
+                String(o.coverImage || "") !== String(x.coverImage || "") ||
+                o.mediaType !== x.mediaType ||
+                !!o.shared !== !!x.shared ||
+                (Number(o.timestamp) || 0) !== (Number(x.timestamp) || 0)
+            );
+        });
         openWorshipBgDatabase()
-            .then((db) => idbWriteAllUploaded(db, _idbUploadedCache))
-            .catch((err) => console.warn("persistUploadedBackgroundsAsync", err));
+            .then(async (db) => {
+                for (const id of deleteIds) {
+                    await idbDeleteUploaded(db, id);
+                }
+                for (const item of putItems) {
+                    await idbPutUploaded(db, item);
+                }
+            })
+            .catch((err) => {
+                console.warn("persistUploadedBackgroundsAsync", err);
+                openWorshipBgDatabase()
+                    .then((db) => idbWriteAllUploaded(db, _idbUploadedCache))
+                    .catch((err2) => console.warn("persistUploadedBackgroundsAsync fallback", err2));
+            });
     }
 
     const CSS_DYNAMIC_BG_TYPES = new Set(["gentle-light", "starry-night", "cross-glow"]);
@@ -1059,9 +1220,7 @@
         key: "C",
         tempo: "72",
         notes: "",
-        tags: "敬拜",
-        overlayOpacityPct: 30,
-        fontOpacityPct: 100
+        tags: "敬拜"
     };
 
     const query = new URLSearchParams(location.search || "");
@@ -1118,7 +1277,7 @@
         ui: {
             theme: "dark",
             fontFamily: "'Microsoft YaHei','PingFang SC',sans-serif",
-            fontSize: 60,
+            fontSize: 80,
             defaultLines: 4,
             posY: 40,
             bgType: "solid-black",
@@ -1128,7 +1287,7 @@
             lyricsBgShareToCloud: false,
             fontColor: "#ffffff",
             fontWeight: "700",
-            overlayOpacityPct: 30,
+            overlayOpacityPct: 0,
             fontOpacityPct: 100,
             textStrokePx: 0,
             vignetteShape: "circle",
@@ -1137,19 +1296,12 @@
             pageTransition: "none",
             pageTransitionSpeed: 0.6,
             fontMegaMode: false,
-            defaultUploadedBgId: "",
             /** 歌词编辑区：按可视高度自动缩小字号，长歌词更易一览 */
             editorAutoFontSize: false,
             editorAutoFontMinPx: 11,
             editorAutoFontMaxPx: 20
         },
         sizePreset: "M",
-        autoplay: {
-            timer: null,
-            progressTimer: null,
-            running: false,
-            elapsed: 0
-        },
         playlist: {
             items: [],
             running: false,
@@ -1168,6 +1320,8 @@
     let librarySongDragId = "";
     /** 单行删除待确认（✕ 一次进入确认态） */
     let libraryPendingDeleteId = "";
+    /** 切歌时丢弃过期的异步 UI 刷新，避免连点诗歌库时卡顿叠加 */
+    let songSwitchGen = 0;
     /** 仅在切换全部/分类/批量时做内容区淡入淡出 */
     let libraryViewModeBeforeRender = null;
     /** 右键菜单当前诗歌 id */
@@ -1485,9 +1639,9 @@
                 }
             }
             const lhRaw = getComputedStyle(document.documentElement).getPropertyValue("--adv-preview-line-height");
-            return Math.max(1.05, Math.min(3, parseFloat(lhRaw) || 1.65));
+            return Math.max(1.05, Math.min(3, parseFloat(lhRaw) || presentationDefaultLineHeight()));
         } catch (_e) {
-            return 1.65;
+            return presentationDefaultLineHeight();
         }
     }
 
@@ -1509,7 +1663,7 @@
             const max = Number(fontIn.max) || 300;
             const span = Math.max(1e-6, max - min);
             const pct = (v) => `${clamp(((Number(v) - min) / span) * 100, 0, 100)}%`;
-            const marks = [60, 88, 120].filter((v) => v >= min && v <= max);
+            const marks = [80, 88, 120].filter((v) => v >= min && v <= max);
             fontBar.replaceChildren();
             marks.forEach((v) => {
                 const m = document.createElement("span");
@@ -1686,14 +1840,14 @@
 
     function applyTypographyToPreviewRow(row, ctx) {
         if (!row) return;
-        const u = readUiLike(ctx);
+        const u = ctx && typeof ctx === "object" ? ctx : state.ui;
         const fontOp = clamp(Number(u.fontOpacityPct ?? 100), 20, 100) / 100;
-        const fwRaw = u.fontWeight != null ? u.fontWeight : state.ui.fontWeight;
+        const fwRaw = u.fontWeight != null ? u.fontWeight : "700";
         const fw = fwRaw == null || fwRaw === "" ? "700" : String(fwRaw);
         row.style.fontWeight = /^(400|normal)$/i.test(fw) ? "400" : fw;
-        row.style.fontFamily = u.fontFamily || state.ui.fontFamily;
-        /** 与 renderDisplayLyric / refreshMonitorContent 一致：填色用 fontColor；纯白底时 text.color 仅为对比参考，不覆盖用户字色 */
-        const root = String(u.fontColor ?? state.ui.fontColor ?? "#ffffff").trim() || "#ffffff";
+        row.style.fontFamily =
+            u.fontFamily || "'Microsoft YaHei','PingFang SC',sans-serif";
+        const root = String(u.fontColor ?? "#ffffff").trim() || "#ffffff";
         const tContr = u.lightBg ? "#111" : root;
         const displayColor = root || tContr || "#ffffff";
         const strokeLightBg = displayColor === "#111" || tContr === "#111";
@@ -2598,23 +2752,12 @@
             const sid = card.getAttribute("data-song-id");
             const plSong = state.songs.find((s) => String(s.id) === String(sid || ""));
             if (!plSong) return;
-            const typo = lyricTypographyContextForSong(plSong);
+            const typo = galleryTypographyContextForSong(plSong);
             const spRaw = clamp(Number(typo.textStrokePx ?? 0), 0, 6);
             const wTotal = Math.max(1, card.getBoundingClientRect().width);
             const scale = (wTotal * band) / refW;
-            const songFs =
-                String(plSong.id) === String(state.currentSongId || "")
-                    ? state.ui.fontSize
-                    : Number.isFinite(Number(plSong.fontSize))
-                      ? plSong.fontSize
-                      : state.ui.fontSize;
-            const fsPx = Math.max(5, Math.round(clampLyricFontSize(songFs) * scale));
-            const lh =
-                String(plSong.id) === String(state.currentSongId || "")
-                    ? getAdvPreviewLineHeightNumber()
-                    : Number.isFinite(Number(plSong.lineHeight))
-                      ? clamp(Number(plSong.lineHeight), 1.2, 2.4)
-                      : getAdvPreviewLineHeightNumber();
+            const fsPx = Math.max(5, Math.round(galleryFontSizeForSong(plSong) * scale));
+            const lh = galleryLineHeightForSong(plSong);
             const lightBg = typo.lightBg;
             const root = String(typo.fontColor ?? "#ffffff").trim() || "#ffffff";
             const tContr = lightBg ? "#111" : root;
@@ -2664,19 +2807,13 @@
 
     function syncPosYFromCurrentSong() {
         const song = currentSong();
-        state.ui.posY = song && Number.isFinite(Number(song.posY))
-            ? clamp(Number(song.posY), 20, 70)
-            : defaultSongPosY;
+        state.ui.posY = resolveSongPresentationField(song, "posY");
     }
 
     function syncOverlayFontOpacityFromCurrentSong() {
         const song = currentSong();
-        state.ui.overlayOpacityPct = song && Number.isFinite(Number(song.overlayOpacityPct))
-            ? clamp(Number(song.overlayOpacityPct), 0, 80)
-            : 30;
-        state.ui.fontOpacityPct = song && Number.isFinite(Number(song.fontOpacityPct))
-            ? clamp(Number(song.fontOpacityPct), 20, 100)
-            : 100;
+        state.ui.overlayOpacityPct = resolveSongPresentationField(song, "overlayOpacityPct");
+        state.ui.fontOpacityPct = resolveSongPresentationField(song, "fontOpacityPct");
     }
 
     function uid() {
@@ -3424,7 +3561,7 @@
     function updateAdvSliderSwatches() {
         const maskEl = $("projection-overlay-opacity-swatch");
         if (maskEl) {
-            const pct = clamp(Number(state?.ui?.overlayOpacityPct ?? 30), 0, 80);
+            const pct = clamp(Number(state?.ui?.overlayOpacityPct ?? PRESENTATION_STYLE_DEFAULTS.overlayOpacityPct), 0, 80);
             const a = (pct / 80) * 0.82;
             const alpha = clamp(a, 0, 0.82);
             maskEl.style.background = `linear-gradient(rgba(0,0,0,${alpha}), rgba(0,0,0,${alpha})), #ffffff`;
@@ -4195,9 +4332,7 @@
             key: tpl.meta && typeof tpl.meta === "object" ? String(tpl.meta.key || "") : "",
             tempo: tpl.meta && typeof tpl.meta === "object" ? String(tpl.meta.tempo || "") : "",
             notes: tpl.meta && typeof tpl.meta === "object" ? String(tpl.meta.notes || "") : "",
-            tags: tpl.meta && typeof tpl.meta === "object" ? String(tpl.meta.tags || "") : "",
-            overlayOpacityPct: 30,
-            fontOpacityPct: 100
+            tags: tpl.meta && typeof tpl.meta === "object" ? String(tpl.meta.tags || "") : ""
         };
         if (tpl.songVisual && typeof tpl.songVisual === "object") {
             if (Number.isFinite(Number(tpl.songVisual.overlayOpacityPct))) {
@@ -4229,21 +4364,18 @@
                 state.ui.bgMediaType = "image";
             }
         }
+        normalizeSongPresentationOverrides(song);
         normalizeLegacyBgImageReference();
-        state.ui.overlayOpacityPct = clamp(Number(song.overlayOpacityPct), 0, 80);
-        state.ui.fontOpacityPct = clamp(Number(song.fontOpacityPct), 20, 100);
-        if (Number.isFinite(Number(song.posY))) {
-            state.ui.posY = clamp(Number(song.posY), 20, 70);
-        }
-        syncPageTransitionFromCurrentSong();
         state.currentSongId = song.id;
+        hydrateCurrentSongTypographyIntoUi();
+        syncPosYFromCurrentSong();
+        syncOverlayFontOpacityFromCurrentSong();
+        syncPageTransitionFromCurrentSong();
         if (!isDisplay && !isLeader) {
             persistSongBackgroundFromUi(song.id);
             saveSongs();
         }
         state.currentPage = 0;
-        syncPosYFromCurrentSong();
-        syncOverlayFontOpacityFromCurrentSong();
         updateUIFromState();
         syncSongToEditor();
         renderSongList();
@@ -5344,34 +5476,32 @@
     }
 
     function applyAdvEditSettingsDefaultsToState() {
+        const d = PRESENTATION_STYLE_DEFAULTS;
         state.ui.theme = "dark";
-        state.ui.fontFamily = "'Microsoft YaHei','PingFang SC',sans-serif";
-        state.ui.fontSize = 60;
-        state.ui.fontWeight = "700";
+        state.ui.fontFamily = d.fontFamily;
+        state.ui.fontSize = d.fontSize;
+        state.ui.fontWeight = d.fontWeight;
         state.ui.defaultLines = 4;
-        state.ui.posY = 40;
-        state.ui.fontColor = "#ffffff";
-        state.ui.textStrokePx = 0;
-        state.ui.vignetteShape = "circle";
-        state.ui.vignetteCenterBrightness = 0;
-        state.ui.vignetteEdgeDarkness = 0;
+        state.ui.posY = d.posY;
+        state.ui.fontColor = d.fontColor;
+        state.ui.textStrokePx = d.textStrokePx;
+        state.ui.vignetteShape = d.vignetteShape;
+        state.ui.vignetteCenterBrightness = d.vignetteCenterBrightness;
+        state.ui.vignetteEdgeDarkness = d.vignetteEdgeDarkness;
         state.ui.pageTransition = "none";
         state.ui.pageTransitionSpeed = 0.6;
-        state.ui.overlayOpacityPct = 30;
-        state.ui.fontOpacityPct = 100;
+        state.ui.overlayOpacityPct = d.overlayOpacityPct;
+        state.ui.fontOpacityPct = d.fontOpacityPct;
         state.ui.fontMegaMode = false;
-        state.ui.defaultUploadedBgId = "";
         state.ui.editorAutoFontSize = false;
         state.ui.editorAutoFontMinPx = 11;
         state.ui.editorAutoFontMaxPx = 20;
-        defaultSongPosY = 40;
+        defaultSongPosY = d.posY;
         defaultPageTransition = "none";
         defaultPageTransitionSpeed = 0.6;
         const song = currentSong();
         if (song) {
-            song.posY = 40;
-            song.overlayOpacityPct = 30;
-            song.fontOpacityPct = 100;
+            Object.keys(PRESENTATION_STYLE_DEFAULTS).forEach((key) => delete song[key]);
             delete song.pageTransition;
             delete song.pageTransitionSpeed;
         }
@@ -5383,7 +5513,7 @@
             /* ignore */
         }
         applyThemeBgOpacityVar();
-        document.documentElement.style.setProperty("--adv-preview-line-height", "1.65");
+        document.documentElement.style.setProperty("--adv-preview-line-height", String(d.lineHeight));
         try {
             localStorage.removeItem(ADV_PREVIEW_LINE_HEIGHT_LS);
         } catch (_) {
@@ -5472,15 +5602,29 @@
         if (valEl) valEl.textContent = `${Math.round(v * 100)}%`;
     }
 
+    function isUploadedBackgroundItemActive(item) {
+        if (!item || state.ui.bgType !== "image") return false;
+        const id = String(state.ui.bgImageId || "").trim();
+        if (id && String(item.id) === id) return true;
+        const url = String(state.ui.bgImage || "").trim();
+        return !!(url && item.imageData === url);
+    }
+
     function updateMyBackgroundThumbActiveState() {
         const root = $("my-backgrounds-container");
         if (!root) return;
-        const activeUrl = state.ui.bgType === "image" ? String(state.ui.bgImage || "") : "";
-        root.querySelectorAll(".lyric-bg-thumb").forEach((thumb) => {
+        root.querySelectorAll(".lyric-bg-thumb-wrap").forEach((wrap) => {
+            const thumb = wrap.querySelector(".lyric-bg-thumb");
+            if (!thumb) return;
             const id = thumb.dataset.itemId;
             const item = getUploadedBackgrounds().find((x) => x && x.id === id);
-            const on = !!(item && activeUrl && item.imageData === activeUrl);
+            const on = isUploadedBackgroundItemActive(item);
             thumb.classList.toggle("lyric-bg-thumb--active", on);
+            wrap.classList.toggle("lyric-bg-thumb-wrap--active", on);
+            if (on && item) {
+                const isVid = item.mediaType === "video" || inferMediaTypeFromDataUrl(item.imageData) === "video";
+                thumb.title = isVid ? "当前诗歌正在使用此视频背景" : "当前诗歌正在使用此图片背景";
+            }
         });
     }
 
@@ -5603,7 +5747,9 @@
      */
     function extractVideoCoverFromDataUrl(dataUrl) {
         const src = String(dataUrl || "").trim();
-        if (!src || !/^data:video\//i.test(src)) return Promise.resolve("");
+        if (!src || (!/^data:video\//i.test(src) && !isLikelyThemeConsoleVideoDataUrl(src))) {
+            return Promise.resolve("");
+        }
 
         return new Promise((resolve) => {
             let settled = false;
@@ -5745,6 +5891,79 @@
         });
     }
 
+    function generateImageThumbFromDataUrl(dataUrl, maxSide = 240) {
+        const src = String(dataUrl || "").trim();
+        if (!src || !/^data:image\//i.test(src)) return Promise.resolve("");
+        return new Promise((resolve) => {
+            const img = new Image();
+            const finish = (out) => {
+                try {
+                    img.src = "";
+                } catch (_e) {
+                    /* ignore */
+                }
+                resolve(String(out || "").trim());
+            };
+            img.onload = () => {
+                try {
+                    const w = img.naturalWidth || 0;
+                    const h = img.naturalHeight || 0;
+                    if (!w || !h) {
+                        finish("");
+                        return;
+                    }
+                    let tw = w;
+                    let th = h;
+                    if (w > maxSide || h > maxSide) {
+                        if (w >= h) {
+                            tw = maxSide;
+                            th = Math.max(1, Math.round((h * maxSide) / w));
+                        } else {
+                            th = maxSide;
+                            tw = Math.max(1, Math.round((w * maxSide) / h));
+                        }
+                    }
+                    const canvas = document.createElement("canvas");
+                    canvas.width = tw;
+                    canvas.height = th;
+                    const ctx = canvas.getContext("2d");
+                    if (!ctx) {
+                        finish("");
+                        return;
+                    }
+                    ctx.drawImage(img, 0, 0, tw, th);
+                    finish(canvas.toDataURL("image/jpeg", 0.78));
+                } catch (_e2) {
+                    finish("");
+                }
+            };
+            img.onerror = () => finish("");
+            img.src = src;
+        });
+    }
+
+    function appendLyricBgThumbCoverImg(thumb, src, onBroken) {
+        const covImg = document.createElement("img");
+        covImg.className = "lyric-bg-thumb-cover-img";
+        covImg.alt = "";
+        covImg.draggable = false;
+        covImg.src = String(src || "").trim();
+        covImg.addEventListener("error", () => {
+            covImg.remove();
+            thumb.classList.add("lyric-bg-thumb--broken");
+            if (typeof onBroken === "function") onBroken();
+        });
+        thumb.appendChild(covImg);
+    }
+
+    function appendLyricBgThumbVideoPlaceholder(thumb) {
+        const ph = document.createElement("span");
+        ph.className = "lyric-bg-thumb-video-placeholder";
+        ph.setAttribute("aria-hidden", "true");
+        ph.textContent = "▶";
+        thumb.appendChild(ph);
+    }
+
     const _videoThumbExtractingIds = new Set();
     const _coverExtractPromises = new Map();
 
@@ -5785,17 +6004,51 @@
         return p;
     }
 
+    function extractAndPersistUploadedImageCover(itemId) {
+        const id = String(itemId || "").trim();
+        if (!id) return Promise.resolve();
+        const key = "img_" + id;
+        const existingP = _coverExtractPromises.get(key);
+        if (existingP) return existingP;
+
+        const snapshot = getUploadedBackgrounds().find((x) => x && x.id === id);
+        if (!snapshot || isUploadedItemVideo(snapshot)) return Promise.resolve();
+        if (String(snapshot.coverImage || "").trim()) return Promise.resolve();
+
+        const p = (async () => {
+            try {
+                const cover = await generateImageThumbFromDataUrl(snapshot.imageData);
+                if (!cover) return;
+                const next = getUploadedBackgrounds().map((x) =>
+                    x && x.id === id ? { ...x, coverImage: cover } : x
+                );
+                saveUploadedBackgrounds(next);
+                renderUploadedBackgrounds();
+            } finally {
+                _coverExtractPromises.delete(key);
+            }
+        })().finally(() => {
+            _coverExtractPromises.delete(key);
+        });
+
+        _coverExtractPromises.set(key, p);
+        return p;
+    }
+
     let _ensureUploadedVideoCoversChain = Promise.resolve();
 
     function requestEnsureUploadedVideoCoversOnMineTab() {
         if (isDisplay || isLeader) return;
         _ensureUploadedVideoCoversChain = _ensureUploadedVideoCoversChain
             .then(async () => {
-                const ids = getUploadedBackgrounds()
-                    .filter((x) => x && isUploadedItemVideo(x) && !String(x.coverImage || "").trim())
-                    .map((x) => x.id);
-                for (const vid of ids) {
-                    await extractAndPersistUploadedVideoCover(vid);
+                const items = getUploadedBackgrounds();
+                for (const x of items) {
+                    if (!x || !x.id || String(x.coverImage || "").trim()) continue;
+                    if (isUploadedItemVideo(x)) {
+                        await extractAndPersistUploadedVideoCover(x.id);
+                    } else {
+                        await extractAndPersistUploadedImageCover(x.id);
+                    }
                 }
             })
             .catch(() => {});
@@ -5915,6 +6168,40 @@
         return hydrateBackgroundSliceFromLibrary({ ...backgroundDefaults });
     }
 
+    /** 画廊条带专用：非当前诗歌只读自身持久化字段，未单独设背景时用纯黑占位，避免串用全局模板 */
+    function getGalleryStoredSongBackground(song) {
+        if (!song) {
+            return hydrateBackgroundSliceFromLibrary({
+                bgType: "solid-black",
+                bgImage: "",
+                bgImageId: "",
+                bgMediaType: "image"
+            });
+        }
+        const hasId = !!(song.bgImageId && String(song.bgImageId).trim());
+        const hasBlob = !!(song.bgImage && String(song.bgImage).trim());
+        const hasExplicitType = typeof song.bgType === "string" && song.bgType.trim();
+        if (hasExplicitType || hasId || hasBlob) {
+            const bgType = hasExplicitType
+                ? String(song.bgType).trim()
+                : hasId || hasBlob
+                  ? "image"
+                  : "solid-black";
+            return hydrateBackgroundSliceFromLibrary({
+                bgType,
+                bgImage: song.bgImage || "",
+                bgImageId: song.bgImageId || "",
+                bgMediaType: song.bgMediaType || "image"
+            });
+        }
+        return hydrateBackgroundSliceFromLibrary({
+            bgType: "solid-black",
+            bgImage: "",
+            bgImageId: "",
+            bgMediaType: "image"
+        });
+    }
+
     function applyBackgroundSliceToUi(slice) {
         const h = hydrateBackgroundSliceFromLibrary(slice);
         state.ui.bgType = h.bgType;
@@ -5948,6 +6235,104 @@
     /** 控制台网站界面固定字体；歌词投屏字体由 state.ui.fontFamily / 字体选择器控制 */
     const CONSOLE_UI_FONT_FAMILY = "'Microsoft YaHei','PingFang SC',sans-serif";
 
+    const ADV_LINE_HEIGHT_MIN = 1.2;
+    const ADV_LINE_HEIGHT_MAX = 2.4;
+    /** 高级编辑 per-song 默认值；诗歌对象仅持久化与默认不同的项 */
+    const PRESENTATION_STYLE_DEFAULTS = Object.freeze({
+        fontSize: 80,
+        posY: 40,
+        overlayOpacityPct: 0,
+        fontOpacityPct: 100,
+        textStrokePx: 0,
+        lineHeight: (ADV_LINE_HEIGHT_MIN + ADV_LINE_HEIGHT_MAX) / 2,
+        vignetteShape: "circle",
+        vignetteCenterBrightness: 0,
+        vignetteEdgeDarkness: 0,
+        fontFamily: "'Microsoft YaHei','PingFang SC',sans-serif",
+        fontColor: "#ffffff",
+        fontWeight: "700"
+    });
+
+    function presentationDefaultLineHeight() {
+        return PRESENTATION_STYLE_DEFAULTS.lineHeight;
+    }
+
+    function clampPresentationField(key, value) {
+        switch (key) {
+            case "fontSize":
+                return clampLyricFontSize(value);
+            case "posY":
+                return clamp(Number(value), 20, 70);
+            case "overlayOpacityPct":
+                return clamp(Number(value), 0, 80);
+            case "fontOpacityPct":
+                return clamp(Number(value), 20, 100);
+            case "textStrokePx":
+                return clamp(Number(value), 0, 6);
+            case "lineHeight":
+                return clamp(Number(value), ADV_LINE_HEIGHT_MIN, ADV_LINE_HEIGHT_MAX);
+            case "vignetteCenterBrightness":
+                return clamp(Number(value), -50, 50);
+            case "vignetteEdgeDarkness":
+                return clamp(Number(value), 0, 90);
+            case "vignetteShape":
+                return value === "ellipse" ? "ellipse" : "circle";
+            case "fontFamily":
+            case "fontColor":
+            case "fontWeight":
+                return String(value ?? "").trim() || PRESENTATION_STYLE_DEFAULTS[key];
+            default:
+                return value;
+        }
+    }
+
+    function presentationFieldEquals(key, a, b) {
+        if (key === "lineHeight") {
+            return Math.abs(Number(a) - Number(b)) < 0.001;
+        }
+        if (key === "vignetteShape") {
+            return (a === "ellipse" ? "ellipse" : "circle") === (b === "ellipse" ? "ellipse" : "circle");
+        }
+        if (typeof PRESENTATION_STYLE_DEFAULTS[key] === "number") {
+            return Number(a) === Number(b);
+        }
+        return String(a).trim() === String(b).trim();
+    }
+
+    function assignSongPresentationField(song, key, value) {
+        if (!song || !(key in PRESENTATION_STYLE_DEFAULTS)) return;
+        const normalized = clampPresentationField(key, value);
+        const def = PRESENTATION_STYLE_DEFAULTS[key];
+        if (presentationFieldEquals(key, normalized, def)) {
+            delete song[key];
+        } else {
+            song[key] = normalized;
+        }
+    }
+
+    function resolveSongPresentationField(song, key) {
+        if (!(key in PRESENTATION_STYLE_DEFAULTS)) return undefined;
+        const raw = song?.[key];
+        if (key === "fontFamily" || key === "fontColor" || key === "fontWeight") {
+            if (raw != null && String(raw).trim() !== "") return clampPresentationField(key, raw);
+            return PRESENTATION_STYLE_DEFAULTS[key];
+        }
+        if (key === "vignetteShape") {
+            if (raw === "ellipse" || raw === "circle") return clampPresentationField(key, raw);
+            return PRESENTATION_STYLE_DEFAULTS[key];
+        }
+        if (Number.isFinite(Number(raw))) return clampPresentationField(key, raw);
+        return PRESENTATION_STYLE_DEFAULTS[key];
+    }
+
+    function normalizeSongPresentationOverrides(song) {
+        if (!song) return;
+        Object.keys(PRESENTATION_STYLE_DEFAULTS).forEach((key) => {
+            if (!(key in song)) return;
+            assignSongPresentationField(song, key, song[key]);
+        });
+    }
+
     function vignetteUiContextForSong(plSong) {
         const isCur = plSong && String(plSong.id) === String(state.currentSongId || "");
         if (isCur) {
@@ -5958,13 +6343,9 @@
             };
         }
         return {
-            vignetteShape: plSong?.vignetteShape === "ellipse" ? "ellipse" : "circle",
-            vignetteCenterBrightness: Number.isFinite(Number(plSong?.vignetteCenterBrightness))
-                ? clamp(Number(plSong.vignetteCenterBrightness), -50, 50)
-                : 0,
-            vignetteEdgeDarkness: Number.isFinite(Number(plSong?.vignetteEdgeDarkness))
-                ? clamp(Number(plSong.vignetteEdgeDarkness), 0, 90)
-                : 0
+            vignetteShape: resolveSongPresentationField(plSong, "vignetteShape"),
+            vignetteCenterBrightness: resolveSongPresentationField(plSong, "vignetteCenterBrightness"),
+            vignetteEdgeDarkness: resolveSongPresentationField(plSong, "vignetteEdgeDarkness")
         };
     }
 
@@ -5974,9 +6355,7 @@
             return { overlayOpacityPct: clamp(Number(state.ui.overlayOpacityPct), 0, 80) };
         }
         return {
-            overlayOpacityPct: Number.isFinite(Number(plSong?.overlayOpacityPct))
-                ? clamp(Number(plSong.overlayOpacityPct), 0, 80)
-                : 30
+            overlayOpacityPct: resolveSongPresentationField(plSong, "overlayOpacityPct")
         };
     }
 
@@ -6000,7 +6379,7 @@
         const m = ensureGalleryCardProjectionMask(card);
         if (!m) return;
         const ctx = overlayUiContextForSong(plSong);
-        const op = clamp(Number(ctx.overlayOpacityPct ?? 30), 0, 80) / 100;
+        const op = clamp(Number(ctx.overlayOpacityPct ?? PRESENTATION_STYLE_DEFAULTS.overlayOpacityPct), 0, 80) / 100;
         m.style.background = `rgba(0,0,0,${op})`;
     }
 
@@ -6014,26 +6393,21 @@
     function hydrateCurrentSongTypographyIntoUi() {
         const s = currentSong();
         if (!s) return;
-        if (s.fontFamily != null && String(s.fontFamily).trim()) {
-            state.ui.fontFamily = String(s.fontFamily).trim();
-        }
-        if (Number.isFinite(Number(s.fontSize))) state.ui.fontSize = clampLyricFontSize(s.fontSize);
-        if (s.fontColor != null && String(s.fontColor).trim()) state.ui.fontColor = String(s.fontColor).trim();
-        if (s.fontWeight != null && String(s.fontWeight).trim()) state.ui.fontWeight = String(s.fontWeight).trim();
-        if (Number.isFinite(Number(s.textStrokePx))) state.ui.textStrokePx = clamp(Number(s.textStrokePx), 0, 6);
-        if (Number.isFinite(Number(s.lineHeight))) {
-            document.documentElement.style.setProperty(
-                "--adv-preview-line-height",
-                String(clamp(Number(s.lineHeight), 1.2, 2.4))
-            );
-        }
-        if (s.vignetteShape === "ellipse" || s.vignetteShape === "circle") state.ui.vignetteShape = s.vignetteShape;
-        if (Number.isFinite(Number(s.vignetteCenterBrightness))) {
-            state.ui.vignetteCenterBrightness = clamp(Number(s.vignetteCenterBrightness), -50, 50);
-        }
-        if (Number.isFinite(Number(s.vignetteEdgeDarkness))) {
-            state.ui.vignetteEdgeDarkness = clamp(Number(s.vignetteEdgeDarkness), 0, 90);
-        }
+        const d = PRESENTATION_STYLE_DEFAULTS;
+        const stored = getStoredSongTypographyOrDefaults(s);
+        state.ui.fontFamily = stored.fontFamily;
+        state.ui.fontColor = stored.fontColor;
+        state.ui.fontWeight = stored.fontWeight;
+        state.ui.textStrokePx = stored.textStrokePx;
+        state.ui.fontOpacityPct = resolveSongPresentationField(s, "fontOpacityPct");
+        state.ui.fontSize = resolveSongPresentationField(s, "fontSize");
+        const lh = resolveSongPresentationField(s, "lineHeight");
+        document.documentElement.style.setProperty("--adv-preview-line-height", String(lh));
+        state.ui.vignetteShape = resolveSongPresentationField(s, "vignetteShape");
+        state.ui.vignetteCenterBrightness = resolveSongPresentationField(s, "vignetteCenterBrightness");
+        state.ui.vignetteEdgeDarkness = resolveSongPresentationField(s, "vignetteEdgeDarkness");
+        state.ui.posY = resolveSongPresentationField(s, "posY");
+        state.ui.overlayOpacityPct = resolveSongPresentationField(s, "overlayOpacityPct");
     }
 
     function persistCurrentSongTypographyFromUi(songId) {
@@ -6041,15 +6415,15 @@
         const sid = songId != null ? songId : state.currentSongId;
         const s = state.songs.find((x) => String(x.id) === String(sid || ""));
         if (!s) return;
-        s.fontFamily = String(state.ui.fontFamily || CONSOLE_UI_FONT_FAMILY).trim() || CONSOLE_UI_FONT_FAMILY;
-        s.fontSize = clampLyricFontSize(state.ui.fontSize);
-        s.fontColor = String(state.ui.fontColor || "#ffffff").trim() || "#ffffff";
-        s.fontWeight = state.ui.fontWeight == null || state.ui.fontWeight === "" ? "700" : String(state.ui.fontWeight);
-        s.textStrokePx = clamp(Number(state.ui.textStrokePx), 0, 6);
-        s.lineHeight = getAdvPreviewLineHeightNumber();
-        s.vignetteShape = state.ui.vignetteShape === "ellipse" ? "ellipse" : "circle";
-        s.vignetteCenterBrightness = clamp(Number(state.ui.vignetteCenterBrightness), -50, 50);
-        s.vignetteEdgeDarkness = clamp(Number(state.ui.vignetteEdgeDarkness), 0, 90);
+        assignSongPresentationField(s, "fontFamily", state.ui.fontFamily);
+        assignSongPresentationField(s, "fontSize", state.ui.fontSize);
+        assignSongPresentationField(s, "fontColor", state.ui.fontColor);
+        assignSongPresentationField(s, "fontWeight", state.ui.fontWeight);
+        assignSongPresentationField(s, "textStrokePx", state.ui.textStrokePx);
+        assignSongPresentationField(s, "lineHeight", getAdvPreviewLineHeightNumber());
+        assignSongPresentationField(s, "vignetteShape", state.ui.vignetteShape);
+        assignSongPresentationField(s, "vignetteCenterBrightness", state.ui.vignetteCenterBrightness);
+        assignSongPresentationField(s, "vignetteEdgeDarkness", state.ui.vignetteEdgeDarkness);
     }
 
     function persistCurrentSongTypographyAfterUiChange() {
@@ -6064,26 +6438,80 @@
         updateEditorUnsavedIndicator();
     }
 
+    function getStoredSongTypographyOrDefaults(song) {
+        return {
+            fontFamily: resolveSongPresentationField(song, "fontFamily"),
+            fontColor: resolveSongPresentationField(song, "fontColor"),
+            fontOpacityPct: resolveSongPresentationField(song, "fontOpacityPct"),
+            textStrokePx: resolveSongPresentationField(song, "textStrokePx"),
+            fontWeight: resolveSongPresentationField(song, "fontWeight")
+        };
+    }
+
+    /** 页面画廊专用：非当前诗歌读持久化样式；当前诗歌与高级编辑 state.ui 同步 */
+    function gallerySongBackground(plSong) {
+        if (!plSong) {
+            return getGalleryStoredSongBackground(null);
+        }
+        if (String(plSong.id) === String(state.currentSongId || "")) {
+            return hydrateBackgroundSliceFromLibrary({
+                bgType: state.ui.bgType,
+                bgImage: state.ui.bgImage || "",
+                bgImageId: state.ui.bgImageId || "",
+                bgMediaType: state.ui.bgMediaType || "image"
+            });
+        }
+        return getGalleryStoredSongBackground(plSong);
+    }
+
+    function galleryTypographyContextForSong(plSong) {
+        const stored = getStoredSongTypographyOrDefaults(plSong);
+        const isCur = plSong && String(plSong.id) === String(state.currentSongId || "");
+        const lightBg = gallerySongBackground(plSong).bgType === "solid-white";
+        if (!isCur) {
+            return { ...stored, lightBg };
+        }
+        return {
+            fontFamily: String(state.ui.fontFamily || stored.fontFamily).trim() || stored.fontFamily,
+            fontColor: String(state.ui.fontColor || stored.fontColor).trim() || stored.fontColor,
+            fontOpacityPct: state.ui.fontOpacityPct ?? stored.fontOpacityPct,
+            textStrokePx: state.ui.textStrokePx ?? stored.textStrokePx,
+            fontWeight:
+                state.ui.fontWeight != null && state.ui.fontWeight !== "" ? state.ui.fontWeight : stored.fontWeight,
+            lightBg
+        };
+    }
+
+    function galleryFontSizeForSong(plSong) {
+        const isCur = plSong && String(plSong.id) === String(state.currentSongId || "");
+        if (isCur) return clampLyricFontSize(state.ui.fontSize);
+        if (Number.isFinite(Number(plSong?.fontSize))) return clampLyricFontSize(plSong.fontSize);
+        return clampLyricFontSize(PRESENTATION_STYLE_DEFAULTS.fontSize);
+    }
+
+    function galleryLineHeightForSong(plSong) {
+        const isCur = plSong && String(plSong.id) === String(state.currentSongId || "");
+        if (isCur) return getAdvPreviewLineHeightNumber();
+        if (Number.isFinite(Number(plSong?.lineHeight))) return clamp(Number(plSong.lineHeight), 1.2, 2.4);
+        return presentationDefaultLineHeight();
+    }
+
     function lyricTypographyContextForSong(plSong) {
         const isCur = plSong && String(plSong.id) === String(state.currentSongId || "");
         const effBg = effectiveSongBackground(plSong);
-        const pick = (own, fallback) => (own != null && own !== "" ? own : fallback);
+        const stored = getStoredSongTypographyOrDefaults(plSong);
+        if (isCur) {
+            return {
+                fontFamily: state.ui.fontFamily,
+                fontColor: state.ui.fontColor,
+                fontOpacityPct: state.ui.fontOpacityPct,
+                textStrokePx: state.ui.textStrokePx,
+                fontWeight: state.ui.fontWeight,
+                lightBg: effBg.bgType === "solid-white"
+            };
+        }
         return {
-            fontFamily: isCur
-                ? state.ui.fontFamily
-                : pick(plSong?.fontFamily, state.ui.fontFamily),
-            fontColor: isCur ? state.ui.fontColor : pick(plSong?.fontColor, state.ui.fontColor),
-            fontOpacityPct: isCur
-                ? state.ui.fontOpacityPct
-                : Number.isFinite(Number(plSong?.fontOpacityPct))
-                  ? plSong.fontOpacityPct
-                  : state.ui.fontOpacityPct,
-            textStrokePx: isCur
-                ? state.ui.textStrokePx
-                : Number.isFinite(Number(plSong?.textStrokePx))
-                  ? plSong.textStrokePx
-                  : state.ui.textStrokePx,
-            fontWeight: isCur ? state.ui.fontWeight : pick(plSong?.fontWeight, state.ui.fontWeight),
+            ...stored,
             lightBg: effBg.bgType === "solid-white"
         };
     }
@@ -6188,7 +6616,7 @@
 
     function addUploadedBackgroundAndApply(imageData, mediaTypeHint) {
         const data = String(imageData || "").trim();
-        if (!data) return;
+        if (!data) return false;
         const hinted = mediaTypeHint === "video" || mediaTypeHint === "image" ? mediaTypeHint : null;
         let arr = getUploadedBackgrounds().slice();
         let chosenId = "";
@@ -6196,8 +6624,13 @@
         if (existing) {
             chosenId = existing.id;
         } else {
-            chosenId = bgItemId();
             const mt = hinted || inferMediaTypeFromDataUrl(data);
+            const capMsg = uploadedBackgroundCapacityMessage(mt, arr);
+            if (capMsg) {
+                showToast(capMsg, $("my-backgrounds-container") || $("upload-bg-btn"));
+                return false;
+            }
+            chosenId = bgItemId();
             arr = [{
                 id: chosenId,
                 imageData: data,
@@ -6220,8 +6653,11 @@
         const row = getUploadedBackgrounds().find((x) => x && x.id === chosenId);
         if (row && isUploadedItemVideo(row) && !String(row.coverImage || "").trim()) {
             void extractAndPersistUploadedVideoCover(chosenId);
+        } else if (row && !isUploadedItemVideo(row) && !String(row.coverImage || "").trim()) {
+            void extractAndPersistUploadedImageCover(chosenId);
         }
         persistCurrentSongBgAfterUiChange();
+        return true;
     }
 
     function confirmShareMyBackgroundModal() {
@@ -6259,74 +6695,6 @@
         });
     }
 
-    let _bgHoverPreviewTimer = 0;
-
-    function hideBgHoverPreview() {
-        if (_bgHoverPreviewTimer) {
-            clearTimeout(_bgHoverPreviewTimer);
-            _bgHoverPreviewTimer = 0;
-        }
-        const root = $("bg-hover-preview-overlay");
-        const inner = $("bg-hover-preview-inner");
-        if (!root || !inner) return;
-        root.classList.remove("is-visible");
-        root.hidden = true;
-        root.setAttribute("aria-hidden", "true");
-        inner.innerHTML = "";
-    }
-
-    function scheduleBgHoverPreviewThumb(item) {
-        hideBgHoverPreview();
-        if (!item || !item.imageData) return;
-        const root = $("bg-hover-preview-overlay");
-        const inner = $("bg-hover-preview-inner");
-        if (!root || !inner) return;
-        _bgHoverPreviewTimer = window.setTimeout(() => {
-            _bgHoverPreviewTimer = 0;
-            inner.innerHTML = "";
-            const isVid = item.mediaType === "video" || inferMediaTypeFromDataUrl(item.imageData) === "video";
-            if (isVid) {
-                const v = document.createElement("video");
-                v.src = item.imageData;
-                v.muted = true;
-                v.loop = true;
-                v.playsInline = true;
-                v.autoplay = true;
-                v.setAttribute("playsinline", "");
-                inner.appendChild(v);
-                void v.play().catch(() => {});
-            } else {
-                const im = document.createElement("img");
-                im.alt = "";
-                im.src = item.imageData;
-                inner.appendChild(im);
-            }
-            root.hidden = false;
-            root.classList.add("is-visible");
-            root.setAttribute("aria-hidden", "false");
-        }, 280);
-    }
-
-    function scheduleBgHoverPreviewUrl(imageUrl) {
-        hideBgHoverPreview();
-        const url = String(imageUrl || "").trim();
-        if (!url) return;
-        const root = $("bg-hover-preview-overlay");
-        const inner = $("bg-hover-preview-inner");
-        if (!root || !inner) return;
-        _bgHoverPreviewTimer = window.setTimeout(() => {
-            _bgHoverPreviewTimer = 0;
-            inner.innerHTML = "";
-            const im = document.createElement("img");
-            im.alt = "";
-            im.src = url;
-            inner.appendChild(im);
-            root.hidden = false;
-            root.classList.add("is-visible");
-            root.setAttribute("aria-hidden", "false");
-        }, 280);
-    }
-
     function reorderUploadedBackgrounds(fromId, toId) {
         const a = String(fromId || "").trim();
         const b = String(toId || "").trim();
@@ -6343,11 +6711,21 @@
 
     function renderUploadedBackgrounds() {
         const root = $("my-backgrounds-container");
+        const capEl = $("my-bg-capacity-hint");
         if (!root) return;
         const items = getUploadedBackgrounds().filter((x) => x && x.imageData);
         root.innerHTML = "";
+        if (capEl) {
+            if (!items.length) {
+                capEl.hidden = true;
+                capEl.textContent = "";
+            } else {
+                const vidCount = countUploadedBackgroundVideos(items);
+                capEl.hidden = false;
+                capEl.textContent = `已用 ${items.length}/${UPLOADED_BACKGROUNDS_MAX} 个槽位 · 视频 ${vidCount}/${UPLOADED_BACKGROUNDS_MAX_VIDEO}（视频占内存大，建议压缩后上传）`;
+            }
+        }
         if (!items.length) {
-            root.innerHTML = '<div class="hint-text my-backgrounds-empty-hint">暂无已上传背景，请在「预设背景」中上传图片</div>';
             const emptyAdd = document.createElement("button");
             emptyAdd.type = "button";
             emptyAdd.className = "lyric-bg-slot-empty";
@@ -6364,9 +6742,11 @@
         let dragFromId = "";
         items.forEach((item) => {
             if (!item || !item.imageData) return;
+            const isVid = item.mediaType === "video" || inferMediaTypeFromDataUrl(item.imageData) === "video";
             const wrap = document.createElement("div");
-            wrap.className = "lyric-bg-thumb-wrap";
+            wrap.className = "lyric-bg-thumb-wrap" + (isVid ? " lyric-bg-thumb-wrap--video" : "");
             wrap.dataset.wrapItemId = item.id;
+            wrap.setAttribute("role", "listitem");
 
             const grip = document.createElement("span");
             grip.className = "lyric-bg-drag-handle";
@@ -6375,7 +6755,6 @@
             grip.setAttribute("aria-hidden", "true");
             grip.textContent = "⋮⋮";
 
-            const isVid = item.mediaType === "video" || inferMediaTypeFromDataUrl(item.imageData) === "video";
             const thumb = document.createElement("button");
             thumb.type = "button";
             thumb.className = "lyric-bg-thumb" + (isVid ? " lyric-bg-thumb--video" : "");
@@ -6383,16 +6762,12 @@
             if (isVid) {
                 const cover = String(item.coverImage || "").trim();
                 const extracting = _videoThumbExtractingIds.has(item.id);
-                thumb.style.position = "relative";
                 thumb.style.backgroundImage = "none";
-                thumb.style.background = "linear-gradient(145deg,#1e1e28,#12121a)";
+                thumb.style.background = "linear-gradient(145deg,#252530,#14141c)";
                 if (cover) {
-                    const covImg = document.createElement("img");
-                    covImg.className = "lyric-bg-thumb-cover-img";
-                    covImg.alt = "";
-                    covImg.draggable = false;
-                    covImg.src = cover;
-                    thumb.appendChild(covImg);
+                    appendLyricBgThumbCoverImg(thumb, cover, () => appendLyricBgThumbVideoPlaceholder(thumb));
+                } else if (!extracting) {
+                    appendLyricBgThumbVideoPlaceholder(thumb);
                 }
                 if (extracting) {
                     const spin = document.createElement("span");
@@ -6403,25 +6778,23 @@
                 const badge = document.createElement("span");
                 badge.className = "lyric-bg-thumb-play-badge";
                 badge.setAttribute("aria-hidden", "true");
-                badge.style.cssText =
-                    "position:absolute;right:6px;bottom:6px;width:16px;height:16px;border-radius:50%;" +
-                    "background:rgba(255,255,255,0.38);display:flex;align-items:center;justify-content:center;" +
-                    "pointer-events:none;box-sizing:border-box;";
                 const playIc = document.createElement("span");
                 playIc.className = "lyric-bg-thumb-play-icon";
                 playIc.textContent = "▶";
-                playIc.style.cssText = "font-size:8px;line-height:1;color:#fff;";
                 badge.appendChild(playIc);
                 thumb.appendChild(badge);
             } else {
-                thumb.style.backgroundImage = `url("${String(item.imageData).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}")`;
+                thumb.style.backgroundImage = "none";
+                thumb.style.background = "linear-gradient(145deg,#252530,#14141c)";
+                const imgSrc = String(item.coverImage || item.imageData || "").trim();
+                appendLyricBgThumbCoverImg(thumb, imgSrc);
             }
             thumb.title = isVid ? "点击使用视频背景" : "点击使用图片背景";
-            if (state.ui.bgType === "image" && state.ui.bgImage === item.imageData) {
+            if (isUploadedBackgroundItemActive(item)) {
                 thumb.classList.add("lyric-bg-thumb--active");
+                wrap.classList.add("lyric-bg-thumb-wrap--active");
+                thumb.title = isVid ? "当前诗歌正在使用此视频背景" : "当前诗歌正在使用此图片背景";
             }
-            thumb.addEventListener("mouseenter", () => scheduleBgHoverPreviewThumb(item));
-            thumb.addEventListener("mouseleave", () => hideBgHoverPreview());
             thumb.addEventListener("click", (e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -6436,7 +6809,6 @@
                 saveSettings();
                 persistCurrentSongBgAfterUiChange();
                 renderUploadedBackgrounds();
-                showToast("已切换背景", thumb);
             });
 
             const delBtn = document.createElement("button");
@@ -6449,27 +6821,6 @@
                 e.preventDefault();
                 e.stopPropagation();
                 openLyricBgDeletePopover(wrap, item.id);
-            });
-
-            const defBtn = document.createElement("button");
-            defBtn.type = "button";
-            defBtn.className =
-                "lyric-bg-default-btn" + (String(state.ui.defaultUploadedBgId || "") === item.id ? " is-on" : "");
-            defBtn.textContent = String(state.ui.defaultUploadedBgId || "") === item.id ? "取消" : "设默认";
-            defBtn.title = "标记或取消默认背景";
-            defBtn.addEventListener("mousedown", (e) => e.stopPropagation());
-            defBtn.addEventListener("click", (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                if (String(state.ui.defaultUploadedBgId || "") === item.id) {
-                    state.ui.defaultUploadedBgId = "";
-                    showToast("已取消默认背景", defBtn);
-                } else {
-                    state.ui.defaultUploadedBgId = item.id;
-                    showToast("已设为默认背景", defBtn);
-                }
-                saveSettings();
-                renderUploadedBackgrounds();
             });
 
             grip.addEventListener("dragstart", (e) => {
@@ -6520,13 +6871,6 @@
                 sb.title = "已共享";
                 wrap.appendChild(sb);
             }
-            wrap.appendChild(defBtn);
-            if (String(state.ui.defaultUploadedBgId || "") === item.id) {
-                const defBadge = document.createElement("span");
-                defBadge.className = "lyric-bg-default-badge";
-                defBadge.textContent = "默认";
-                wrap.appendChild(defBadge);
-            }
             root.appendChild(wrap);
         });
 
@@ -6562,7 +6906,7 @@
             supabase = null;
         }
         if (!supabase) {
-            showToast("Supabase 未初始化，无法共享", triggerEl);
+            showToast("共享背景服务未就绪，请检查网络", triggerEl);
             return;
         }
         try {
@@ -6587,10 +6931,36 @@
         }
     }
 
+    function setSharedBgStatusHint(text, tone) {
+        const el = $("shared-bg-status-hint");
+        if (!el) return;
+        if (!text) {
+            el.hidden = true;
+            el.textContent = "";
+            el.className = "shared-bg-status hint-text";
+            return;
+        }
+        el.hidden = false;
+        el.textContent = text;
+        el.className = "shared-bg-status hint-text" + (tone ? ` shared-bg-status--${tone}` : "");
+    }
+
     async function loadSharedBackgrounds() {
         const root = $("shared-backgrounds-container");
         if (!root) return;
-        root.innerHTML = '<div class="hint-text" style="grid-column:1/-1;">加载中…</div>';
+
+        if (typeof navigator !== "undefined" && navigator.onLine === false) {
+            root.innerHTML = "";
+            setSharedBgStatusHint(
+                "当前处于离线状态，无法加载共享背景。请连接网络后重试，或改用「预设背景」「我的背景」。",
+                "warn"
+            );
+            return;
+        }
+
+        root.innerHTML = '<div class="shared-bg-loading hint-text">正在连接云端…</div>';
+        setSharedBgStatusHint("", "");
+
         let supabase;
         try {
             supabase = await ensureSupabaseClient();
@@ -6598,28 +6968,53 @@
             supabase = null;
         }
         if (!supabase) {
-            root.innerHTML = '<div class="hint-text" style="grid-column:1/-1;">Supabase 未初始化</div>';
+            root.innerHTML = "";
+            setSharedBgStatusHint(
+                "共享背景需联网并连接云端服务，当前无法使用（云端未就绪或网络受限）。请改用「预设背景」或在「我的背景」中上传本地图片。",
+                "warn"
+            );
             return;
         }
-        const { data, error } = await supabase
-            .from("backgrounds")
-            .select("*")
-            .order("created_at", { ascending: false })
-            .limit(48);
+        let data;
+        let error;
+        try {
+            ({ data, error } = await supabase
+                .from("backgrounds")
+                .select("*")
+                .order("created_at", { ascending: false })
+                .limit(48));
+        } catch (err) {
+            console.error("loadSharedBackgrounds", err);
+            root.innerHTML = "";
+            setSharedBgStatusHint(
+                "共享背景暂时无法加载，请检查网络后重试。若持续失败，说明云端服务暂不可用，请改用「预设背景」或「我的背景」。",
+                "warn"
+            );
+            return;
+        }
         if (error) {
             console.error("loadSharedBackgrounds", error);
-            root.innerHTML = '<div class="hint-text" style="grid-column:1/-1;">共享背景加载失败</div>';
+            root.innerHTML = "";
+            setSharedBgStatusHint(
+                "共享背景暂时无法加载，请检查网络后重试。若持续失败，说明云端服务暂不可用，请改用「预设背景」或「我的背景」。",
+                "warn"
+            );
             return;
         }
         const rows = Array.isArray(data) ? data : [];
         root.innerHTML = "";
         if (!rows.length) {
-            root.innerHTML = '<div class="hint-text" style="grid-column:1/-1;">暂无云端共享背景</div>';
+            setSharedBgStatusHint(
+                "云端共享库中暂无背景。您可在「我的背景」上传图片后，点击 ☁ 按钮分享到云端（需云端服务可用）。",
+                "info"
+            );
             return;
         }
+        let rendered = 0;
         rows.forEach((row) => {
             const imageUrl = String(row.image_url || "").trim();
             if (!imageUrl) return;
+            rendered += 1;
             const wrap = document.createElement("div");
             wrap.className = "lyric-bg-thumb-wrap";
             const thumb = document.createElement("button");
@@ -6638,13 +7033,18 @@
                 updateAll();
                 saveSettings();
                 persistCurrentSongBgAfterUiChange();
-                showToast("已应用共享背景", thumb);
             });
-            thumb.addEventListener("mouseenter", () => scheduleBgHoverPreviewUrl(imageUrl));
-            thumb.addEventListener("mouseleave", () => hideBgHoverPreview());
             wrap.appendChild(thumb);
             root.appendChild(wrap);
         });
+        if (!rendered) {
+            setSharedBgStatusHint(
+                "云端共享库中暂无可用背景。您可在「我的背景」上传图片后，点击 ☁ 按钮分享到云端。",
+                "info"
+            );
+            return;
+        }
+        setSharedBgStatusHint("以下为云端共享背景，点击缩略图即可应用。", "ok");
     }
 
     function switchBgTabTo(name) {
@@ -6674,15 +7074,6 @@
                 switchBgTabTo(tab.getAttribute("data-bg-tab") || "preset");
             });
         });
-        const hoverOv = $("bg-hover-preview-overlay");
-        if (hoverOv && hoverOv.dataset.dismissBound !== "1") {
-            hoverOv.dataset.dismissBound = "1";
-            hoverOv.addEventListener("click", (e) => {
-                if (e.target === hoverOv || (e.target && e.target.classList.contains("bg-hover-preview-backdrop"))) {
-                    hideBgHoverPreview();
-                }
-            });
-        }
     }
 
     function closeFreeBgMaterialsPanel() {
@@ -7262,21 +7653,8 @@
 
         if (Array.isArray(loadedSongs) && loadedSongs.length) {
             state.songs = loadedSongs;
-            let migratedSongVisual = false;
-            state.songs.forEach((s) => {
-                if (!Number.isFinite(Number(s.overlayOpacityPct))) {
-                    s.overlayOpacityPct = 30;
-                    migratedSongVisual = true;
-                }
-                if (!Number.isFinite(Number(s.fontOpacityPct))) {
-                    s.fontOpacityPct = 100;
-                    migratedSongVisual = true;
-                }
-            });
             if (recoverySource) {
                 migrateRecoveredLibraryToPrimaryStore(state.songs, recoverySource, { notify: true });
-            } else if (migratedSongVisual) {
-                saveSongs();
             } else {
                 writeSongsBackupSnapshot(state.songs);
             }
@@ -7301,7 +7679,6 @@
                 state.ui.bgMediaType = "image";
             }
             if (state.ui.fontMegaMode !== true) state.ui.fontMegaMode = false;
-            if (state.ui.defaultUploadedBgId == null) state.ui.defaultUploadedBgId = "";
             state.ui.editorAutoFontSize = false;
             state.ui.editorAutoFontMinPx = clamp(Number(state.ui.editorAutoFontMinPx) || 11, 9, 22);
             state.ui.editorAutoFontMaxPx = clamp(
@@ -7311,7 +7688,7 @@
             );
             if (Number(state.ui.fontSize) > 300) state.ui.fontMegaMode = true;
             const cap = state.ui.fontMegaMode ? 500 : 300;
-            state.ui.fontSize = clamp(Number(state.ui.fontSize) || 60, 8, cap);
+            state.ui.fontSize = clamp(Number(state.ui.fontSize) || PRESENTATION_STYLE_DEFAULTS.fontSize, 8, cap);
         } else {
             state.currentSongId = state.songs[0].id;
             state.ui.theme = "dark";
@@ -7320,6 +7697,7 @@
         if (!state.songs.some((s) => s.id === state.currentSongId)) {
             state.currentSongId = state.songs[0].id;
         }
+        state.songs.forEach((s) => normalizeSongPresentationOverrides(s));
         const playlist = readPlaylistFromAllStorageKeys();
         if (playlist && Array.isArray(playlist.items)) {
             state.playlist.items = playlist.items.slice();
@@ -7335,7 +7713,7 @@
             }
         }
         state.playlist.autoSwitch = false;
-        defaultSongPosY = clamp(Number(state.ui.posY) || 40, 20, 70);
+        defaultSongPosY = clamp(Number(state.ui.posY) || PRESENTATION_STYLE_DEFAULTS.posY, 20, 70);
         defaultPageTransition = canonicalPageTransition(state.ui.pageTransition);
         defaultPageTransitionSpeed =
             Math.round(clamp(Number(state.ui.pageTransitionSpeed) || 0.6, 0.3, 1.5) * 10) / 10;
@@ -7669,9 +8047,13 @@
             bgMediaType: snap.bgMediaType === "video" ? "video" : "image",
             posY: snap.posY != null ? clamp(Number(snap.posY), 20, 70) : defaultSongPosY,
             overlayOpacityPct:
-                snap.overlayOpacityPct != null ? clamp(Number(snap.overlayOpacityPct), 0, 80) : 30,
+                snap.overlayOpacityPct != null
+                    ? clamp(Number(snap.overlayOpacityPct), 0, 80)
+                    : PRESENTATION_STYLE_DEFAULTS.overlayOpacityPct,
             fontOpacityPct:
-                snap.fontOpacityPct != null ? clamp(Number(snap.fontOpacityPct), 20, 100) : 100,
+                snap.fontOpacityPct != null
+                    ? clamp(Number(snap.fontOpacityPct), 20, 100)
+                    : PRESENTATION_STYLE_DEFAULTS.fontOpacityPct,
             pageTransition: canonicalPageTransition(
                 snap.pageTransition != null ? snap.pageTransition : defaultPageTransition
             ),
@@ -7802,9 +8184,9 @@
         if (!s) return;
         persistSongBackgroundFromUi(sid);
         persistCurrentSongTypographyFromUi(sid);
-        s.posY = clamp(Number(state.ui.posY), 20, 70);
-        s.overlayOpacityPct = clamp(Number(state.ui.overlayOpacityPct), 0, 80);
-        s.fontOpacityPct = clamp(Number(state.ui.fontOpacityPct), 20, 100);
+        assignSongPresentationField(s, "posY", state.ui.posY);
+        assignSongPresentationField(s, "overlayOpacityPct", state.ui.overlayOpacityPct);
+        assignSongPresentationField(s, "fontOpacityPct", state.ui.fontOpacityPct);
         persistPageTransitionFromUi(sid);
     }
 
@@ -7879,6 +8261,25 @@
         if (restoreBtn) {
             restoreBtn.disabled = !songHasOwnPageTransition(song);
         }
+        document.querySelectorAll("#layout-page-gallery .gallery-song-transition-slot").forEach((slot) => {
+            const sec = slot.closest(".gallery-song-section");
+            if (!sec) return;
+            const sid = sec.getAttribute("data-song-id");
+            const plSong = state.songs.find((s) => String(s.id) === String(sid));
+            if (!plSong) return;
+            const inherit = !songHasOwnPageTransition(plSong);
+            const trans = getEffectivePageTransition(plSong);
+            const spd = getEffectivePageTransitionSpeed(plSong);
+            const summary = `✨ ${formatPageTransitionSummary(trans, spd, { inherit, short: true })}`;
+            const tip = inherit
+                ? `默认翻页转场：${pageTransitionLabel(trans)}`
+                : `本首翻页转场：${pageTransitionLabel(trans)}`;
+            const pill = slot.querySelector(".gallery-song-transition-pill");
+            if (pill) {
+                pill.textContent = summary;
+                pill.title = tip;
+            }
+        });
     }
 
     function openAdvDrawerTransitionSection() {
@@ -8064,6 +8465,7 @@
         if ($("song-tempo")) $("song-tempo").value = song.tempo || "";
         if ($("song-notes")) $("song-notes").value = song.notes || "";
         if ($("song-tags")) $("song-tags").value = song.tags || "";
+        _galleryEditorSyncedSongId = String(song.id || "");
     }
 
     function syncEditorToSong() {
@@ -8081,8 +8483,8 @@
         if (notesEl) song.notes = notesEl.value.trim();
         const tagsEl = $("song-tags");
         if (tagsEl) song.tags = tagsEl.value.trim();
-        song.overlayOpacityPct = clamp(Number(state.ui.overlayOpacityPct), 0, 80);
-        song.fontOpacityPct = clamp(Number(state.ui.fontOpacityPct), 20, 100);
+        assignSongPresentationField(song, "overlayOpacityPct", state.ui.overlayOpacityPct);
+        assignSongPresentationField(song, "fontOpacityPct", state.ui.fontOpacityPct);
     }
 
     /** 分页用歌词：取编辑器与曲库中较长的一段，避免一侧瞬时空串或未写回时 pages 塌成 1 页、#card-container 被重绘成一张卡 */
@@ -8113,6 +8515,32 @@
 
     /** 仅在 updateAll 周期内置入：sync 前后取较长串，防止 sync 用空 textarea 覆盖 song.lyrics 后分页只剩 1 页 */
     let _lyricsPagingSplitOverride = null;
+
+    /*
+     * ========== 页面画廊 · 不变量（改切歌/歌词/背景/分页请先读） ==========
+     * 1. 切歌：须先 syncSongToEditor，再 renderPageGallery（或 syncPageGallerySelectionFast）。
+     * 2. 多首连播：禁止增量 patch，必须全量 renderPageGallery。
+     * 3. 当前诗歌分页：编辑器未同步（_galleryEditorSyncedSongId）时用 song.lyrics，不用 textarea。
+     * 4. 非当前诗歌：读持久化 song 字段，不读全局 state.ui 背景/字体默认值。
+     * 5. 选中态：仅改边框/颜色/交互，不改变区块占位（见 style.css 画廊段）。
+     * 6. patch 后须 verifyPageGalleryCardCounts；失败则清除 galleryStructSig 并全量重建。
+     * 调试：localStorage worship:galleryDebug=1 或 URL ?galleryDebug=1
+     * ================================================================
+     */
+    /** syncSongToEditor 最后一次写入的诗歌 id；画廊分页在切歌后编辑器未同步前勿误用上一首歌词 */
+    let _galleryEditorSyncedSongId = "";
+
+    function getGalleryLyricsSrcForSong(plSong, isCurrent) {
+        if (!plSong) return "";
+        if (!isCurrent || String(plSong.id) !== String(state.currentSongId || "")) {
+            return String(plSong.lyrics ?? "");
+        }
+        if (_galleryEditorSyncedSongId !== String(plSong.id || "")) {
+            return String(plSong.lyrics ?? "");
+        }
+        return getStablePagingLyricsForPageSplit();
+    }
+
     function lyricsForPaginationSplit() {
         return _lyricsPagingSplitOverride != null ? _lyricsPagingSplitOverride : getLyricsSourceStringForPaging();
     }
@@ -8156,21 +8584,147 @@
         return String(it?.coverImage || "").trim();
     }
 
-    /**
-     * @param {{ galleryThumb?: boolean; song?: object }} [opts]
-     * 画廊视频背景：仅当前诗歌的激活分页卡使用 live video（galleryThumb:false）；其余分页与其它诗歌用封面缩略图，减轻切歌解码压力。
-     * 传入 opts.song 时按该诗歌独立背景渲染；否则按当前诗歌（与中间预览一致）。
-     */
-    function applyCardBackgroundFromSlice(card, slice, opts) {
-        const galleryThumb = !!(opts && opts.galleryThumb);
-        const oldVid = card.querySelector(".card-video-bg");
-        if (oldVid) {
+    /** 画廊/预览共用：同一视频 URL 只保留一个解码中的 <video>，翻页时迁移 DOM 而非重建 src */
+    function assignCardVideoBgSrc(videoEl, dataUrl) {
+        if (!videoEl) return;
+        if (typeof globalThis.projectionAssignVideoBgSrc === "function") {
+            globalThis.projectionAssignVideoBgSrc(videoEl, dataUrl);
+            return;
+        }
+        const want = String(dataUrl || "").trim();
+        if (!want) return;
+        if (videoEl.dataset.worshipBgUrl === want && videoEl.readyState >= 2) {
+            videoEl.style.opacity = "1";
+            if (videoEl.paused) void videoEl.play().catch(() => {});
+            return;
+        }
+        videoEl.dataset.worshipBgUrl = want;
+        videoEl.src = want;
+        void videoEl.play().catch(() => {});
+    }
+
+    function obtainGalleryLiveVideo(url) {
+        const want = String(url || "").trim();
+        if (!want) return null;
+        let v = _galleryLiveVideoByUrl.get(want);
+        if (!v) {
+            v = document.createElement("video");
+            v.className = "card-video-bg gallery-live-video-shared";
+            v.muted = true;
+            v.defaultMuted = true;
+            v.loop = true;
+            v.playsInline = true;
+            v.setAttribute("playsinline", "");
+            v.setAttribute("aria-hidden", "true");
+            v.style.cssText =
+                "position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;" +
+                "z-index:0;pointer-events:none;opacity:1;";
+            _galleryLiveVideoByUrl.set(want, v);
+            assignCardVideoBgSrc(v, want);
+        }
+        return v;
+    }
+
+    function detachGalleryLiveVideoFromCard(card) {
+        if (!card) return;
+        const v = card.querySelector(".gallery-live-video-shared");
+        if (v && v.parentElement === card) v.remove();
+    }
+
+    function applyGalleryVideoPosterOnCard(card, slice) {
+        const coverUrl = resolveGalleryVideoCoverForSlice(slice);
+        if (coverUrl) {
+            card.style.background = "#0a0a12";
+            card.style.backgroundImage = `url("${coverUrl.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}")`;
+            card.style.backgroundSize = "cover";
+            card.style.backgroundPosition = "center";
+            return;
+        }
+        card.style.background = "linear-gradient(145deg,#252530,#14141c)";
+        card.style.backgroundImage = "none";
+    }
+
+    function mountGalleryLiveVideoOnCard(card, slice, mountOpts) {
+        const want = String(slice?.bgImage || "").trim();
+        const dedicated = !!(mountOpts && mountOpts.dedicated);
+        card.querySelectorAll(".card-video-bg:not(.gallery-live-video-shared)").forEach((el) => {
             try {
-                oldVid.pause();
+                el.pause();
             } catch (_e) {
                 /* ignore */
             }
-            oldVid.remove();
+            el.remove();
+        });
+        if (dedicated) {
+            detachGalleryLiveVideoFromCard(card);
+            let v = card.querySelector(".gallery-card-video-local");
+            if (!v) {
+                v = document.createElement("video");
+                v.className = "card-video-bg gallery-card-video-local";
+                v.muted = true;
+                v.defaultMuted = true;
+                v.loop = true;
+                v.playsInline = true;
+                v.setAttribute("playsinline", "");
+                v.setAttribute("aria-hidden", "true");
+                v.style.cssText =
+                    "position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;" +
+                    "z-index:0;pointer-events:none;opacity:1;";
+                applyGalleryVideoPosterOnCard(card, slice);
+                card.insertBefore(v, card.firstChild);
+            } else {
+                applyGalleryVideoPosterOnCard(card, slice);
+            }
+            assignCardVideoBgSrc(v, want);
+            v.style.opacity = "1";
+            if (v.paused || v.ended) void v.play().catch(() => {});
+            return;
+        }
+        const v = obtainGalleryLiveVideo(want);
+        if (!v || !card) return;
+        applyGalleryVideoPosterOnCard(card, slice);
+        if (v.parentElement !== card) {
+            if (v.parentElement) detachGalleryLiveVideoFromCard(v.parentElement);
+            card.insertBefore(v, card.firstChild);
+        }
+        v.style.opacity = "1";
+        if (v.paused || v.ended) void v.play().catch(() => {});
+    }
+
+    /**
+     * @param {{ galleryThumb?: boolean; song?: object; galleryStoredOnly?: boolean }} [opts]
+     * galleryStoredOnly + 视频：页面画廊每卡独立解码播放；中间投屏预览/投屏窗仍仅当前页 live（共享 video）。
+     */
+    function applyCardBackgroundFromSlice(card, slice, opts) {
+        const galleryThumb = !!(opts && opts.galleryThumb);
+        const galleryDedicatedVideo = !!(opts && opts.galleryStoredOnly);
+        const oldVid = card.querySelector(".card-video-bg");
+        if (oldVid) {
+            if (oldVid.classList.contains("gallery-live-video-shared")) {
+                if (!galleryThumb && oldVid.parentElement === card) {
+                    /* 共享 video 仍留在此卡，下方只清理装饰层 */
+                } else {
+                    detachGalleryLiveVideoFromCard(card);
+                }
+            } else if (oldVid.classList.contains("gallery-card-video-local")) {
+                if (!galleryThumb) {
+                    /* 画廊专用 video 仍在本卡 */
+                } else {
+                    try {
+                        oldVid.pause();
+                    } catch (_e) {
+                        /* ignore */
+                    }
+                    oldVid.remove();
+                }
+            } else {
+                try {
+                    oldVid.pause();
+                } catch (_e) {
+                    /* ignore */
+                }
+                oldVid.remove();
+            }
         }
         card.querySelector(".gallery-video-stub")?.remove();
         card.querySelector(".gallery-card-css-dyn-bg")?.remove();
@@ -8222,19 +8776,7 @@
                     card.insertBefore(stub, card.firstChild);
                     return;
                 }
-                card.style.background = "#000";
-                const v = document.createElement("video");
-                v.className = "card-video-bg";
-                v.src = slice.bgImage;
-                v.muted = true;
-                v.loop = true;
-                v.playsInline = true;
-                v.setAttribute("playsinline", "");
-                v.setAttribute("autoplay", "");
-                v.style.cssText =
-                    "position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;z-index:0;pointer-events:none;";
-                card.insertBefore(v, card.firstChild);
-                void v.play().catch(() => {});
+                mountGalleryLiveVideoOnCard(card, slice, { dedicated: galleryDedicatedVideo });
             } else {
                 card.style.backgroundImage = `url("${slice.bgImage}")`;
                 card.style.backgroundSize = "cover";
@@ -8245,7 +8787,12 @@
 
     function applyCardBackground(card, opts) {
         const song = opts && opts.song;
-        const slice = song ? effectiveSongBackground(song) : effectiveSongBackground(currentSong());
+        const fromGallery = !!(opts && opts.galleryStoredOnly);
+        const slice = song
+            ? fromGallery
+                ? gallerySongBackground(song)
+                : effectiveSongBackground(song)
+            : effectiveSongBackground(currentSong());
         applyCardBackgroundFromSlice(card, slice, opts || {});
     }
 
@@ -8285,10 +8832,37 @@
         if (!container) {
             syncPageIndicatorFromState(stepCount);
             renderAllPagesThumbnails(flatPages);
-            renderPageGallery();
+            if (!options.skipGallery) {
+                if (!syncPageGallerySelectionFast()) renderPageGallery();
+            }
             return;
         }
         state.currentPage = clamp(state.currentPage, 0, Math.max(0, stepCount - 1));
+
+        if (options.pageOnly) {
+            const cards = container.querySelectorAll(".card");
+            if (cards.length === flatPages.length && flatPages.length > 0) {
+                cards.forEach((card, idx) => {
+                    card.classList.toggle("active", idx === state.currentPage);
+                });
+                if (isMainVideoBackground()) {
+                    const slice = effectiveSongBackground(song);
+                    cards.forEach((card, idx) => {
+                        const wantLive = idx === state.currentPage;
+                        applyCardBackground(card, { galleryThumb: !wantLive });
+                    });
+                }
+                syncPageIndicatorFromState(stepCount);
+                updateAllPagesThumbnailsActive();
+                if (!options.skipGallery) {
+                    if (!syncPageGallerySelectionFast()) renderPageGallery();
+                }
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(scrollSpeakerPreviewCardIntoView);
+                });
+                return;
+            }
+        }
 
         if (options.linesOnly && isMainVideoBackground()) {
             const cards = container.querySelectorAll(".card");
@@ -8315,8 +8889,10 @@
                         });
                     });
                     syncPageIndicatorFromState(stepCount);
-                    renderAllPagesThumbnails(flatPages);
-                    renderPageGallery();
+                    updateAllPagesThumbnailsActive();
+                    if (!options.skipGallery) {
+                        if (!syncPageGallerySelectionFast()) renderPageGallery();
+                    }
                     requestAnimationFrame(() => {
                         requestAnimationFrame(scrollSpeakerPreviewCardIntoView);
                     });
@@ -8348,7 +8924,8 @@
         flatPages.forEach((lines, idx) => {
             const card = document.createElement("div");
             card.className = "card" + (idx === state.currentPage ? " active" : "");
-            applyCardBackground(card);
+            const vidBg = isMainVideoBackground();
+            applyCardBackground(card, { galleryThumb: vidBg && idx !== state.currentPage });
             card.style.boxSizing = "border-box";
             card.style.padding = "10px 20px";
             card.style.position = "relative";
@@ -8403,7 +8980,7 @@
             });
             card.addEventListener("click", () => {
                 state.currentPage = idx;
-                updateAll({ linesOnly: isMainVideoBackground() });
+                updateAll({ pageOnly: true, linesOnly: isMainVideoBackground() });
             });
             container.appendChild(card);
         });
@@ -8413,7 +8990,9 @@
         requestAnimationFrame(() => {
             requestAnimationFrame(scrollSpeakerPreviewCardIntoView);
         });
-        renderPageGallery();
+        if (!options.skipGallery) {
+            if (!syncPageGallerySelectionFast()) renderPageGallery();
+        }
     }
 
     function getPlaylistSongIdsOrderedForGallery() {
@@ -8447,7 +9026,7 @@
             const plSong = state.songs.find((s) => String(s.id) === String(sid));
             if (!plSong) return;
             const isCurrent = String(sid) === curSid;
-            const lyricsSrc = isCurrent ? getStablePagingLyricsForPageSplit() : String(plSong.lyrics ?? "");
+            const lyricsSrc = getGalleryLyricsSrcForSong(plSong, isCurrent);
             const pages = splitPages(lyricsSrc, state.ui.defaultLines);
             const seq = getPlaybackSequenceForSong(plSong, isCurrent);
             const pn = Math.max(1, seq.length);
@@ -8468,11 +9047,13 @@
             }
             if (wrapR) {
                 wrapR.hidden = isCurrent;
+                wrapR.setAttribute("aria-hidden", isCurrent ? "true" : "false");
                 const val = wrapR.querySelector(".page-indicator-readonly-val");
                 const tot = wrapR.querySelector(".page-indicator-total");
                 if (val) val.textContent = String(clamp(cp + 1, 1, pn));
                 if (tot) tot.textContent = `/${pn}`;
             }
+            if (wrapI) wrapI.setAttribute("aria-hidden", isCurrent ? "false" : "true");
         });
     }
 
@@ -8492,6 +9073,15 @@
         }
     }
 
+    /** 翻页时只切换缩略图选中态，避免重建全部页缩略图 */
+    function updateAllPagesThumbnailsActive() {
+        const root = $("all-pages-thumbs");
+        if (!root) return;
+        root.querySelectorAll(".all-pages-thumb").forEach((btn, idx) => {
+            btn.classList.toggle("is-active", idx === state.currentPage);
+        });
+    }
+
     function renderAllPagesThumbnails(pages) {
         const root = $("all-pages-thumbs");
         if (!root) return;
@@ -8509,7 +9099,7 @@
                 `<span class="all-pages-thumb-preview">${escapeHtml(preview.slice(0, 120))}</span>`;
             btn.addEventListener("click", () => {
                 state.currentPage = idx;
-                updateAll({ linesOnly: isMainVideoBackground() });
+                updateAll({ pageOnly: true, linesOnly: isMainVideoBackground() });
             });
             root.appendChild(btn);
         });
@@ -8601,7 +9191,7 @@
             row.className = "gallery-card-line";
             row.style.position = "relative";
             row.style.zIndex = "2";
-            populateLyricRowElement(row, l, lyricTypographyContextForSong(plSong));
+            populateLyricRowElement(row, l, galleryTypographyContextForSong(plSong));
             lyricAnim.appendChild(row);
         });
     }
@@ -8620,24 +9210,203 @@
 
     function songHasGalleryVideoBg(plSong) {
         if (!plSong) return false;
-        const eff = effectiveSongBackground(plSong);
+        const eff = gallerySongBackground(plSong);
         return eff.bgType === "image" && eff.bgMediaType === "video" && !!eff.bgImage;
     }
 
-    function desiredGalleryCardVideoMode(plSong, isCurrentSection, isActiveCard, deferLive) {
+    function desiredGalleryCardVideoThumb(plSong, _isCurrentSection, _isActiveCard, deferLive) {
+        if (!songHasGalleryVideoBg(plSong)) return true;
+        if (deferLive) return true;
+        return false;
+    }
+
+    function desiredGalleryCardVideoMode(plSong, _isCurrentSection, _isActiveCard, deferLive) {
         if (!songHasGalleryVideoBg(plSong)) return null;
-        if (isCurrentSection && isActiveCard && !deferLive) return "live";
-        return "thumb";
+        if (deferLive) return "thumb";
+        return "live";
+    }
+
+    /** 按诗歌独立样式刷新画廊卡片背景/蒙版/字号（切歌后强制全量，避免串色串字） */
+    function refreshGalleryAllCardsPresentation(gal, opts) {
+        if (!gal) return;
+        const forceBg = !!(opts && opts.forceBackground);
+        const curSid = String(state.currentSongId || "");
+        const deferLive = !!gal._galleryDeferLiveVideo;
+        gal.querySelectorAll(".gallery-page-card[data-gallery-card]").forEach((card) => {
+            const sid = card.getAttribute("data-song-id") || "";
+            const plSong = state.songs.find((s) => String(s.id) === String(sid));
+            if (!plSong) return;
+            const isCurrent = String(sid) === curSid;
+            const act = card.classList.contains("is-active");
+            const effStrip = gallerySongBackground(plSong);
+            const wantBgSig = pageGalleryBackgroundIdentityKey(effStrip);
+            const prevBgSig = card.getAttribute("data-gallery-bg-sig") || "";
+            const galleryThumb = desiredGalleryCardVideoThumb(plSong, isCurrent, act, deferLive);
+            if (forceBg || prevBgSig !== wantBgSig) {
+                applyCardBackground(card, {
+                    galleryThumb,
+                    song: plSong,
+                    galleryStoredOnly: true
+                });
+                card.setAttribute("data-gallery-bg-sig", wantBgSig);
+                if (songHasGalleryVideoBg(plSong)) {
+                    card.dataset.galleryVideoMode = galleryThumb ? "thumb" : "live";
+                } else {
+                    delete card.dataset.galleryVideoMode;
+                }
+            }
+            applyGalleryCardProjectionMask(card, plSong);
+            const vig = card.querySelector(".card-vignette-radial");
+            if (vig) applyRadialVignetteToLayer(vig, vignetteUiContextForSong(plSong));
+        });
+        syncGalleryAllSectionVideoModes(gal);
+        syncGalleryCardLyricFontsToProjectionScale();
+    }
+
+    function pageGalleryDebugEnabled() {
+        try {
+            if (typeof localStorage !== "undefined" && localStorage.getItem("worship:galleryDebug") === "1") return true;
+        } catch (_) {
+            /* ignore */
+        }
+        try {
+            const q = typeof location !== "undefined" ? String(location.search || "") : "";
+            return /(?:^|[?&])galleryDebug=1(?:&|$)/.test(q);
+        } catch (_) {
+            return false;
+        }
+    }
+
+    function collectPageGalleryCardCountIssues(gal, songIdsOrdered) {
+        const issues = [];
+        if (!gal || !songIdsOrdered.length) return issues;
+        const sections = gal.querySelectorAll(":scope > .gallery-song-section");
+        if (sections.length !== songIdsOrdered.length) {
+            issues.push({
+                kind: "section-count",
+                expected: songIdsOrdered.length,
+                actual: sections.length
+            });
+            return issues;
+        }
+        for (let si = 0; si < songIdsOrdered.length; si++) {
+            const sid = String(songIdsOrdered[si]);
+            const sec = sections[si];
+            if (sec.getAttribute("data-song-id") !== sid) {
+                issues.push({
+                    kind: "section-order",
+                    index: si,
+                    expectedSongId: sid,
+                    actualSongId: sec.getAttribute("data-song-id")
+                });
+                continue;
+            }
+            const plSong = state.songs.find((s) => String(s.id) === String(sid));
+            if (!plSong) {
+                issues.push({ kind: "missing-song", songId: sid, index: si });
+                continue;
+            }
+            const isCurrent = sid === String(state.currentSongId || "");
+            const seq = getPlaybackSequenceForSong(plSong, isCurrent);
+            const scrollRow =
+                sec.querySelector(":scope > .layout-page-gallery-pages-scale-shell > .layout-page-gallery-pages") ||
+                sec.querySelector(":scope > .layout-page-gallery-pages");
+            if (!scrollRow) {
+                issues.push({ kind: "missing-scroll-row", songId: sid, title: plSong.title || "" });
+                continue;
+            }
+            const cards = scrollRow.querySelectorAll(":scope > .gallery-page-card[data-gallery-card]");
+            if (cards.length !== seq.length) {
+                issues.push({
+                    kind: "card-count",
+                    songId: sid,
+                    title: plSong.title || "未命名",
+                    expected: seq.length,
+                    actual: cards.length,
+                    editorSynced: isCurrent ? _galleryEditorSyncedSongId === sid : null
+                });
+            }
+        }
+        return issues;
+    }
+
+    function logPageGalleryCardCountMismatch(context, issues) {
+        const summary = issues
+            .map((i) => {
+                if (i.kind === "card-count") {
+                    return `「${i.title}」${i.actual}/${i.expected} 卡`;
+                }
+                if (i.kind === "section-count") return `分区 ${i.actual}/${i.expected}`;
+                if (i.kind === "section-order") return `分区#${i.index} id 错位`;
+                if (i.kind === "missing-song") return `缺失 song ${i.songId}`;
+                if (i.kind === "missing-scroll-row") return `「${i.title}」无卡片容器`;
+                return i.kind;
+            })
+            .join("; ");
+        console.warn(`[page-gallery] 卡片校验失败 (${context}): ${summary}`);
+        if (pageGalleryDebugEnabled()) console.warn("[page-gallery] 详情", { context, issues });
+    }
+
+    function verifyPageGalleryCardCounts(gal, songIdsOrdered, logContext) {
+        const issues = collectPageGalleryCardCountIssues(gal, songIdsOrdered);
+        if (issues.length) {
+            logPageGalleryCardCountMismatch(logContext || "verify", issues);
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * 增量 patch 前置检查：返回 null 表示允许 patch，否则为阻断原因（须全量 renderPageGallery）。
+     */
+    function pageGalleryPatchBlockReason(gal, songIdsOrdered) {
+        if (!gal) return "no-gallery-root";
+        if (!songIdsOrdered?.length) return "empty-playlist";
+        if (songIdsOrdered.length > 1) return "multi-song-playlist";
+        if (!gal.querySelector(".gallery-page-card")) return "no-existing-cards";
+        const newSig = computePageGalleryStructureSig(songIdsOrdered);
+        if (gal.dataset.galleryStructSig !== newSig) return "structure-signature-changed";
+        return null;
+    }
+
+    /**
+     * 统一入口：结构允许时增量 patch，并校验卡片数；失败时打日志（调试模式含详情）。
+     * @returns {boolean}
+     */
+    function applyPageGalleryPatchIfAllowed(gal, songIdsOrdered, opts) {
+        const context = opts?.context || "patch";
+        const block = pageGalleryPatchBlockReason(gal, songIdsOrdered);
+        if (block) {
+            if (pageGalleryDebugEnabled() && opts?.logSkip) {
+                console.debug(`[page-gallery] patch 跳过 (${context}): ${block}`);
+            }
+            return false;
+        }
+        captureGalleryActiveFlowOrigin(gal);
+        if (!tryPatchPageGalleryInPlace(gal, songIdsOrdered)) {
+            if (pageGalleryDebugEnabled()) {
+                console.warn(`[page-gallery] patch 失败 (${context}): tryPatchPageGalleryInPlace`);
+            }
+            return false;
+        }
+        return verifyPageGalleryCardCounts(gal, songIdsOrdered, context);
     }
 
     function applyGalleryCardVideoMode(card, plSong, mode) {
         if (!card || !plSong || !mode) return;
+        if (mode === "live") {
+            const liveEl = card.querySelector(".gallery-live-video-shared, .gallery-card-video-local");
+            if ((card.dataset.galleryVideoMode || "") === mode && liveEl) return;
+            applyCardBackground(card, { galleryThumb: false, song: plSong, galleryStoredOnly: true });
+            card.dataset.galleryVideoMode = mode;
+            return;
+        }
         if ((card.dataset.galleryVideoMode || "") === mode) return;
-        applyCardBackground(card, { galleryThumb: mode !== "live", song: plSong });
+        applyCardBackground(card, { galleryThumb: true, song: plSong, galleryStoredOnly: true });
         card.dataset.galleryVideoMode = mode;
     }
 
-    /** 视频背景：仅当前诗歌的激活卡片播 live video，其余用封面，避免切歌/翻页时多路解码卡顿 */
+    /** 页面画廊：凡视频背景卡片均 live 播放（每卡独立 video）；翻页动画期间暂用封面 */
     function syncGalleryAllSectionVideoModes(gal) {
         if (!gal) return;
         const curSid = String(state.currentSongId || "");
@@ -8647,10 +9416,16 @@
             const plSong = state.songs.find((s) => String(s.id) === String(sid));
             if (!plSong || !songHasGalleryVideoBg(plSong)) return;
             const isCurrent = String(sid) === curSid;
-            sec.querySelectorAll(":scope .gallery-page-card[data-gallery-card]").forEach((card) => {
+            const cards = [...sec.querySelectorAll(":scope .gallery-page-card[data-gallery-card]")];
+            cards.forEach((card) => {
                 const act = card.classList.contains("is-active");
                 const mode = desiredGalleryCardVideoMode(plSong, isCurrent, act, deferLive);
-                applyGalleryCardVideoMode(card, plSong, mode);
+                if (mode === "live") applyGalleryCardVideoMode(card, plSong, mode);
+            });
+            cards.forEach((card) => {
+                const act = card.classList.contains("is-active");
+                const mode = desiredGalleryCardVideoMode(plSong, isCurrent, act, deferLive);
+                if (mode === "thumb") applyGalleryCardVideoMode(card, plSong, mode);
             });
         });
     }
@@ -8856,13 +9631,34 @@
         return `${t}|${m}|len${len}|head:${s.slice(0, 96)}|tail:${s.slice(-96)}`;
     }
 
+    /** 页面画廊结构签名：含每首排版/背景/蒙版，避免增量补丁在仅改样式时漏刷新 */
+    function pageGalleryPresentationStyleKey(plSong) {
+        if (!plSong) return "x";
+        const isCur = String(plSong.id) === String(state.currentSongId || "");
+        const typo = isCur ? galleryTypographyContextForSong(plSong) : getStoredSongTypographyOrDefaults(plSong);
+        const eff = gallerySongBackground(plSong);
+        const parts = [
+            pageGalleryBackgroundIdentityKey(eff),
+            typo.fontFamily,
+            typo.fontColor,
+            typo.fontWeight,
+            String(typo.fontOpacityPct ?? ""),
+            String(typo.textStrokePx ?? ""),
+            String(isCur ? state.ui.fontSize : plSong.fontSize ?? ""),
+            String(isCur ? getAdvPreviewLineHeightNumber() : plSong.lineHeight ?? ""),
+            String(isCur ? state.ui.posY : plSong.posY ?? ""),
+            String(isCur ? state.ui.overlayOpacityPct : plSong.overlayOpacityPct ?? ""),
+            String(isCur ? state.ui.vignetteShape : plSong.vignetteShape || ""),
+            String(isCur ? state.ui.vignetteCenterBrightness : plSong.vignetteCenterBrightness ?? ""),
+            String(isCur ? state.ui.vignetteEdgeDarkness : plSong.vignetteEdgeDarkness ?? "")
+        ];
+        return parts.join("|");
+    }
+
     function computePageGalleryStructureSig(songIdsOrdered) {
         const parts = [];
         parts.push(songIdsOrdered.join(","));
         parts.push(String(state.ui.defaultLines));
-        parts.push(String(state.ui.vignetteShape || ""));
-        parts.push(String(state.ui.vignetteCenterBrightness ?? ""));
-        parts.push(String(state.ui.vignetteEdgeDarkness ?? ""));
         const curSid = String(state.currentSongId || "");
         songIdsOrdered.forEach((sid) => {
             const plSong = state.songs.find((s) => String(s.id) === String(sid));
@@ -8871,11 +9667,12 @@
                 return;
             }
             const isCurrent = String(sid) === curSid;
-            const lyricsSrc = isCurrent ? getStablePagingLyricsForPageSplit() : String(plSong.lyrics ?? "");
+            const lyricsSrc = getGalleryLyricsSrcForSong(plSong, isCurrent);
             const pages = splitPages(lyricsSrc, state.ui.defaultLines);
             const seq = getPlaybackSequenceForSong(plSong, isCurrent);
-            const eff = effectiveSongBackground(plSong);
-            parts.push(`${sid}:${pages.length}:${playbackSequenceSignature(seq)}:${pageGalleryBackgroundIdentityKey(eff)}`);
+            parts.push(
+                `${sid}:${pages.length}:${playbackSequenceSignature(seq)}:${pageGalleryPresentationStyleKey(plSong)}`
+            );
         });
         return parts.join("\x1e");
     }
@@ -8948,21 +9745,35 @@
         });
     }
 
+    function resetGalleryLyricAnimsInGal(gal, fontOpacityPct) {
+        if (!gal) return;
+        const fontOp = clamp(Number(fontOpacityPct ?? 100), 20, 100);
+        gal.querySelectorAll(".gallery-card-lyric-anim").forEach((el) => {
+            resetLyricAnimEl(el, fontOp, "translateY(-50%)");
+        });
+    }
+
     /** 结构未变时只改高亮与歌词，保留 video 节点，避免翻页黑闪 */
     function tryPatchPageGalleryInPlace(gal, songIdsOrdered) {
         const sections = gal.querySelectorAll(":scope > .gallery-song-section");
         if (sections.length !== songIdsOrdered.length) return false;
-        if (pageNavChasingThisFrame) {
+        const prevGalS = gal.dataset.galLyricLastSongId;
+        const curSid = String(state.currentSongId || "");
+        const songSwitched =
+            prevGalS !== undefined && String(prevGalS || "") !== curSid;
+        if (pageNavChasingThisFrame || songSwitched) {
             flushGalleryLyricTrans({ invokePending: false });
+            if (songSwitched) {
+                resetGalleryLyricAnimsInGal(gal, galleryPageTransitionSource().fontOpacityPct);
+            }
         } else {
             flushGalleryLyricTrans({ invokePending: false, skipReset: true });
         }
         const gsrc = galleryPageTransitionSource();
         const prevGalP = gal.dataset.galLyricLastPage;
-        const prevGalS = gal.dataset.galLyricLastSongId;
         const idxNav = state.currentPage;
-        const curSid = String(state.currentSongId || "");
         const needGalLyricTrans =
+            !songSwitched &&
             galleryLyricTransitionEnabled() &&
             prevGalP !== undefined &&
             gsrc.trans !== "none" &&
@@ -8985,15 +9796,21 @@
             if (pageMetaEl) {
                 const wrapI = pageMetaEl.querySelector('[data-gallery-page-mode="interactive"]');
                 const wrapR = pageMetaEl.querySelector('[data-gallery-page-mode="readonly"]');
-                if (wrapI) wrapI.hidden = !isCurrent;
-                if (wrapR) wrapR.hidden = isCurrent;
+                if (wrapI) {
+                    wrapI.hidden = !isCurrent;
+                    wrapI.setAttribute("aria-hidden", isCurrent ? "false" : "true");
+                }
+                if (wrapR) {
+                    wrapR.hidden = isCurrent;
+                    wrapR.setAttribute("aria-hidden", isCurrent ? "true" : "false");
+                }
             }
-            const lyricsSrc = isCurrent ? getStablePagingLyricsForPageSplit() : String(plSong.lyrics ?? "");
+            const lyricsSrc = getGalleryLyricsSrcForSong(plSong, isCurrent);
             const pages = splitPages(lyricsSrc, state.ui.defaultLines);
             const seq = getPlaybackSequenceForSong(plSong, isCurrent);
             const cp = isCurrent ? clamp(state.currentPage, 0, Math.max(0, seq.length - 1)) : -1;
 
-            const effStrip = effectiveSongBackground(plSong);
+            const effStrip = gallerySongBackground(plSong);
             const galleryLiveVideoBgThis =
                 effStrip.bgType === "image" && effStrip.bgMediaType === "video" && !!effStrip.bgImage;
             const wantBgSig = pageGalleryBackgroundIdentityKey(effStrip);
@@ -9006,18 +9823,18 @@
             const cards = scrollRow.querySelectorAll(":scope > .gallery-page-card[data-gallery-card]");
             if (cards.length !== seq.length) return false;
 
-            for (let si = 0; si < seq.length; si++) {
-                const step = seq[si];
+            for (let ci = 0; ci < seq.length; ci++) {
+                const step = seq[ci];
                 const pi = step.sourcePage;
-                const card = cards[si];
-                if (card.getAttribute("data-song-id") !== sid || card.getAttribute("data-playback-step-idx") !== String(si))
+                const card = cards[ci];
+                if (card.getAttribute("data-song-id") !== sid || card.getAttribute("data-playback-step-idx") !== String(ci))
                     return false;
                 if (card.getAttribute("data-page-idx") !== String(pi)) return false;
                 const stepId = String(step.id || "");
                 if (card.getAttribute("data-playback-step-id") !== stepId) {
                     card.setAttribute("data-playback-step-id", stepId);
                 }
-                const act = isCurrent && si === cp;
+                const act = isCurrent && ci === cp;
                 card.className = "gallery-page-card" + (act ? " is-active" : "");
 
                 applyGalleryCardProjectionMask(card, plSong);
@@ -9041,36 +9858,45 @@
                 if (!lineList.length) lineList = ["…"];
 
                 const prevBgSig = card.getAttribute("data-gallery-bg-sig") || "";
-                if (prevBgSig !== wantBgSig) {
+                if (songSwitched || prevBgSig !== wantBgSig) {
                     applyCardBackground(card, {
-                        galleryThumb: !galleryLiveVideoBgThis || !act,
-                        song: plSong
+                        galleryThumb: !galleryLiveVideoBgThis || !!gal._galleryDeferLiveVideo,
+                        song: plSong,
+                        galleryStoredOnly: true
                     });
                     card.setAttribute("data-gallery-bg-sig", wantBgSig);
                     if (galleryLiveVideoBgThis) {
-                        card.dataset.galleryVideoMode = act && !gal._galleryDeferLiveVideo ? "live" : "thumb";
+                        card.dataset.galleryVideoMode = gal._galleryDeferLiveVideo ? "thumb" : "live";
                     } else {
                         delete card.dataset.galleryVideoMode;
                     }
                 }
 
-                /* 同歌翻页：非激活卡歌词不变，跳过重绘减轻卡顿 */
-                if (isCurrent && needGalLyricTrans && !act) {
+                /* 同歌翻页：非激活卡歌词不变，跳过重绘减轻卡顿（切歌时 songSwitched 已强制全量刷新） */
+                if (!songSwitched && isCurrent && needGalLyricTrans && !act) {
                     continue;
                 }
 
                 const hasPriorLines = !!lyricAnim.querySelector(".gallery-card-line");
-                if (act && needGalLyricTrans && hasPriorLines) {
+                if (!songSwitched && act && needGalLyricTrans && hasPriorLines) {
                     runCoalescedGalleryActiveLyricSwap(card, lyricAnim, plSong, gsrc, hasPriorLines, gal);
-                } else if (act && needGalLyricTrans) {
+                } else if (!songSwitched && act && needGalLyricTrans) {
                     runCoalescedGalleryActiveLyricSwap(card, lyricAnim, plSong, gsrc, false, gal);
                 } else {
                     card.querySelectorAll(".gallery-card-line").forEach((n) => n.remove());
                     appendGalleryLinesToLyricAnim(lyricAnim, lineList, plSong);
                     applyGalleryCardLyricVerticalLayout(card, lyricAnim, plSong);
+                    if (songSwitched) {
+                        resetLyricAnimEl(lyricAnim, gsrc.fontOpacityPct, "translateY(-50%)");
+                    }
                 }
             }
+            if (songSwitched) {
+                gal.dataset.galLyricLastPage = String(state.currentPage);
+                gal.dataset.galLyricLastSongId = curSid;
+            }
         }
+        refreshGalleryAllCardsPresentation(gal, { forceBackground: songSwitched });
         syncGalleryAllSectionVideoModes(gal);
         refreshGallerySectionPageIndicators();
         if (!isLyricPageTransBusy()) {
@@ -9218,6 +10044,59 @@
         wrap.scrollLeft = 0;
     }
 
+    /** 每首诗歌标题栏固定保留转场占位，避免切歌时头部高度变化 */
+    function appendGallerySongTransitionSlot(headMain, plSong, isCurrent, songOrd) {
+        const inherit = !songHasOwnPageTransition(plSong);
+        const trans = getEffectivePageTransition(plSong);
+        const spd = getEffectivePageTransitionSpeed(plSong);
+        const summary = `✨ ${formatPageTransitionSummary(trans, spd, { inherit, short: true })}`;
+        const tip = inherit
+            ? `默认翻页转场：${pageTransitionLabel(trans)}`
+            : `本首翻页转场：${pageTransitionLabel(trans)}`;
+
+        const slot = document.createElement("span");
+        slot.className = "gallery-song-transition-slot";
+        if (isCurrent) {
+            const transPill = document.createElement("button");
+            transPill.type = "button";
+            transPill.className = "gallery-song-transition-pill";
+            if (songOrd === 0 || isCurrent) transPill.id = "gallery-active-transition-pill";
+            transPill.textContent = summary;
+            transPill.title = tip;
+            transPill.addEventListener("click", (e) => {
+                e.stopPropagation();
+                openAdvDrawerTransitionSection();
+            });
+            slot.appendChild(transPill);
+        } else {
+            const transPill = document.createElement("span");
+            transPill.className = "gallery-song-transition-pill gallery-song-transition-pill--readonly";
+            transPill.textContent = summary;
+            transPill.title = tip;
+            slot.appendChild(transPill);
+        }
+        headMain.appendChild(slot);
+    }
+
+    /**
+     * 切歌/翻页时优先增量更新画廊选中态（不重绘整棵 DOM），失败时由 renderPageGallery 全量重建。
+     * @returns {boolean} 是否已增量 patch 成功
+     */
+    function syncPageGallerySelectionFast() {
+        const gal = document.getElementById("layout-page-gallery");
+        if (!gal || !state.songs?.length || !state.currentSongId) return false;
+        const songIdsOrdered = getPlaylistSongIdsOrderedForGallery();
+        if (!applyPageGalleryPatchIfAllowed(gal, songIdsOrdered, { context: "sync-fast", logSkip: true })) {
+            return false;
+        }
+        scrollGalleryActiveIntoView(gal);
+        scheduleGalleryCardSwitchAnimation();
+        refreshGallerySectionPageIndicators();
+        bindGalleryPlaybackCardsInGal(gal);
+        requestAnimationFrame(() => relayoutGalleryLyricVerticalPads());
+        return true;
+    }
+
     function renderPageGallery() {
         const gal = document.getElementById("layout-page-gallery");
         const finishGalleryChrome = () => {
@@ -9254,11 +10133,7 @@
         }
 
         const newSig = computePageGalleryStructureSig(songIdsOrdered);
-        if (
-            gal.dataset.galleryStructSig === newSig &&
-            gal.querySelector(".gallery-page-card") &&
-            tryPatchPageGalleryInPlace(gal, songIdsOrdered)
-        ) {
+        if (applyPageGalleryPatchIfAllowed(gal, songIdsOrdered, { context: "render-early" })) {
             scrollGalleryActiveIntoView(gal);
             scheduleGalleryCardSwitchAnimation();
             refreshGallerySectionPageIndicators();
@@ -9295,33 +10170,10 @@
             titleEl.textContent = plSong.title || "未命名";
             headMain.appendChild(idxLabel);
             headMain.appendChild(titleEl);
-            if (isCurrent) {
-                const transPill = document.createElement("button");
-                transPill.type = "button";
-                transPill.className = "gallery-song-transition-pill";
-                transPill.id = songOrd === 0 || isCurrent ? "gallery-active-transition-pill" : "";
-                const inherit = !songHasOwnPageTransition(plSong);
-                const trans = getEffectivePageTransition(plSong);
-                const spd = getEffectivePageTransitionSpeed(plSong);
-                transPill.textContent = `✨ ${formatPageTransitionSummary(trans, spd, { inherit, short: true })}`;
-                transPill.title = inherit
-                    ? `默认翻页转场：${pageTransitionLabel(trans)}`
-                    : `本首翻页转场：${pageTransitionLabel(trans)}`;
-                transPill.addEventListener("click", (e) => {
-                    e.stopPropagation();
-                    openAdvDrawerTransitionSection();
-                });
-                headMain.appendChild(transPill);
-            } else if (songHasOwnPageTransition(plSong)) {
-                const transHint = document.createElement("span");
-                transHint.className = "gallery-song-transition-hint";
-                transHint.textContent = `✨ ${pageTransitionLabel(getEffectivePageTransition(plSong))}`;
-                transHint.title = "本首已单独设置翻页转场";
-                headMain.appendChild(transHint);
-            }
+            appendGallerySongTransitionSlot(headMain, plSong, isCurrent, songOrd);
             head.appendChild(headMain);
 
-            const lyricsSrc = isCurrent ? getStablePagingLyricsForPageSplit() : String(plSong.lyrics ?? "");
+            const lyricsSrc = getGalleryLyricsSrcForSong(plSong, isCurrent);
             const pages = splitPages(lyricsSrc, state.ui.defaultLines);
             const seq = getPlaybackSequenceForSong(plSong, isCurrent);
             const cp = clamp(state.currentPage, 0, Math.max(0, isCurrent ? seq.length - 1 : 0));
@@ -9372,7 +10224,7 @@
             scrollRow.className = "layout-page-gallery-pages";
             scrollRow.setAttribute("role", "list");
             scrollRow.setAttribute("aria-label", `${plSong.title || "诗歌"} 分页`);
-            const effStrip = effectiveSongBackground(plSong);
+            const effStrip = gallerySongBackground(plSong);
             const galleryLiveVideoBgThis =
                 effStrip.bgType === "image" && effStrip.bgMediaType === "video" && !!effStrip.bgImage;
 
@@ -9387,10 +10239,11 @@
                 card.setAttribute("data-playback-step-id", String(step.id || ""));
                 card.className = "gallery-page-card" + (act ? " is-active" : "");
                 card.setAttribute("role", "listitem");
-                const wantLiveVideo = galleryLiveVideoBgThis && act && !gal._galleryDeferLiveVideo;
+                const wantLiveVideo = galleryLiveVideoBgThis && !gal._galleryDeferLiveVideo;
                 applyCardBackground(card, {
                     galleryThumb: !wantLiveVideo,
-                    song: plSong
+                    song: plSong,
+                    galleryStoredOnly: true
                 });
                 if (galleryLiveVideoBgThis) {
                     card.dataset.galleryVideoMode = wantLiveVideo ? "live" : "thumb";
@@ -9418,7 +10271,7 @@
                     row.className = "gallery-card-line";
                     row.style.position = "relative";
                     row.style.zIndex = "2";
-                    populateLyricRowElement(row, l, lyricTypographyContextForSong(plSong));
+                    populateLyricRowElement(row, l, galleryTypographyContextForSong(plSong));
                     lyricAnim.appendChild(row);
                 });
                 applyGalleryCardLyricVerticalLayout(card, lyricAnim, plSong);
@@ -9427,8 +10280,10 @@
                     if (String(sid) === String(state.currentSongId)) {
                         jumpToPage(si);
                     } else {
+                        if (String(sid) !== String(state.currentSongId || "")) {
+                            updateSongListActiveHighlight(state.currentSongId, sid);
+                        }
                         switchSong(sid, { page: si });
-                        broadcastState();
                     }
                 });
                 bindGalleryPlaybackCardEl(card, plSong, si);
@@ -9441,7 +10296,20 @@
         });
 
         gal.dataset.galleryStructSig = newSig;
+        refreshGalleryAllCardsPresentation(gal, { forceBackground: true });
         syncGalleryAllSectionVideoModes(gal);
+        if (!verifyPageGalleryCardCounts(gal, songIdsOrdered, "full-rebuild")) {
+            if (gal.dataset.galleryRebuildRetry === "1") {
+                delete gal.dataset.galleryRebuildRetry;
+            } else {
+                gal.dataset.galleryRebuildRetry = "1";
+                delete gal.dataset.galleryStructSig;
+                gal.innerHTML = "";
+                return renderPageGallery();
+            }
+        } else {
+            delete gal.dataset.galleryRebuildRetry;
+        }
         scrollGalleryActiveIntoView(gal);
         scheduleGalleryCardSwitchAnimation();
         refreshGallerySectionPageIndicators();
@@ -9763,6 +10631,9 @@ ${deleteBtnHtml}
 <button type="button" class="song-add-btn${playlistIncludesSongId(song.id) ? " in-playlist" : ""}" title="${playlistIncludesSongId(song.id) ? "已在播放列表" : "加入播放列表"}" data-song-id="${song.id}">${playlistIncludesSongId(song.id) ? "✓" : "+"}</button>`;
 
         const openSong = () => {
+            if (String(song.id) !== String(state.currentSongId || "")) {
+                updateSongListActiveHighlight(state.currentSongId, song.id);
+            }
             switchSong(song.id);
         };
 
@@ -9918,6 +10789,35 @@ ${deleteBtnHtml}
             run();
             inner.style.opacity = "1";
         }, 200);
+    }
+
+    /** 切歌时只更新列表选中态，避免整表 innerHTML 重绘 */
+    function updateSongListActiveHighlight(prevSongId, nextSongId) {
+        const list = $("song-list");
+        if (!list) return;
+        const prevId = prevSongId != null ? String(prevSongId) : "";
+        const nextId = nextSongId != null ? String(nextSongId) : "";
+        if (prevId && prevId !== nextId) {
+            list.querySelectorAll(`.song-item[data-song-id="${prevId}"]`).forEach((el) => el.classList.remove("active"));
+        }
+        if (!nextId) return;
+        const nextRow = list.querySelector(`.song-item[data-song-id="${nextId}"]`);
+        if (!nextRow) return;
+        nextRow.classList.add("active");
+        try {
+            nextRow.scrollIntoView({ block: "nearest", behavior: "auto" });
+        } catch (_e) {
+            nextRow.scrollIntoView();
+        }
+    }
+
+    /** 播放列表切歌时只切换 active 样式，避免整表重建 */
+    function updatePlaylistActiveHighlight() {
+        const list = $("playlist-list");
+        if (!list) return;
+        list.querySelectorAll(".playlist-item").forEach((li, idx) => {
+            li.classList.toggle("active", !!state.playlist.running && idx === state.playlist.activeIndex);
+        });
     }
 
     function clearSongAddBtnFeedbackTimer(btn) {
@@ -11029,11 +11929,10 @@ ${deleteBtnHtml}
         if (whichPage === "last") {
             const lp = splitPages(getStablePagingLyricsForPageSplit(), state.ui.defaultLines);
             state.currentPage = Math.max(0, lp.length - 1);
-            updateSpeakerCards();
-            renderMiniPreview();
+            updateSpeakerCards({ pageOnly: true });
+            renderMiniPreview({ pageOnly: true });
+            broadcastState();
         }
-        renderPlaylist();
-        broadcastState();
         savePlaylist();
         return true;
     }
@@ -11140,6 +12039,52 @@ ${deleteBtnHtml}
             if ($("preview-line-counter")) $("preview-line-counter").textContent = `(${lines.length} 行)`;
             mini.dataset._miniTransPage = String(state.currentPage);
             return;
+        }
+
+        if (options && options.pageOnly) {
+            const stagePg = mini.querySelector(".mini-preview-lyric-stage");
+            const prevPg = mini.dataset._miniTransPage;
+            const pageChangedPg = prevPg !== undefined && prevPg !== String(state.currentPage);
+            const transPg = isAnimatablePageTransition(state.ui.pageTransition)
+                ? canonicalPageTransition(state.ui.pageTransition)
+                : "none";
+            const durPg = clamp(Number(state.ui.pageTransitionSpeed ?? 0.6), 0.3, 1.5);
+            if (
+                MINI_PREVIEW_ANIMATE_PAGE_CHANGE &&
+                !(options && options.skipPageTransition) &&
+                pageChangedPg &&
+                transPg !== "none" &&
+                stagePg &&
+                stagePg.isConnected
+            ) {
+                mini.dataset._miniTransPage = String(state.currentPage);
+                runMiniPageTransitionThenRender(stagePg, transPg, durPg, state.ui.fontOpacityPct, () => {
+                    renderMiniPreview({ ...options, skipPageTransition: true });
+                });
+                return;
+            }
+            if (stagePg && stagePg.isConnected && mini.style.display !== "none") {
+                stagePg.querySelectorAll(".preview-line").forEach((n) => n.remove());
+                lines.forEach((line) => {
+                    const row = document.createElement("div");
+                    row.className = "preview-line";
+                    row.style.fontSize =
+                        Math.round(Math.min(140, clampLyricFontSize(state.ui.fontSize) * 0.42)) + "px";
+                    row.style.position = "relative";
+                    row.style.zIndex = "3";
+                    populateLyricRowElement(row, line, {
+                        fontFamily: state.ui.fontFamily,
+                        fontColor: state.ui.fontColor,
+                        fontOpacityPct: state.ui.fontOpacityPct,
+                        textStrokePx: state.ui.textStrokePx,
+                        lightBg: state.ui.bgType === "solid-white"
+                    });
+                    stagePg.appendChild(row);
+                });
+                if ($("preview-line-counter")) $("preview-line-counter").textContent = `(${lines.length} 行)`;
+                mini.dataset._miniTransPage = String(state.currentPage);
+                return;
+            }
         }
 
         const prevPage = mini.dataset._miniTransPage;
@@ -11485,9 +12430,7 @@ ${deleteBtnHtml}
             key: String(row.key || "").trim(),
             tempo: String(row.tempo || "").trim(),
             notes,
-            tags: Array.isArray(row.tags) ? row.tags.join(",") : String(row.tags || "").trim(),
-            overlayOpacityPct: 30,
-            fontOpacityPct: 100
+            tags: Array.isArray(row.tags) ? row.tags.join(",") : String(row.tags || "").trim()
         };
     }
 
@@ -11689,7 +12632,7 @@ ${deleteBtnHtml}
             const fv = $("font-opacity-val");
             if (fv) fv.textContent = String(state.ui.fontOpacityPct);
             const song = currentSong();
-            if (song) song.fontOpacityPct = state.ui.fontOpacityPct;
+            if (song) assignSongPresentationField(song, "fontOpacityPct", state.ui.fontOpacityPct);
             updateAdvSliderSwatches();
             saveSongs();
             updateAll();
@@ -11843,8 +12786,8 @@ ${deleteBtnHtml}
                 '<div class="adv-drawer-slider-visual-row">' +
                 '<span id="projection-overlay-opacity-swatch" class="adv-slider-swatch adv-slider-swatch--mask" aria-hidden="true"></span>' +
                 '<div class="adv-drawer-slider-visual-main">' +
-                '<label class="adv-drawer-field-label" for="projection-overlay-opacity-slider">蒙版浓度 <span id="projection-overlay-opacity-val">30</span>%</label>' +
-                '<input type="range" id="projection-overlay-opacity-slider" class="projection-tint-range" min="0" max="80" value="30" step="1" aria-label="投屏背景蒙版浓度">' +
+                '<label class="adv-drawer-field-label" for="projection-overlay-opacity-slider">蒙版浓度 <span id="projection-overlay-opacity-val">0</span>%</label>' +
+                '<input type="range" id="projection-overlay-opacity-slider" class="projection-tint-range" min="0" max="80" value="0" step="1" aria-label="投屏背景蒙版浓度">' +
                 "</div></div>";
         }
         const rng = $("projection-overlay-opacity-slider");
@@ -11864,7 +12807,7 @@ ${deleteBtnHtml}
                 const ov = $("projection-overlay-opacity-val");
                 if (ov) ov.textContent = String(state.ui.overlayOpacityPct);
                 const song = currentSong();
-                if (song) song.overlayOpacityPct = state.ui.overlayOpacityPct;
+                if (song) assignSongPresentationField(song, "overlayOpacityPct", state.ui.overlayOpacityPct);
                 updateAdvSliderSwatches();
                 saveSongs();
                 capturePresentationStyleBaseline();
@@ -11901,9 +12844,9 @@ ${deleteBtnHtml}
         if ($("font-slider")) {
             $("font-slider").min = "8";
             $("font-slider").max = String(fmax);
-            $("font-slider").value = String(clamp(Number(state.ui.fontSize) || 60, 8, fmax));
+            $("font-slider").value = String(clamp(Number(state.ui.fontSize) || PRESENTATION_STYLE_DEFAULTS.fontSize, 8, fmax));
         }
-        state.ui.fontSize = clamp(Number(state.ui.fontSize) || 60, 8, fmax);
+        state.ui.fontSize = clamp(Number(state.ui.fontSize) || PRESENTATION_STYLE_DEFAULTS.fontSize, 8, fmax);
         if ($("font-val")) $("font-val").textContent = String(state.ui.fontSize);
         if ($("default-lines-input")) $("default-lines-input").value = String(state.ui.defaultLines);
         if ($("pos-slider")) $("pos-slider").value = String(state.ui.posY);
@@ -11935,9 +12878,12 @@ ${deleteBtnHtml}
         syncThemeBgOpacityControls();
         updateMyBackgroundThumbActiveState();
         const lh = String(
-            getComputedStyle(document.documentElement).getPropertyValue("--adv-preview-line-height") || "1.65"
+            getComputedStyle(document.documentElement).getPropertyValue("--adv-preview-line-height") ||
+                String(presentationDefaultLineHeight())
         ).trim();
-        if ($("adv-preview-line-height")) $("adv-preview-line-height").value = lh || "1.65";
+        if ($("adv-preview-line-height")) {
+            $("adv-preview-line-height").value = lh || String(presentationDefaultLineHeight());
+        }
         if ($("text-stroke-slider")) $("text-stroke-slider").value = String(clamp(Number(state.ui.textStrokePx), 0, 6));
         if ($("text-stroke-val")) $("text-stroke-val").textContent = String(clamp(Number(state.ui.textStrokePx), 0, 6));
         if ($("vignette-shape-select")) $("vignette-shape-select").value = state.ui.vignetteShape === "ellipse" ? "ellipse" : "circle";
@@ -12472,21 +13418,27 @@ ${deleteBtnHtml}
         }
         if (!mediaType) mediaType = "image";
         const isVideoBg = type === "image" && mediaType === "video" && !!bgState.imageData;
+        const wantVideoUrl = isVideoBg ? String(bgState.imageData || "") : "";
+        const monitorVideoStable =
+            isVideoBg &&
+            wantVideoUrl &&
+            videoEl.dataset.worshipBgUrl === wantVideoUrl &&
+            videoEl.readyState >= 2;
 
-        clearCssDynamicBgClass(bgEl);
-        bgEl.style.background = "#000";
-        bgEl.style.backgroundImage = "none";
+        if (!monitorVideoStable) {
+            clearCssDynamicBgClass(bgEl);
+            bgEl.style.background = "#000";
+            bgEl.style.backgroundImage = "none";
+        }
 
         if (isVideoBg) {
             videoEl.style.display = "block";
-            const want = String(bgState.imageData || "");
-            if (videoEl.dataset.worshipBgUrl !== want) {
-                videoEl.dataset.worshipBgUrl = want;
-                videoEl.src = want;
-                void videoEl.play().catch(() => {});
-            } else if (videoEl.paused) {
+            if (videoEl.dataset.worshipBgUrl !== wantVideoUrl) {
+                assignCardVideoBgSrc(videoEl, wantVideoUrl);
+            } else if (videoEl.paused || videoEl.ended) {
                 void videoEl.play().catch(() => {});
             }
+            videoEl.style.opacity = "1";
         } else {
             videoEl.pause();
             videoEl.removeAttribute("src");
@@ -12515,7 +13467,7 @@ ${deleteBtnHtml}
             }
         }
 
-        const maskOp = clamp(Number(snap.overlayOpacityPct ?? 30), 0, 80) / 100;
+        const maskOp = clamp(Number(snap.overlayOpacityPct ?? PRESENTATION_STYLE_DEFAULTS.overlayOpacityPct), 0, 80) / 100;
         mask.style.background = `rgba(0,0,0,${maskOp})`;
 
         applyRadialVignetteToLayer(vig, snap);
@@ -12523,7 +13475,7 @@ ${deleteBtnHtml}
         lyr.style.top = `${projectionTextTopPctFromLive(t)}%`;
         const monFf = (t.fontFamily && String(t.fontFamily).trim()) || state.ui.fontFamily;
         lyr.style.fontFamily = monFf;
-        lyr.style.fontSize = `${clampLyricFontSize(Number(t.fontSize) || 60)}px`;
+        lyr.style.fontSize = `${clampLyricFontSize(Number(t.fontSize) || PRESENTATION_STYLE_DEFAULTS.fontSize)}px`;
         lyr.style.fontWeight =
             t.fontWeight != null && t.fontWeight !== ""
                 ? String(t.fontWeight)
@@ -12851,6 +13803,24 @@ ${deleteBtnHtml}
         }
     }
 
+    let _broadcastStateDebounceTimer = 0;
+    function scheduleBroadcastStateDebounced(delayMs) {
+        const ms = Number.isFinite(Number(delayMs)) ? Math.max(0, Number(delayMs)) : 90;
+        if (_broadcastStateDebounceTimer) clearTimeout(_broadcastStateDebounceTimer);
+        _broadcastStateDebounceTimer = window.setTimeout(() => {
+            _broadcastStateDebounceTimer = 0;
+            safeBroadcastState("scheduleBroadcastStateDebounced");
+        }, ms);
+    }
+
+    function flushBroadcastStateDebounced() {
+        if (_broadcastStateDebounceTimer) {
+            clearTimeout(_broadcastStateDebounceTimer);
+            _broadcastStateDebounceTimer = 0;
+        }
+        safeBroadcastState("flushBroadcastStateDebounced");
+    }
+
     /** 与当前页面同源解析，避免相对路径在部分部署下解析错误 */
     function projectionEntryUrl(kind) {
         const q = kind === "leader" ? "leader=1" : "display=1";
@@ -13004,15 +13974,27 @@ ${deleteBtnHtml}
         _lyricsPagingSplitOverride = mergedPaging;
         try {
             const lineOnlyFlip = !!(o.linesOnly && isMainVideoBackground());
+            const pageOnlyNav = !!o.pageOnly;
+            if (pageOnlyNav || lineOnlyFlip) {
+                if (!syncPageGallerySelectionFast()) renderPageGallery();
+            }
             if (lineOnlyFlip) {
-                updateSpeakerCards({ linesOnly: true });
-                renderMiniPreview({ linesOnly: true });
+                updateSpeakerCards({ linesOnly: true, pageOnly: pageOnlyNav });
+                renderMiniPreview({ linesOnly: true, pageOnly: pageOnlyNav });
+            } else if (pageOnlyNav) {
+                updateSpeakerCards({ pageOnly: true });
+                renderMiniPreview({ pageOnly: true });
             } else {
                 updateSpeakerCards();
                 renderMiniPreview();
             }
-            renderPlaylist();
-            broadcastState();
+            if (o.rebuildPlaylist) renderPlaylist();
+            else updatePlaylistActiveHighlight();
+            if (pageOnlyNav || lineOnlyFlip) {
+                scheduleBroadcastStateDebounced(70);
+            } else {
+                broadcastState();
+            }
         } finally {
             const song = currentSong();
             if (song && mergedPaging.length > String(song.lyrics || "").length) {
@@ -13183,38 +14165,74 @@ ${deleteBtnHtml}
 
     function switchSongCore(songId, opts) {
         if (!state.songs.some((s) => s.id === songId)) return;
+        const gen = ++songSwitchGen;
         const prevSongId = state.currentSongId;
         libraryPendingDeleteId = "";
+
+        updateSongListActiveHighlight(prevSongId, songId);
+
         if (!isDisplay && !isLeader) {
             syncEditorToSong();
             persistCurrentSongPresentationFromUi(state.currentSongId);
-            saveSongs();
+            try {
+                saveSongs();
+            } catch (_persistSave) {
+                /* ignore */
+            }
         }
         state.currentSongId = songId;
         if (String(prevSongId || "") !== String(songId || "")) {
             state._pendingSongSwitchAnim = true;
         }
-        if (!isDisplay && !isLeader) {
-            hydrateCurrentSongBackgroundIntoUi();
-            hydrateCurrentSongTypographyIntoUi();
-        }
-        syncPosYFromCurrentSong();
-        syncOverlayFontOpacityFromCurrentSong();
-        syncPageTransitionFromCurrentSong();
-        updateUIFromState();
-        syncSongToEditor();
-        captureEditorPersistBaseline();
-        capturePresentationStyleBaseline();
         const song = state.songs.find((s) => String(s.id) === String(songId));
         const stepCount = song ? Math.max(1, getPlaybackSequenceForSong(song, true).length) : 1;
         const wantPage = opts && opts.page != null && Number.isFinite(Number(opts.page)) ? Math.floor(Number(opts.page)) : 0;
         state.currentPage = clamp(wantPage, 0, Math.max(0, stepCount - 1));
-        renderSongList();
-        updateSpeakerCards();
-        renderMiniPreview();
-        renderPlaylist();
-        saveSettings();
-        broadcastState();
+        updatePlaylistActiveHighlight();
+        syncPageIndicatorFromState(stepCount);
+
+        const songChanged = String(prevSongId || "") !== String(songId || "");
+        if (!isDisplay && !isLeader) {
+            hydrateCurrentSongBackgroundIntoUi();
+            hydrateCurrentSongTypographyIntoUi();
+            if (songChanged) syncSongToEditor();
+        }
+        if (songChanged) markPageNavChaseIfBusy();
+        const gal = document.getElementById("layout-page-gallery");
+        if (songChanged) {
+            if (gal) delete gal.dataset.galleryStructSig;
+        } else if (!syncPageGallerySelectionFast()) {
+            requestAnimationFrame(() => {
+                if (gen !== songSwitchGen) return;
+                renderPageGallery();
+            });
+        }
+
+        const applySwitchUi = () => {
+            if (gen !== songSwitchGen) return;
+            syncPosYFromCurrentSong();
+            syncOverlayFontOpacityFromCurrentSong();
+            syncPageTransitionFromCurrentSong();
+            updateUIFromState();
+            if (!isDisplay && !isLeader) {
+                syncSongToEditor();
+                captureEditorPersistBaseline();
+                capturePresentationStyleBaseline();
+            }
+            if (songChanged) {
+                if (gal) delete gal.dataset.galleryStructSig;
+                renderPageGallery();
+            }
+            updateSpeakerCards({ skipGallery: true });
+            renderMiniPreview();
+            scheduleBroadcastStateDebounced(100);
+        };
+
+        if (typeof requestAnimationFrame === "function") {
+            requestAnimationFrame(applySwitchUi);
+        } else {
+            applySwitchUi();
+        }
     }
 
     let lyricDraftSaveTimer = 0;
@@ -13814,9 +14832,7 @@ ${deleteBtnHtml}
             key: "",
             tempo: "",
             notes: "",
-            tags: "",
-            overlayOpacityPct: 30,
-            fontOpacityPct: 100
+            tags: ""
         };
         const currentIndex = Math.max(0, state.songs.findIndex((s) => s.id === state.currentSongId));
         state.songs.splice(currentIndex + 1, 0, song);
@@ -15789,35 +16805,6 @@ ${deleteBtnHtml}
         reader.readAsText(file, "utf-8");
     }
 
-    function stopAutoplay() {
-        if (state.autoplay.timer) clearInterval(state.autoplay.timer);
-        if (state.autoplay.progressTimer) clearInterval(state.autoplay.progressTimer);
-        state.autoplay.timer = null;
-        state.autoplay.progressTimer = null;
-        state.autoplay.running = false;
-        state.autoplay.elapsed = 0;
-        if ($("autoplay-progress")) $("autoplay-progress").style.width = "0%";
-    }
-
-    function startAutoplay() {
-        stopAutoplay();
-        const seconds = clamp(Number($("autoplay-interval")?.value || 5), 1, 30);
-        const interval = seconds * 1000;
-        state.autoplay.running = true;
-        state.autoplay.timer = setInterval(() => {
-            const stepCount = getCurrentSongPlaybackStepCount();
-            if (stepCount <= 0) return;
-            state.currentPage = (state.currentPage + 1) % stepCount;
-            updateAll();
-            state.autoplay.elapsed = 0;
-        }, interval);
-        state.autoplay.progressTimer = setInterval(() => {
-            state.autoplay.elapsed += 100;
-            const pct = clamp((state.autoplay.elapsed / interval) * 100, 0, 100);
-            if ($("autoplay-progress")) $("autoplay-progress").style.width = pct + "%";
-        }, 100);
-    }
-
     /** 投屏/主领弹窗：用于窗口尺寸与 Safari（macOS）兼容策略 */
     function isWorshipMacLikePlatform() {
         const p = navigator.platform || "";
@@ -16583,7 +17570,7 @@ ${deleteBtnHtml}
         });
 
         on("font-slider", "input", () => {
-            const v = clampLyricFontSize($("font-slider").value || 60);
+            const v = clampLyricFontSize($("font-slider").value || PRESENTATION_STYLE_DEFAULTS.fontSize);
             state.ui.fontSize = v;
             if ($("font-val")) $("font-val").textContent = String(v);
             scheduleMiniSliderDomPreview(() => applyMiniPreviewFontSizePx(v));
@@ -16591,7 +17578,7 @@ ${deleteBtnHtml}
             scheduleGalleryLyricPadRelayout();
         });
         on("font-slider", "change", () => {
-            state.ui.fontSize = clampLyricFontSize($("font-slider").value || 60);
+            state.ui.fontSize = clampLyricFontSize($("font-slider").value || PRESENTATION_STYLE_DEFAULTS.fontSize);
             if ($("font-val")) $("font-val").textContent = String(state.ui.fontSize);
             saveSettings();
             persistCurrentSongTypographyAfterUiChange();
@@ -16600,7 +17587,7 @@ ${deleteBtnHtml}
         on("font-mega-mode", "change", () => {
             state.ui.fontMegaMode = !!($("font-mega-mode") && $("font-mega-mode").checked);
             const mx = getLyricFontSliderMax();
-            state.ui.fontSize = clamp(Number(state.ui.fontSize) || 60, 8, mx);
+            state.ui.fontSize = clamp(Number(state.ui.fontSize) || PRESENTATION_STYLE_DEFAULTS.fontSize, 8, mx);
             if ($("font-slider")) {
                 $("font-slider").max = String(mx);
                 $("font-slider").value = String(state.ui.fontSize);
@@ -16633,7 +17620,7 @@ ${deleteBtnHtml}
             state.ui.posY = clamp(Number($("pos-slider").value || 40), 20, 70);
             if ($("pos-val")) $("pos-val").textContent = String(state.ui.posY);
             const song = currentSong();
-            if (song) song.posY = state.ui.posY;
+            if (song) assignSongPresentationField(song, "posY", state.ui.posY);
             clearMiniPreviewLyricStageDragTransform();
             saveSongs();
             saveSettings();
@@ -16709,8 +17696,19 @@ ${deleteBtnHtml}
             let ok = 0;
             let readFail = 0;
             let saveFail = 0;
+            let capFail = 0;
             (async () => {
                 for (const file of list) {
+                    const name = String(file.name || "").toLowerCase();
+                    const videoByExt = /\.(mp4|webm|mov|m4v|ogv|ogg|mkv|avi)$/i.test(name);
+                    const videoByMime = String(file.type || "").startsWith("video/");
+                    const mtGuess = videoByMime || videoByExt ? "video" : "image";
+                    const capBeforeRead = uploadedBackgroundCapacityMessage(mtGuess);
+                    if (capBeforeRead) {
+                        capFail++;
+                        showToast(capBeforeRead, toastAnchor);
+                        continue;
+                    }
                     let dataUrl;
                     try {
                         dataUrl = await readLocalFileAsDataURL(file);
@@ -16718,14 +17716,12 @@ ${deleteBtnHtml}
                         readFail++;
                         continue;
                     }
+                    const videoByDataUrl =
+                        /^data:video\//i.test(dataUrl) || isLikelyThemeConsoleVideoDataUrl(dataUrl);
+                    const mt = videoByMime || videoByExt || videoByDataUrl ? "video" : "image";
                     try {
-                        const name = String(file.name || "").toLowerCase();
-                        const videoByExt = /\.(mp4|webm|mov|m4v|ogv|ogg|mkv|avi)$/i.test(name);
-                        const videoByMime = String(file.type || "").startsWith("video/");
-                        const videoByDataUrl = /^data:video\//i.test(dataUrl);
-                        const mt = videoByMime || videoByExt || videoByDataUrl ? "video" : "image";
-                        addUploadedBackgroundAndApply(dataUrl, mt);
-                        ok++;
+                        if (addUploadedBackgroundAndApply(dataUrl, mt)) ok++;
+                        else capFail++;
                     } catch (err) {
                         console.warn(err);
                         saveFail++;
@@ -16736,16 +17732,16 @@ ${deleteBtnHtml}
                     updateAll();
                     saveSettings();
                     switchBgTabTo("mine");
-                    if (list.length === 1 && !readFail && !saveFail) {
-                        showToast("已应用背景并加入「我的背景」", toastAnchor);
-                    } else {
+                    const silentSingleOk = list.length === 1 && !readFail && !saveFail && !capFail;
+                    if (!silentSingleOk) {
                         const parts = [`成功添加 ${ok} 个`];
                         if (readFail) parts.push(`${readFail} 个读取失败`);
                         if (saveFail) parts.push(`${saveFail} 个保存失败`);
+                        if (capFail) parts.push(`${capFail} 个因已达上限未加入`);
                         showToast(parts.join("，"), toastAnchor);
                     }
                 } else if (readFail || saveFail) {
-                    showToast("未能添加背景", toastAnchor);
+                    showToast(capFail && !readFail && !saveFail ? "已达上传上限，请先删除旧背景" : "未能添加背景", toastAnchor);
                 }
                 input.value = "";
             })();
@@ -16784,20 +17780,6 @@ ${deleteBtnHtml}
             updateAll();
         });
         on("free-bg-link", "click", () => openFreeBgMaterialsPanel());
-
-        on("autoplay-toggle", "click", () => {
-            if (state.autoplay.running) {
-                stopAutoplay();
-                showToast("自动播放已停止", $("autoplay-toggle"));
-            } else {
-                startAutoplay();
-                showToast("自动播放已开始", $("autoplay-toggle"));
-            }
-        });
-        on("autoplay-stop", "click", () => {
-            stopAutoplay();
-            showToast("自动播放已停止", $("autoplay-stop"));
-        });
 
         on("open-display-btn", "click", handleOpenDisplayBtnClick);
         on("close-projection-display-btn", "click", () => closeProjectionDisplayWindow());
@@ -16885,7 +17867,7 @@ ${deleteBtnHtml}
         });
 
         on("adv-preview-line-height", "input", () => {
-            const lh = clamp(parseFloat($("adv-preview-line-height").value || "1.65"), 1.2, 2.4);
+            const lh = clamp(parseFloat($("adv-preview-line-height").value || String(presentationDefaultLineHeight())), 1.2, 2.4);
             document.documentElement.style.setProperty("--adv-preview-line-height", String(lh));
             scheduleLiveStyleProjectionPush({ lineHeight: lh });
             scheduleGalleryLyricPadRelayout();
@@ -16893,7 +17875,7 @@ ${deleteBtnHtml}
         on("adv-preview-line-height", "change", () => {
             document.documentElement.style.setProperty(
                 "--adv-preview-line-height",
-                String($("adv-preview-line-height").value || "1.65")
+                String($("adv-preview-line-height").value || presentationDefaultLineHeight())
             );
             persistCurrentSongTypographyAfterUiChange();
             updateAll();
@@ -17427,7 +18409,7 @@ ${deleteBtnHtml}
     function applyProjectionMaskFromLiveState() {
         const el = $("projection-bg-mask");
         if (!el || !liveState) return;
-        const p = clamp(Number(liveState.overlayOpacityPct ?? 30), 0, 80) / 100;
+        const p = clamp(Number(liveState.overlayOpacityPct ?? PRESENTATION_STYLE_DEFAULTS.overlayOpacityPct), 0, 80) / 100;
         el.style.background = `rgba(0,0,0,${p})`;
     }
 
@@ -17454,7 +18436,7 @@ ${deleteBtnHtml}
         layer.style.top = `${projectionTextTopPctFromLive(t)}%`;
         layer.style.transform = LYRIC_CENTER_TRANSFORM;
         layer.style.fontFamily = t.fontFamily || state.ui.fontFamily;
-        layer.style.fontSize = `${clampLyricFontSize(Number(t.fontSize) || 60)}px`;
+        layer.style.fontSize = `${clampLyricFontSize(Number(t.fontSize) || PRESENTATION_STYLE_DEFAULTS.fontSize)}px`;
         layer.style.lineHeight = String(getAdvPreviewLineHeightNumber());
         layer.style.fontWeight =
             t.fontWeight != null && t.fontWeight !== ""
@@ -18007,55 +18989,15 @@ ${deleteBtnHtml}
             }
         }
 
-        function applyDisplayLiveFromPayload(payload) {
+        function applyDisplayLiveFromPayload(payload, opts) {
             if (!payload || !payload.pages) return;
-            const prev = liveState;
-            const prevIdx = prev ? (prev.pageIndex || 0) : -1;
-            const newIdx = payload.pageIndex || 0;
-            const pageChanged = prevIdx !== newIdx;
-            const trans = canonicalPageTransition(payload.pageTransition || "none");
-            const dur = clamp(Number(payload.pageTransitionSpeed || 0.6), 0.3, 1.5);
-            const fontOpForAnim = clamp(Number(payload.fontOpacityPct || 100), 20, 100);
-
-            const rerenderLyrics = (animOpts) => {
-                renderDisplayLyric(animOpts);
-                applyProjectionMaskFromLiveState();
-                applyProjectionVignetteFromLiveState();
-            };
-
-            if (pageChanged && trans !== "none" && prev && !payload.playlistFade) {
-                runDisplayPageTransitionThenRender(trans, dur, rerenderLyrics, fontOpForAnim);
-            } else {
-                rerenderLyrics();
+            if (typeof globalThis.applyLive === "function") {
+                globalThis.applyLive("display", payload, opts || undefined);
+                return;
             }
-            applyLive("display", payload);
-            const bg = payload.background || {};
-            const mediaType =
-                bg.mediaType === "video" || inferMediaTypeFromDataUrl(bg.imageData || "") === "video"
-                    ? "video"
-                    : "image";
-            const isVideoBg = bg.type === "image" && mediaType === "video" && !!bg.imageData;
-            requestAnimationFrame(() => {
-                if (isVideoBg) {
-                    const dispV = $("display-video-bg");
-                    if (dispV && bg.imageData) {
-                        const want = String(bg.imageData);
-                        const srcChanged = dispV.dataset.worshipBgUrl !== want;
-                        if (srcChanged) {
-                            dispV.dataset.worshipBgUrl = want;
-                            dispV.src = want;
-                        }
-                        dispV.style.opacity = "1";
-                        if (srcChanged || dispV.paused || dispV.ended) {
-                            void dispV.play().catch(() => {});
-                        }
-                    }
-                } else {
-                    requestAnimationFrame(() => {
-                        restartBg();
-                    });
-                }
-            });
+            liveState = payload;
+            renderDisplayLyric();
+            restartBg();
         }
 
         const initState = getStore(STORAGE.LIVE, null);
@@ -18129,7 +19071,7 @@ ${deleteBtnHtml}
                     return;
                 }
                 if (d && d.type === "update" && d.payload && d.payload.pages) {
-                    applyDisplayLiveFromPayload(d.payload);
+                    applyDisplayLiveFromPayload(d.payload, { styleOnly: !!d.styleOnly });
                 }
             };
             channel.postMessage({ type: "projection_display_ready", source: "display" });
@@ -21784,7 +22726,7 @@ const linesHtml = rawLines
         if (d < 0) {
             if (cur > 0) {
                 state.currentPage = cur + d;
-                updateAll({ linesOnly: isMainVideoBackground() });
+                updateAll({ pageOnly: true, linesOnly: isMainVideoBackground() });
                 notifyProjectionConsoleReadyForGuide();
             } else {
                 const items = state.playlist.items || [];
@@ -21819,11 +22761,11 @@ const linesHtml = rawLines
                     notifyProjectionConsoleReadyForGuide();
                 }
             } else {
-                updateAll({ linesOnly: isMainVideoBackground() });
+                updateAll({ pageOnly: true, linesOnly: isMainVideoBackground() });
             }
         } else {
             state.currentPage = Math.min(cur + d, maxIdx);
-            updateAll({ linesOnly: isMainVideoBackground() });
+            updateAll({ pageOnly: true, linesOnly: isMainVideoBackground() });
             notifyProjectionConsoleReadyForGuide();
         }
         /** 勿重复 broadcastState / refreshMonitorContent：updateAll 与 switchToPlaylistSong 已广播；
@@ -21842,10 +22784,10 @@ const linesHtml = rawLines
         projectionDisplayOverlay = null;
         const maxIdx = Math.max(0, getCurrentSongPlaybackStepCount() - 1);
         state.currentPage = clamp(Number(pageIndex) || 0, 0, maxIdx);
-        updateAll({ linesOnly: isMainVideoBackground() });
+        updateAll({ pageOnly: true, linesOnly: isMainVideoBackground() });
     }
 
-    /** 覆盖 state.js 里仅维护 AppState 的占位实现，供 UI 自动播放等调用 */
+    /** 覆盖 state.js 里仅维护 AppState 的占位实现，供翻页等调用 */
     globalThis.changePage = changePage;
     globalThis.prevPage = prevPage;
     globalThis.nextPage = nextPage;
@@ -22011,6 +22953,54 @@ const linesHtml = rawLines
         }
     }
 
+    function initNetworkStatusBanner() {
+        const BANNER_ID = "worship-offline-banner";
+        let banner = null;
+
+        function setBodyOffset(on) {
+            document.body.classList.toggle("has-offline-banner", !!on);
+        }
+
+        function removeBanner() {
+            if (!banner) return;
+            const node = banner;
+            banner = null;
+            setBodyOffset(false);
+            node.classList.add("is-hiding");
+            window.setTimeout(() => {
+                try {
+                    node.remove();
+                } catch (_e) {
+                    /* ignore */
+                }
+            }, 280);
+        }
+
+        function updateNetworkStatusBanner() {
+            const offline = typeof navigator.onLine === "boolean" ? !navigator.onLine : false;
+            if (!offline) {
+                removeBanner();
+                return;
+            }
+            if (document.getElementById(BANNER_ID)) {
+                banner = document.getElementById(BANNER_ID);
+                setBodyOffset(true);
+                return;
+            }
+            banner = document.createElement("div");
+            banner.id = BANNER_ID;
+            banner.className = "worship-offline-banner";
+            banner.setAttribute("role", "status");
+            banner.textContent = "当前离线 · 本地诗歌与背景可用；云端素材与在线搜索不可用";
+            document.body.appendChild(banner);
+            setBodyOffset(true);
+        }
+
+        window.addEventListener("online", updateNetworkStatusBanner);
+        window.addEventListener("offline", updateNetworkStatusBanner);
+        updateNetworkStatusBanner();
+    }
+
     function initMain() {
         worshipIntroProgress(0.04);
         const boot = () => {
@@ -22061,6 +23051,7 @@ const linesHtml = rawLines
             renderPlaylist();
             worshipIntroProgress(0.64);
             bindEvents();
+            initNetworkStatusBanner();
             installGalleryPlaybackInteractions();
             initUiZoom();
             worshipIntroProgress(0.78);

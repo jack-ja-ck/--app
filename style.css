@@ -130,6 +130,60 @@ body[data-theme-custom-bg="1"]::before {
     overscroll-behavior: contain;
 }
 .bg-tab-panel.active { display: flex; }
+#bg-tab-mine.bg-tab-panel.active,
+.my-bg-tab.active {
+    flex-direction: column;
+    gap: 8px;
+    overflow: visible;
+    flex: 0 0 auto !important;
+    min-height: 0;
+    width: 100%;
+    box-sizing: border-box;
+}
+#bg-tab-mine.bg-tab-panel.active {
+    overflow: visible;
+}
+#bg-tab-shared.bg-tab-panel.active,
+.shared-bg-tab.active {
+    flex-direction: column;
+    gap: 8px;
+    overflow: visible !important;
+    flex: 0 0 auto !important;
+    min-height: 0;
+}
+.shared-bg-tab {
+    gap: 8px;
+    min-height: 0;
+}
+.shared-bg-loading {
+    margin: 0;
+    padding: 8px 0;
+    font-size: 0.72rem;
+    color: rgba(210, 214, 230, 0.72);
+}
+.shared-bg-status {
+    margin: 0;
+    font-size: 0.72rem;
+    line-height: 1.45;
+    color: rgba(200, 204, 220, 0.72);
+}
+.shared-bg-status--warn {
+    color: rgba(255, 190, 130, 0.92);
+}
+.shared-bg-status--info {
+    color: rgba(200, 210, 235, 0.78);
+}
+.shared-bg-status--ok {
+    color: rgba(170, 210, 170, 0.85);
+}
+.bg-panel-group[data-bg-tab-active="shared"] > .bg-preset-actions {
+    display: none;
+}
+.bg-panel-group[data-bg-tab-active="preset"] > .bg-preset-actions,
+.bg-panel-group[data-bg-tab-active="mine"] > .bg-preset-actions {
+    margin-top: 10px;
+    flex-shrink: 0;
+}
 /* ========== 免费背景素材向导弹窗 ========== */
 .free-bg-materials-overlay {
     position: fixed;
@@ -915,10 +969,6 @@ body.free-bg-modal-open {
     #preview-panel .bg-selector .bg-option {
         max-width: 72px;
     }
-    #my-backgrounds-container .lyric-bg-thumb-wrap,
-    #my-backgrounds-container .lyric-bg-slot-empty {
-        max-width: 104px;
-    }
     #shared-backgrounds-container .lyric-bg-thumb-wrap {
         max-width: 56px;
     }
@@ -926,10 +976,6 @@ body.free-bg-modal-open {
 @container preview-panel (min-width: 400px) {
     #preview-panel .bg-selector .bg-option {
         max-width: 80px;
-    }
-    #my-backgrounds-container .lyric-bg-thumb-wrap,
-    #my-backgrounds-container .lyric-bg-slot-empty {
-        max-width: 112px;
     }
     #shared-backgrounds-container .lyric-bg-thumb-wrap {
         max-width: 60px;
@@ -939,14 +985,6 @@ body.free-bg-modal-open {
 @container preview-panel (max-width: 248px) {
     .bg-selector--presets {
         gap: 6px;
-    }
-    #my-backgrounds-container.my-backgrounds {
-        grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
-    }
-    #my-backgrounds-container .lyric-bg-thumb-wrap,
-    #my-backgrounds-container .lyric-bg-slot-empty {
-        min-width: 64px;
-        max-width: 88px;
     }
     #shared-backgrounds-container.my-backgrounds {
         grid-template-columns: repeat(auto-fill, minmax(36px, 1fr));
@@ -1473,6 +1511,32 @@ body[data-theme-custom-bg="1"] #editor-area {
     font-size: 0.72rem;
     color: rgba(232, 201, 107, 0.85);
     white-space: nowrap;
+}
+
+.gallery-song-transition-slot {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    max-width: 11rem;
+    min-width: 0;
+}
+
+.gallery-song-transition-pill--readonly {
+    display: inline-block;
+    border: 1px solid rgba(212, 175, 55, 0.22);
+    border-radius: 999px;
+    background: rgba(212, 175, 55, 0.06);
+    color: rgba(232, 201, 107, 0.62);
+    font-size: 0.72rem;
+    line-height: 1.2;
+    padding: 4px 10px;
+    white-space: nowrap;
+    max-width: 11rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: default;
+    user-select: none;
+    box-sizing: border-box;
 }
 
 .adv-page-transition-restore-btn {
@@ -5775,37 +5839,70 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
     line-height:1.45;
 }
 .my-backgrounds { margin-top:10px; }
+/* ========== 我的背景（卡片网格重设计） ========== */
+.my-bg-capacity {
+    margin: 0;
+    font-size: 0.72rem;
+    line-height: 1.45;
+    color: rgba(220, 220, 230, 0.78);
+}
+.my-bg-footnote {
+    margin: 0;
+    font-size: 0.68rem;
+    line-height: 1.4;
+    color: rgba(200, 204, 220, 0.62);
+    flex-shrink: 0;
+}
+/* 「我的背景」：小方格网格（同预设背景风格），固定间距、不拉伸不溢出 */
+#my-backgrounds-container,
+#my-backgrounds-container.my-backgrounds {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(48px, 1fr));
+    gap: 10px;
+    justify-content: start;
+    align-content: start;
+    justify-items: start;
+    width: 100%;
+    box-sizing: border-box;
+    overflow: visible;
+    flex: 0 0 auto;
+}
+#preview-panel #my-backgrounds-container .lyric-bg-thumb-wrap,
+#preview-panel #my-backgrounds-container .lyric-bg-slot-empty {
+    width: 100%;
+    max-width: 64px;
+    justify-self: start;
+}
+@container preview-panel (min-width: 320px) {
+    #preview-panel #my-backgrounds-container .lyric-bg-thumb-wrap,
+    #preview-panel #my-backgrounds-container .lyric-bg-slot-empty {
+        max-width: 72px;
+    }
+}
+@container preview-panel (min-width: 400px) {
+    #preview-panel #my-backgrounds-container .lyric-bg-thumb-wrap,
+    #preview-panel #my-backgrounds-container .lyric-bg-slot-empty {
+        max-width: 80px;
+    }
+}
+@container preview-panel (max-width: 248px) {
+    #preview-panel #my-backgrounds-container .lyric-bg-thumb-wrap,
+    #preview-panel #my-backgrounds-container .lyric-bg-slot-empty {
+        max-width: 56px;
+    }
+}
 #shared-backgrounds-container.my-backgrounds {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
     gap: 8px;
     justify-content: start;
     align-content: start;
-    max-height: min(42vh, 280px);
-    overflow-x: auto;
-    overflow-y: auto;
-}
-/* 「我的背景」：格宽随侧栏伸缩（有上下限），窄时换行、宽时放大，不压扁 */
-#my-backgrounds-container.my-backgrounds {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
-    gap: 8px;
-    justify-content: start;
-    align-content: start;
-    max-height: min(42vh, 320px);
-    overflow-x: auto;
-    overflow-y: auto;
+    overflow: visible;
 }
 #my-backgrounds-container.my-backgrounds .my-backgrounds-empty-hint {
     grid-column: 1 / -1;
     width: 100%;
     box-sizing: border-box;
-}
-#preview-panel .bg-tab-panel.active #shared-backgrounds-container.my-backgrounds,
-#preview-panel .bg-tab-panel.active #my-backgrounds-container.my-backgrounds {
-    flex: 1 1 auto;
-    min-height: 120px;
-    max-height: none;
 }
 #shared-backgrounds-container .lyric-bg-thumb-wrap {
     width: 100%;
@@ -5844,6 +5941,7 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
 }
 #my-backgrounds-container .lyric-bg-thumb--video {
     position: absolute;
+    inset: 0;
     display: block;
     overflow: hidden;
 }
@@ -5901,13 +5999,12 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
 #my-backgrounds-container .lyric-bg-thumb-wrap {
     position: relative;
     box-sizing: border-box;
+    display: block;
     width: 100%;
-    min-width: 72px;
-    max-width: 96px;
+    min-width: 0;
     height: auto;
-    aspect-ratio: 76 / 45;
-    justify-self: start;
-    overflow: visible;
+    aspect-ratio: 1;
+    overflow: hidden;
     border: none !important;
     background: transparent !important;
     box-shadow: none !important;
@@ -5949,8 +6046,111 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
     opacity:1;
     pointer-events:auto;
 }
+#my-backgrounds-container .lyric-bg-thumb-wrap--video .lyric-bg-thumb-delete,
+#my-backgrounds-container .lyric-bg-thumb-wrap:focus-within .lyric-bg-thumb-delete {
+    opacity: 0.92;
+    pointer-events: auto;
+}
+#my-backgrounds-container .my-backgrounds-cap-hint {
+    grid-column: 1 / -1;
+    width: 100%;
+    margin: 0 0 6px;
+    font-size: 0.72rem;
+    line-height: 1.4;
+    color: rgba(220, 220, 230, 0.72);
+}
 
-/* 「我的背景」删除确认：贴缩略图右上角、小巧卡片 */
+/* 「我的背景」删除确认：居中浮层，避免被侧栏 overflow 裁切 */
+.lyric-bg-delete-dialog-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 13000;
+    background: rgba(0, 0, 0, 0.52);
+    opacity: 0;
+    transition: opacity 0.18s ease;
+}
+.lyric-bg-delete-dialog-backdrop.is-visible {
+    opacity: 1;
+}
+.lyric-bg-delete-dialog {
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -46%) scale(0.96);
+    z-index: 13001;
+    width: min(280px, calc(100vw - 32px));
+    padding: 16px 18px 14px;
+    box-sizing: border-box;
+    border-radius: 14px;
+    background: rgba(22, 24, 34, 0.98);
+    -webkit-backdrop-filter: blur(14px) saturate(1.2);
+    backdrop-filter: blur(14px) saturate(1.2);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    box-shadow:
+        0 16px 48px rgba(0, 0, 0, 0.55),
+        0 0 0 1px rgba(0, 0, 0, 0.28) inset;
+    opacity: 0;
+    transition:
+        opacity 0.18s ease,
+        transform 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.lyric-bg-delete-dialog.is-visible {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+}
+.lyric-bg-delete-dialog-title {
+    margin: 0 0 6px;
+    font-size: 0.92rem;
+    font-weight: 700;
+    color: rgba(248, 249, 255, 0.98);
+    letter-spacing: 0.01em;
+}
+.lyric-bg-delete-dialog-text {
+    margin: 0 0 14px;
+    font-size: 0.78rem;
+    font-weight: 500;
+    color: rgba(210, 214, 232, 0.88);
+    line-height: 1.45;
+}
+.lyric-bg-delete-dialog-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+}
+.lyric-bg-delete-dialog-confirm,
+.lyric-bg-delete-dialog-cancel {
+    min-width: 64px;
+    padding: 7px 14px;
+    border-radius: 9px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition:
+        transform 0.12s ease,
+        box-shadow 0.15s ease,
+        opacity 0.15s ease;
+}
+.lyric-bg-delete-dialog-confirm {
+    color: #fff;
+    border: 1px solid rgba(255, 130, 130, 0.42);
+    background: linear-gradient(165deg, rgba(200, 72, 72, 0.94) 0%, rgba(140, 36, 44, 0.96) 100%);
+    box-shadow: 0 2px 10px rgba(60, 0, 0, 0.35);
+}
+.lyric-bg-delete-dialog-cancel {
+    color: rgba(228, 232, 248, 0.92);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    background: rgba(255, 255, 255, 0.07);
+}
+.lyric-bg-delete-dialog-confirm:hover {
+    opacity: 0.94;
+    transform: translateY(-0.5px);
+}
+.lyric-bg-delete-dialog-cancel:hover {
+    background: rgba(255, 255, 255, 0.12);
+}
+
+/* 旧版贴边 popover（保留类名供缓存兼容） */
 .lyric-bg-delete-popover {
     position: absolute;
     right: 0;
@@ -6035,7 +6235,101 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
     opacity: 1;
 }
 
-/* 删除成功气泡 + 消散 */
+/* 删除：快速收缩淡出（替代原 1.5s 气泡 + 粒子消散） */
+#my-backgrounds-container .lyric-bg-thumb-wrap--removing {
+    pointer-events: none;
+    z-index: 2;
+    animation: lyric-bg-shrink-out 0.22s cubic-bezier(0.4, 0, 0.85, 0.35) forwards;
+    transform-origin: center center;
+}
+@keyframes lyric-bg-shrink-out {
+    0% {
+        opacity: 1;
+        transform: scale(1);
+        filter: none;
+    }
+    35% {
+        opacity: 0.9;
+        transform: scale(0.97);
+        filter: brightness(1.08);
+    }
+    100% {
+        opacity: 0;
+        transform: scale(0.72);
+        filter: brightness(0.55) blur(3px);
+    }
+}
+.lyric-bg-thumb-video-placeholder {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.35rem;
+    color: rgba(255, 255, 255, 0.42);
+    pointer-events: none;
+    z-index: 1;
+    background: linear-gradient(145deg, #2a2a36 0%, #16161e 100%);
+}
+.lyric-bg-thumb--broken {
+    background: linear-gradient(145deg, #3a2830 0%, #1a1218 100%) !important;
+}
+.lyric-bg-thumb--broken::after {
+    content: "🖼";
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    opacity: 0.55;
+    pointer-events: none;
+}
+.worship-offline-banner {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 3400;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 7px 14px;
+    font-size: 0.78rem;
+    line-height: 1.35;
+    color: #f5ecd8;
+    text-align: center;
+    background: linear-gradient(180deg, rgba(48, 38, 18, 0.96) 0%, rgba(32, 26, 14, 0.92) 100%);
+    border-bottom: 1px solid rgba(212, 175, 55, 0.35);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+    animation: worship-offline-banner-in 0.28s ease;
+    pointer-events: none;
+}
+.worship-offline-banner.is-hiding {
+    animation: worship-offline-banner-out 0.26s ease forwards;
+}
+@keyframes worship-offline-banner-in {
+    from { opacity: 0; transform: translateY(-100%); }
+    to { opacity: 1; transform: translateY(0); }
+}
+@keyframes worship-offline-banner-out {
+    from { opacity: 1; transform: translateY(0); }
+    to { opacity: 0; transform: translateY(-100%); }
+}
+body.has-offline-banner {
+    padding-top: 34px;
+}
+@media (prefers-reduced-motion: reduce) {
+    #my-backgrounds-container .lyric-bg-thumb-wrap--removing {
+        animation-duration: 0.01ms;
+    }
+    .worship-offline-banner {
+        animation: none;
+    }
+}
+
+/* 删除成功气泡 + 消散（已弃用，保留 keyframes 供旧缓存样式兼容） */
 #my-backgrounds-container .lyric-bg-thumb-wrap--deleting {
     pointer-events:none;
 }
@@ -6108,11 +6402,9 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
 }
 #my-backgrounds-container .lyric-bg-slot-empty {
     width: 100%;
-    min-width: 72px;
-    max-width: 96px;
+    min-width: 0;
     height: auto;
-    aspect-ratio: 76 / 45;
-    justify-self: start;
+    aspect-ratio: 1;
     box-sizing: border-box;
     border:1px dashed rgba(255,255,255,0.35);
     border-radius:8px;
@@ -6137,12 +6429,9 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
 }
 #my-backgrounds-container .lyric-bg-thumb {
     position: absolute;
-    left: 14px;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    width: auto;
-    height: auto;
+    inset: 0;
+    width: 100%;
+    height: 100%;
     min-width: 0;
     min-height: 0;
     margin: 0;
@@ -6153,9 +6442,22 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
 #my-backgrounds-container .lyric-bg-thumb:hover {
     border-color:rgba(255,255,255,0.78);
 }
+#my-backgrounds-container .lyric-bg-thumb-wrap--active {
+    border-radius: 8px;
+    box-shadow:
+        0 0 0 2px rgba(212, 175, 55, 0.92),
+        0 0 12px rgba(212, 175, 55, 0.38);
+}
 #my-backgrounds-container .lyric-bg-thumb.lyric-bg-thumb--active {
-    border-color:#e8cf7a;
-    box-shadow:0 0 0 2px rgba(212,175,55,0.5), 0 2px 10px rgba(0,0,0,0.45);
+    border-color: #e8cf7a;
+    border-width: 2px;
+    box-shadow:
+        0 0 0 1px rgba(212, 175, 55, 0.65),
+        0 2px 10px rgba(0, 0, 0, 0.45);
+}
+#my-backgrounds-container .lyric-bg-thumb-wrap--active .lyric-bg-drag-handle {
+    background: rgba(212, 175, 55, 0.28);
+    color: rgba(255, 248, 220, 0.95);
 }
 .lyric-bg-thumb-share {
     position:absolute;
@@ -6188,59 +6490,6 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
 #my-backgrounds-container .bg-shared-badge {
     right:2px;
     bottom:2px;
-}
-
-/* 背景悬停中央放大预览 */
-.bg-hover-preview-overlay {
-    position: fixed;
-    inset: 0;
-    z-index: 12000;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    pointer-events: none;
-    opacity: 0;
-    transition: opacity 0.2s ease;
-}
-.bg-hover-preview-overlay.is-visible {
-    opacity: 1;
-    pointer-events: auto;
-}
-.bg-hover-preview-backdrop {
-    position: absolute;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.72);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-}
-.bg-hover-preview-frame {
-    position: relative;
-    z-index: 1;
-    width: min(86vw, 960px);
-    height: min(78vh, 540px);
-    border-radius: 20px;
-    overflow: hidden;
-    box-shadow:
-        0 0 0 1px rgba(255, 255, 255, 0.12),
-        0 24px 80px rgba(0, 0, 0, 0.65),
-        0 0 60px rgba(120, 160, 255, 0.18);
-    background: rgba(12, 14, 22, 0.5);
-}
-.bg-hover-preview-inner {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-.bg-hover-preview-inner img,
-.bg-hover-preview-inner video {
-    max-width: 100%;
-    max-height: 100%;
-    width: auto;
-    height: auto;
-    object-fit: contain;
-    display: block;
 }
 
 /* 高级编辑：字号 / 垂直位置滑杆参考金线 */
@@ -6298,16 +6547,16 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
 }
 .lyric-bg-drag-handle {
     position: absolute;
-    left: 2px;
-    top: 50%;
-    transform: translateY(-50%);
+    left: 0;
+    top: 0;
+    bottom: 0;
     z-index: 5;
-    width: 12px;
-    height: 28px;
-    border-radius: 6px;
+    width: 11px;
+    height: auto;
+    border-radius: 5px 0 0 5px;
     background: rgba(255, 255, 255, 0.12);
     color: rgba(255, 255, 255, 0.65);
-    font-size: 9px;
+    font-size: 8px;
     line-height: 1;
     display: flex;
     align-items: center;
@@ -6336,7 +6585,8 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
 }
 .lyric-bg-default-btn {
     position: absolute;
-    left: 2px;
+    left: 50%;
+    transform: translateX(-50%);
     bottom: 2px;
     z-index: 6;
     min-width: 0;
@@ -9251,57 +9501,32 @@ body.leader-note-modal-open {
     order: -1 !important;
 }
 
-/* 翻页落位后：仅金边光晕收束，不缩放卡片（避免背景在框内跳动） */
+/* 翻页落位后：仅边框色过渡，阴影/尺寸保持不变 */
 @keyframes galleryCardSwitchPulse {
-    0% {
-        box-shadow:
-            0 0 0 2px rgba(212, 175, 55, 0.48),
-            0 4px 16px rgba(212, 175, 55, 0.14);
-    }
-    42% {
-        box-shadow:
-            0 0 0 1px rgba(212, 175, 55, 0.38),
-            0 10px 28px rgba(0, 0, 0, 0.3);
-    }
-    72% {
-        box-shadow:
-            0 0 0 1px rgba(212, 175, 55, 0.36),
-            0 8px 26px rgba(0, 0, 0, 0.33);
-    }
+    0%,
     100% {
-        box-shadow:
-            0 0 0 1px rgba(212, 175, 55, 0.35),
-            0 8px 28px rgba(0, 0, 0, 0.35);
+        border-color: #d4af37;
+    }
+    50% {
+        border-color: rgba(212, 175, 55, 0.72);
     }
 }
 
 @keyframes galleryGoldHandoffOut {
     0% {
         border-color: #d4af37;
-        box-shadow:
-            0 0 0 1px rgba(212, 175, 55, 0.35),
-            0 8px 28px rgba(0, 0, 0, 0.35);
-        outline-color: rgba(212, 175, 55, 0.45);
     }
     100% {
         border-color: rgba(255, 255, 255, 0.12);
-        box-shadow: none;
-        outline-color: transparent;
     }
 }
 
 @keyframes galleryGoldHandoffIn {
     0% {
         border-color: rgba(255, 255, 255, 0.12);
-        box-shadow: none;
-        outline-color: transparent;
     }
     100% {
         border-color: #d4af37;
-        box-shadow:
-            0 0 0 1px rgba(212, 175, 55, 0.35),
-            0 8px 28px rgba(0, 0, 0, 0.35);
-        outline-color: rgba(212, 175, 55, 0.45);
     }
 }
 
@@ -9325,25 +9550,21 @@ body.leader-note-modal-open {
     padding: 10px 12px;
     border-radius: 16px;
     border: 2px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.18);
     cursor: pointer;
     overflow: hidden;
     flex-shrink: 0;
     transform-origin: center center;
     transition:
         border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1),
-        box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1),
-        opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1),
-        transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 #layout-page-gallery .gallery-page-card.is-active {
-    z-index: 4;
+    z-index: 1;
     border-color: #d4af37;
-    box-shadow:
-        0 0 0 1px rgba(212, 175, 55, 0.35),
-        0 8px 28px rgba(0, 0, 0, 0.35);
-    outline: 2px solid rgba(212, 175, 55, 0.45);
-    outline-offset: 3px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.18);
+    outline: none;
 }
 
 /* 翻页金边交接：旧卡淡出、新卡淡入，金边始终贴在卡片上 */
@@ -9356,20 +9577,13 @@ body.leader-note-modal-open {
     animation: galleryGoldHandoffIn 0.42s cubic-bezier(0.18, 0.92, 0.28, 1) both;
 }
 
-/* 悬停：略加强反馈，仍克制、不暗示「已选中」 */
+/* 悬停：仅边框色，不改变尺寸/位移 */
 #layout-page-gallery .gallery-page-card:not(.is-active):not(.gallery-page-card--dragging):hover {
-    border-color: rgba(255, 255, 255, 0.3);
-    box-shadow:
-        0 4px 18px rgba(0, 0, 0, 0.22),
-        0 0 0 1px rgba(255, 255, 255, 0.07);
-    transform: translateY(-2px);
+    border-color: rgba(255, 255, 255, 0.28);
 }
 
 #layout-page-gallery .gallery-page-card.is-active:not(.gallery-page-card--dragging):not(.gallery-highlight-enter):hover {
-    box-shadow:
-        0 0 0 2px rgba(212, 175, 55, 0.42),
-        0 10px 32px rgba(0, 0, 0, 0.38);
-    transform: translateY(-1px);
+    border-color: #e0c04a;
 }
 
 #layout-page-gallery .gallery-page-card:active:not(.gallery-page-card--dragging) {
@@ -9739,6 +9953,7 @@ body.leader-note-modal-open {
     gap: 8px 14px;
     margin-bottom: 10px;
     padding: 4px 2px 0;
+    min-height: 2rem;
 }
 .gallery-song-section-head-main {
     display: flex;
@@ -9752,6 +9967,24 @@ body.leader-note-modal-open {
     flex: 0 0 auto;
     align-self: center;
 }
+#layout-page-gallery.layout-page-gallery--multi-strip .gallery-song-section-page-meta {
+    display: inline-grid;
+    grid-template-columns: max-content;
+    grid-template-rows: max-content;
+    align-items: center;
+    justify-items: end;
+    min-width: 3.4rem;
+    min-height: 1.65rem;
+}
+#layout-page-gallery.layout-page-gallery--multi-strip .gallery-song-section-page-meta > .page-indicator-wrap {
+    grid-area: 1 / 1;
+    margin-left: 0;
+}
+#layout-page-gallery.layout-page-gallery--multi-strip .gallery-song-section-page-meta > .page-indicator-wrap[hidden] {
+    display: inline-flex !important;
+    visibility: hidden;
+    pointer-events: none;
+}
 #layout-page-gallery:not(.layout-page-gallery--multi-strip) .gallery-song-section-page-meta {
     display: none !important;
 }
@@ -9763,9 +9996,6 @@ body.leader-note-modal-open {
     opacity: 0.82;
     cursor: default;
     user-select: none;
-}
-.gallery-section-page-wrap-readonly[hidden] {
-    display: none !important;
 }
 .page-indicator-readonly-val {
     display: inline-flex;

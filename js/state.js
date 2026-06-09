@@ -13,9 +13,7 @@ const AppState = {
     bgType: "particles",
     fontSize: 56,
     defaultLines: 4,
-    posY: 45,
-    autoplayActive: false,
-    autoplayInterval: 5
+    posY: 45
 };
 
 /** 与 AppState.songs 同一数组引用，供持久化 API 使用 */

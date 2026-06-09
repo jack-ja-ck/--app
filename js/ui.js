@@ -12,9 +12,6 @@ function clamp(n, min, max) {
 }
 
 let _eventsBound = false;
-let _autoplayMainTimer = 0;
-let _autoplayProgTimer = 0;
-
 const UI = {
     _inited: false,
 
@@ -355,56 +352,6 @@ const UI = {
         })();
     },
 
-    stopAutoplay() {
-        const g = typeof globalThis !== "undefined" ? globalThis : window;
-        if (_autoplayMainTimer) clearInterval(_autoplayMainTimer);
-        if (_autoplayProgTimer) clearInterval(_autoplayProgTimer);
-        _autoplayMainTimer = 0;
-        _autoplayProgTimer = 0;
-        if (g.AppState) g.AppState.autoplayActive = false;
-        const bar = document.getElementById("autoplay-progress");
-        if (bar) bar.style.width = "0%";
-    },
-
-    toggleAutoplay() {
-        const g = typeof globalThis !== "undefined" ? globalThis : window;
-        const AppState = g.AppState;
-        if (!AppState) return;
-        if (AppState.autoplayActive) {
-            UI.stopAutoplay();
-            UI.showToast("自动播放已停止", document.getElementById("autoplay-toggle"));
-            return;
-        }
-        UI.stopAutoplay();
-        const intervalEl = document.getElementById("autoplay-interval");
-        const seconds = clamp(Number(intervalEl && intervalEl.value) || AppState.autoplayInterval || 5, 1, 30);
-        AppState.autoplayInterval = seconds;
-        const intervalMs = seconds * 1000;
-        AppState.autoplayActive = true;
-        let elapsed = 0;
-        _autoplayMainTimer = window.setInterval(() => {
-            UI.syncCurrentPagesFromSong();
-            const next = typeof g.nextPage === "function" ? g.nextPage : null;
-            if (typeof next === "function") next();
-            else if (g.AppState && g.AppState.currentPages.length) {
-                const max = g.AppState.currentPages.length - 1;
-                const cur = g.AppState.currentPageIndex;
-                g.AppState.currentPageIndex = cur >= max ? 0 : cur + 1;
-                g.AppState.currentCardPage = g.AppState.currentPageIndex;
-            }
-            UI.renderLyrics();
-            UI._updateAll();
-            elapsed = 0;
-        }, intervalMs);
-        _autoplayProgTimer = window.setInterval(() => {
-            elapsed += 100;
-            const pct = clamp((elapsed / intervalMs) * 100, 0, 100);
-            const bar = document.getElementById("autoplay-progress");
-            if (bar) bar.style.width = pct + "%";
-        }, 100);
-        UI.showToast("自动播放已开始", document.getElementById("autoplay-toggle"));
-    },
-
     _getDisplayWindowPlacement() {
         const g = typeof globalThis !== "undefined" ? globalThis : window;
         if (typeof g.__worshipGetProjectionWindowPlacement === "function") {
@@ -630,12 +577,6 @@ const UI = {
         on("upload-bg-btn", "click", () => UI.triggerBgImageInput());
         on("bg-image-input", "change", (e) => UI.onBgImageInputChange(e));
 
-        on("autoplay-toggle", "click", () => UI.toggleAutoplay());
-        on("autoplay-stop", "click", () => {
-            UI.stopAutoplay();
-            UI.showToast("自动播放已停止", document.getElementById("autoplay-stop"));
-        });
-
         /* 开启投屏 / 主领：由 app.js 绑定（含 Mac 兼容的 window.open 参数与固定窗口名），此处勿重复监听以免连开两窗 */
 
         on("search-input", "input", () => UI.filterSongList());
@@ -832,12 +773,21 @@ globalThis.ensureProjectionCanvas = function () {
     }
 
 };
+function isVideoBgDataUrl(s) {
+    const t = String(s || "").trim();
+    if (!t.startsWith("data:") || t.length < 80) return false;
+    if (/^data:video\//i.test(t)) return true;
+    if (/^data:application\/octet-stream[;,]/i.test(t)) return true;
+    return false;
+}
+
 function projectionAssignVideoBgSrc(videoEl, dataUrl) {
     const want = String(dataUrl || "").trim();
     if (!videoEl || !want) return;
     const prev = String(videoEl.dataset.worshipBgUrl || "");
-    if (prev === want && videoEl.src && !videoEl.paused && !videoEl.ended) {
+    if (prev === want && videoEl.src && videoEl.readyState >= 2 && !videoEl.ended) {
         videoEl.style.opacity = "1";
+        if (videoEl.paused) void videoEl.play().catch(() => {});
         return;
     }
     videoEl.dataset.worshipBgUrl = want;
@@ -851,7 +801,7 @@ function projectionAssignVideoBgSrc(videoEl, dataUrl) {
         if (videoEl.readyState >= 2) kickPlay();
         else videoEl.addEventListener("loadeddata", kickPlay, { once: true });
     };
-    if (/^data:video\//i.test(want)) {
+    if (isVideoBgDataUrl(want)) {
         if (videoEl._worshipVideoBlobKey === want && videoEl._worshipVideoBlobUrl) {
             applySrc(videoEl._worshipVideoBlobUrl);
             return;
@@ -885,6 +835,8 @@ function projectionAssignVideoBgSrc(videoEl, dataUrl) {
     }
     applySrc(want);
 }
+
+globalThis.projectionAssignVideoBgSrc = projectionAssignVideoBgSrc;
 
 function projectionHideDisplayVideoBg(videoEl) {
     if (!videoEl) return;

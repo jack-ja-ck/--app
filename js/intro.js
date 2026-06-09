@@ -286,7 +286,7 @@
             var start = performance.now();
 
             function tick(now) {
-                if (aborted) {
+                if (aborted || skipToCurtainRunning) {
                     resolve();
                     return;
                 }
@@ -427,6 +427,30 @@
         }
     }
 
+    var skipNextIntroClick = false;
+    var skipToCurtainRunning = false;
+
+    function skipToCurtainPhase() {
+        if (!running || aborted || skipToCurtainRunning) return;
+        if (introFinished) return;
+        skipToCurtainRunning = true;
+        clearTimers();
+        lockIntroClick();
+        applyLoadProgress(1);
+        prepareCurtainReveal()
+            .then(function () {
+                if (aborted || !running) return;
+                return animateCurtain(CURTAIN_MS);
+            })
+            .then(function () {
+                skipToCurtainRunning = false;
+                if (!aborted && running) finishIntro(false);
+            })
+            .catch(function () {
+                skipToCurtainRunning = false;
+            });
+    }
+
     function enterNow() {
         if (!running) return;
         aborted = true;
@@ -438,6 +462,7 @@
         if (running || !intro) return;
         running = true;
         aborted = false;
+        skipToCurtainRunning = false;
         introStartTime = performance.now();
         intro.classList.remove("is-done");
         intro.removeAttribute("aria-hidden");
@@ -455,13 +480,13 @@
         }
 
         await animateMainTimeline();
-        if (aborted) return;
+        if (aborted || skipToCurtainRunning) return;
         await wait(HOLD_MS);
-        if (aborted) return;
+        if (aborted || skipToCurtainRunning) return;
         await prepareCurtainReveal();
-        if (aborted) return;
+        if (aborted || skipToCurtainRunning) return;
         await animateCurtain(CURTAIN_MS);
-        if (!aborted) finishIntro(false);
+        if (!aborted && !skipToCurtainRunning) finishIntro(false);
     }
 
     function bindDom() {
@@ -474,7 +499,16 @@
         clickHint = document.getElementById("intro-click-hint");
         if (!intro || !curtainL || !curtainR || !anchorL || !anchorR) return false;
         buildCrossMarkup();
+        intro.addEventListener("dblclick", function (e) {
+            e.preventDefault();
+            skipNextIntroClick = true;
+            skipToCurtainPhase();
+        });
         intro.addEventListener("click", function () {
+            if (skipNextIntroClick) {
+                skipNextIntroClick = false;
+                return;
+            }
             if (running && canSkipIntro()) enterNow();
         });
         return true;

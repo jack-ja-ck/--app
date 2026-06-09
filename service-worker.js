@@ -1,4 +1,4 @@
-const CACHE_NAME = "worship-app-v21";
+const CACHE_NAME = "worship-app-v22";
 const NETWORK_FIRST_PATHS = [
   "/index.html",
   "/app.js",
@@ -19,6 +19,22 @@ function isNetworkFirstRequest(url) {
     return false;
   }
 }
+
+function isRuntimeCacheableAsset(url) {
+  try {
+    const u = new URL(url);
+    const host = u.hostname || "";
+    return (
+      host === "fonts.googleapis.com" ||
+      host === "fonts.gstatic.com" ||
+      host === "cdn.jsdelivr.net" ||
+      host === "fontsapi.zeoseven.com"
+    );
+  } catch (_e) {
+    return false;
+  }
+}
+
 const ASSETS = [
   "index.html",
   "manifest.json",
@@ -81,6 +97,23 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
   const url = event.request.url;
+
+  if (isRuntimeCacheableAsset(url)) {
+    event.respondWith(
+      caches.open(CACHE_NAME).then((cache) =>
+        fetch(event.request)
+          .then((res) => {
+            if (res && res.status === 200) {
+              cache.put(event.request, res.clone());
+            }
+            return res;
+          })
+          .catch(() => cache.match(event.request))
+      )
+    );
+    return;
+  }
+
   if (isNetworkFirstRequest(url)) {
     event.respondWith(
       fetch(event.request)

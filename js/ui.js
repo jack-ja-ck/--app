@@ -95,7 +95,6 @@ const UI = {
         UI.syncCurrentPagesFromSong();
         UI.renderLyrics();
         UI._updateAll();
-        UI.showToast("已新建诗歌，请编辑歌词", document.getElementById("add-song-btn"));
     },
 
     saveCurrentLyrics() {

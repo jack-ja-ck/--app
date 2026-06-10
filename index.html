@@ -301,7 +301,7 @@
 <p class="intro-click-hint" id="intro-click-hint" hidden>点击屏幕进入 · 双击跳过至幕布</p>
 <div id="app">
     <!-- 左侧：诗歌管理区 -->
-    <div id="song-library" class="console-zone console-zone--library">
+    <div id="song-library" class="console-zone console-zone--library" data-guide="song-library">
         <p class="console-zone-label">诗歌管理</p>
         <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
             <h3 style="margin:0;">📚 诗歌库</h3>
@@ -326,7 +326,7 @@
             <div class="projection-playlist-body">
                 <ul id="playlist-list"></ul>
                 <div class="playlist-controls projection-playlist-controls">
-                    <button id="playlist-start-btn" class="small-btn playlist-start-full" type="button">▶ 开始播放</button>
+                    <button id="playlist-start-btn" class="small-btn playlist-start-full" type="button" data-guide="playlist-start">▶ 开始播放</button>
                     <div style="display:flex; gap:6px; width:100%;">
                         <button id="save-setlist-btn" class="small-btn playlist-start-full" type="button" style="flex:1; padding:6px 8px; font-size:12px; text-align:center; white-space:nowrap;">💾 保存歌单</button>
                         <button id="load-setlist-btn" class="small-btn playlist-start-full" type="button" style="flex:1; padding:6px 8px; font-size:12px; text-align:center; white-space:nowrap;">📋 我的歌单</button>
@@ -360,7 +360,7 @@
         </div>
         <div class="editor-main-body editor-main-body--gallery-first">
             <!-- 主区：页面画廊 + 分页卡片（横向换行，无内层滚动） -->
-            <div id="speaker-view" class="speaker-view--gallery-hero">
+            <div id="speaker-view" class="speaker-view--gallery-hero" data-guide="page-gallery">
                 <div id="speaker-resize-handle"></div>
                 <div class="speaker-view-toolbar" role="toolbar" aria-label="页面画廊与页码">
                     <div class="speaker-view-toolbar-cluster">
@@ -455,7 +455,7 @@
                 <span class="editor-lyrics-drawer-summary-label">📝 编辑歌词（展开后粘贴 / 修改）</span>
                 <span id="editor-unsaved-badge" class="editor-unsaved-badge" hidden>未保存</span>
             </summary>
-            <div class="editor-lyrics-drawer-body" id="layout-editor-sheet">
+            <div class="editor-lyrics-drawer-body" id="layout-editor-sheet" data-guide="lyrics-editor">
                 <div class="editor-title-row">
                     <input type="text" id="song-title-input" class="editor-song-title-input" placeholder="请输入歌名..." value="奇异恩典" aria-label="歌名">
                     <button type="button" id="song-page-transition-pill" class="song-page-transition-pill" title="当前诗歌翻页转场，点击打开高级编辑">✨ 无过渡</button>
@@ -467,7 +467,7 @@
                     <span class="editor-lyrics-drawer-collapse-hint" role="note">收起：点击上方「编辑歌词」即可收回</span>
                 </div>
                 <div id="editor-inline-actions" class="editor-action-bar" role="toolbar" aria-label="歌词编辑与云端">
-                    <button type="button" id="save-song-btn" class="editor-action-bar-btn" title="保存到诗歌库，并同步到会众投屏与页面画廊"><span class="editor-action-bar-btn__icon" aria-hidden="true">💾</span><span class="editor-action-bar-btn__text">保存并应用</span></button>
+                    <button type="button" id="save-song-btn" class="editor-action-bar-btn" data-guide="save-apply" title="保存到诗歌库，并同步到会众投屏与页面画廊"><span class="editor-action-bar-btn__icon" aria-hidden="true">💾</span><span class="editor-action-bar-btn__text">保存并应用</span></button>
                     <button type="button" id="save-as-template-btn" class="editor-action-bar-btn" title="将当前歌词与高级样式存为本机诗歌存档，便于下次套用"><span class="editor-action-bar-btn__icon" aria-hidden="true">📄</span><span class="editor-action-bar-btn__text">存为存档</span></button>
                     <button type="button" id="reset-current-song" class="editor-action-bar-btn" title="恢复本首诗歌的示例内容"><span class="editor-action-bar-btn__icon" aria-hidden="true">🔄</span><span class="editor-action-bar-btn__text">重置示例</span></button>
                     <button type="button" id="ocr-btn" class="editor-action-bar-btn" title="从照片识别歌词"><span class="editor-action-bar-btn__icon" aria-hidden="true">📷</span><span class="editor-action-bar-btn__text">拍照识歌词</span></button>
@@ -562,7 +562,7 @@
         </div>
         </div>
         <div class="projection-actions-row leader-projection-actions">
-            <button type="button" id="open-display-btn" class="btn projection-action-card projection-action-card--display">
+            <button type="button" id="open-display-btn" class="btn projection-action-card projection-action-card--display" data-guide="projection-display">
                 <span class="projection-action-card__icon" aria-hidden="true">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <rect x="2" y="4" width="20" height="14" rx="2" stroke="currentColor" stroke-width="1.75"/>
@@ -576,7 +576,7 @@
                 </span>
                 <span class="projection-action-card__addons"></span>
             </button>
-            <button type="button" id="open-leader-btn" class="btn-outline projection-action-card projection-action-card--leader">
+            <button type="button" id="open-leader-btn" class="btn-outline projection-action-card projection-action-card--leader" data-guide="projection-leader">
                 <span class="projection-action-card__icon" aria-hidden="true">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <rect x="4" y="2" width="16" height="20" rx="2.5" stroke="currentColor" stroke-width="1.75"/>

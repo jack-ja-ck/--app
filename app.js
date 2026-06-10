@@ -1582,6 +1582,7 @@
         }
         applyUiZoomLayoutCompensation(uiZoomLevel);
         syncUiZoomControlLabels();
+        if (newUserArrowGuideActive) scheduleNewUserArrowGuideRelayout();
     }
 
     function setUiZoomManualLevel(next) {
@@ -3632,45 +3633,45 @@
     /** 首次访问：箭头式分步指引（与 worship_visited 共用，完成后不再显示）——按实际操作顺序 */
     const NEW_USER_ARROW_GUIDE_STEPS = [
         {
-            selector: "#editor-lyrics-drawer",
+            guide: "lyrics-editor",
             expandDrawer: true,
-            pad: 6,
+            pad: 8,
             title: "第 1 步：编辑歌词",
             text:
                 "中间栏下方「📝 编辑歌词」已为你展开。填写歌名，在大块歌词编辑区粘贴或修改（一行一句；空行或 [page] 分段）。右侧可调整编辑区字号；顶边金色条可向上拖高。编辑时画廊与已开投屏会实时预览。"
         },
         {
-            selector: "#playlist-panel",
-            pad: 10,
+            guide: "song-library",
+            pad: 6,
             title: "第 2 步：加入播放列表",
             text:
                 "在左侧「诗歌库」里选中要唱的诗歌，点该行右侧「+」，加入下方的「播放列表（敬拜顺序）」；可多首并拖拽排序。列表下方「💾 保存歌单」与「📋 我的歌单」并排，用于命名保存或打开本机已存歌单。（「在线搜索诗歌」当前为占位。）"
         },
         {
-            selector: "#playlist-start-btn",
+            guide: "playlist-start",
             pad: 10,
             title: "第 3 步：开始播放",
             text:
                 "顺序排好后点「▶ 开始播放」。之后用中间「页面画廊」里的分页卡片翻页：可点击卡片，或使用键盘 ← → / 空格。"
         },
         {
-            selector: "#gallery-wrapper",
+            guide: "page-gallery",
             pad: 8,
             title: "第 4 步：预览页面画廊",
             text:
                 "卡片区即分页预览，每张对应投屏一页；可点击卡片或按 ← → / 空格翻页。右键卡片可「复制 / 删除 / 撤销 / 恢复为歌词顺序」；按住卡片拖动可在同一首歌内调整播放顺序（不改歌词）。上方工具栏有「帮助」与画廊缩放。"
         },
         {
-            selector: "#editor-inline-actions",
+            guide: "save-apply",
             expandDrawer: true,
-            pad: 8,
+            pad: 10,
             title: "第 5 步：保存并应用到投屏",
             text:
                 "改好歌词后点「💾 保存并应用」（或 Ctrl+S / ⌘+S）：写入诗歌库，并同步到会众投屏与页面画廊。「存为存档」可把当前歌词与样式存到本机，便于下次套用。"
         },
         {
-            selector: "#open-display-btn",
-            pad: 10,
+            guideUnion: ["projection-display", "projection-leader"],
+            pad: 8,
             title: "第 6 步：开启与结束投屏",
             text:
                 "右侧「投屏控制」有「开启投屏」「主领视角」等入口；开启投屏后会众窗打开，同一按钮变为「关闭投屏」，或按 Ctrl+Shift+E 关闭。「主领视角」可选平板/手机传数据（二维码）或在电脑打开。会众窗按 F 全屏；绿色按钮右上角 ? 可看投屏帮助。投屏时中间金色状态栏另有「结束投屏」与「分享云端」等。"
@@ -3679,6 +3680,165 @@
 
     let newUserArrowGuideIndex = 0;
     let newUserArrowGuideRelayoutTimer = 0;
+    let newUserArrowGuideResizeObs = null;
+    let newUserArrowGuideLayoutRetry = 0;
+
+    function getActiveUiZoomFactor() {
+        if (isDisplay || isLeader) return 1;
+        const inline = parseFloat(document.documentElement.style.zoom);
+        if (Number.isFinite(inline) && inline > 0) return inline;
+        return Number.isFinite(uiZoomLevel) && uiZoomLevel > 0 ? uiZoomLevel : 1;
+    }
+
+    /** html zoom 下 getBoundingClientRect 与 position:fixed 坐标系不一致，需换算后再定位引导层 */
+    function compensateGuideSpotForDocumentZoom(spot) {
+        const zoom = getActiveUiZoomFactor();
+        if (!spot || Math.abs(zoom - 1) < 0.001) return spot;
+        const div = (v) => v / zoom;
+        const raw = spot.raw;
+        return {
+            left: div(spot.left),
+            top: div(spot.top),
+            width: div(spot.width),
+            height: div(spot.height),
+            raw: raw
+                ? {
+                      left: div(raw.left),
+                      top: div(raw.top),
+                      right: div(raw.right),
+                      bottom: div(raw.bottom)
+                  }
+                : undefined
+        };
+    }
+
+    function queryGuideTargetEl(guideKey) {
+        if (!guideKey) return null;
+        return document.querySelector('[data-guide="' + guideKey + '"]');
+    }
+
+    function isGuideTargetMeasurable(el) {
+        if (!el || !el.isConnected) return false;
+        const style = getComputedStyle(el);
+        if (style.display === "none" || style.visibility === "hidden") return false;
+        const opacity = Number.parseFloat(style.opacity);
+        if (Number.isFinite(opacity) && opacity <= 0.01) return false;
+        const r = el.getBoundingClientRect();
+        return r.width > 2 && r.height > 2;
+    }
+
+    function resolveGuideTargetEl(step) {
+        if (!step) return null;
+        if (step.guide) {
+            const el = queryGuideTargetEl(step.guide);
+            if (el) return el;
+        }
+        if (Array.isArray(step.guideUnion)) {
+            for (const key of step.guideUnion) {
+                const el = queryGuideTargetEl(key);
+                if (el) return el;
+            }
+        }
+        if (step.selector) return document.querySelector(step.selector);
+        return null;
+    }
+
+    function measureGuideSpotRect(step) {
+        const pad = Number.isFinite(step.pad) ? step.pad : 8;
+        const keys = Array.isArray(step.guideUnion)
+            ? step.guideUnion
+            : step.guide
+              ? [step.guide]
+              : [];
+        let union = null;
+        if (keys.length) {
+            for (const key of keys) {
+                const el = queryGuideTargetEl(key);
+                if (!isGuideTargetMeasurable(el)) continue;
+                const r = el.getBoundingClientRect();
+                if (!union) {
+                    union = { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
+                } else {
+                    union.left = Math.min(union.left, r.left);
+                    union.top = Math.min(union.top, r.top);
+                    union.right = Math.max(union.right, r.right);
+                    union.bottom = Math.max(union.bottom, r.bottom);
+                }
+            }
+        }
+        if (!union) {
+            const el = resolveGuideTargetEl(step);
+            if (!isGuideTargetMeasurable(el)) return null;
+            const r = el.getBoundingClientRect();
+            union = { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
+        }
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+        const left = Math.max(0, union.left - pad);
+        const top = Math.max(0, union.top - pad);
+        const right = Math.min(vw, union.right + pad);
+        const bottom = Math.min(vh, union.bottom + pad);
+        return {
+            left,
+            top,
+            width: Math.max(0, right - left),
+            height: Math.max(0, bottom - top),
+            raw: union
+        };
+    }
+
+    function applyGuideSpotlightBlock(blockEl, spot) {
+        if (!blockEl) return;
+        if (!spot || spot.width < 2 || spot.height < 2) {
+            blockEl.style.clipPath = "";
+            return;
+        }
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+        const l = spot.left;
+        const t = spot.top;
+        const r = spot.left + spot.width;
+        const b = spot.top + spot.height;
+        blockEl.style.clipPath =
+            "polygon(evenodd," +
+            "0px 0px," +
+            vw +
+            "px 0px," +
+            vw +
+            "px " +
+            vh +
+            "px," +
+            "0px " +
+            vh +
+            "px," +
+            "0px 0px," +
+            l +
+            "px " +
+            t +
+            "px," +
+            r +
+            "px " +
+            t +
+            "px," +
+            r +
+            "px " +
+            b +
+            "px," +
+            l +
+            "px " +
+            b +
+            "px)";
+    }
+
+    function watchNewUserArrowGuideTarget(el) {
+        if (newUserArrowGuideResizeObs) {
+            newUserArrowGuideResizeObs.disconnect();
+            newUserArrowGuideResizeObs = null;
+        }
+        if (!el || typeof ResizeObserver === "undefined") return;
+        newUserArrowGuideResizeObs = new ResizeObserver(() => scheduleNewUserArrowGuideRelayout());
+        newUserArrowGuideResizeObs.observe(el);
+    }
     /** 引导开始前编辑抽屉是否已展开；引导结束后恢复此状态 */
     let newUserArrowGuideDrawerWasOpen = null;
     let newUserArrowGuideActive = false;
@@ -3708,7 +3868,14 @@
         if (root) {
             root.hidden = true;
             root.setAttribute("aria-hidden", "true");
+            const block = root.querySelector(".new-user-arrow-guide__block");
+            if (block) block.style.clipPath = "";
         }
+        if (newUserArrowGuideResizeObs) {
+            newUserArrowGuideResizeObs.disconnect();
+            newUserArrowGuideResizeObs = null;
+        }
+        newUserArrowGuideLayoutRetry = 0;
         if (newUserArrowGuideRelayoutTimer) {
             clearTimeout(newUserArrowGuideRelayoutTimer);
             newUserArrowGuideRelayoutTimer = 0;
@@ -3741,6 +3908,7 @@
             prev.addEventListener("click", () => {
                 if (newUserArrowGuideIndex <= 0) return;
                 newUserArrowGuideIndex -= 1;
+                newUserArrowGuideLayoutRetry = 0;
                 layoutNewUserArrowGuideStep();
             });
         }
@@ -3753,6 +3921,7 @@
                     dismissFirstVisitOnboarding();
                     return;
                 }
+                newUserArrowGuideLayoutRetry = 0;
                 layoutNewUserArrowGuideStep();
             });
         }
@@ -3811,6 +3980,7 @@
         const root = $("new-user-arrow-guide");
         if (!root || root.hidden) return;
         const step = NEW_USER_ARROW_GUIDE_STEPS[newUserArrowGuideIndex];
+        const block = root.querySelector(".new-user-arrow-guide__block");
         const ring = root.querySelector(".new-user-arrow-guide__ring");
         const shaft = root.querySelector(".new-user-arrow-guide__shaft");
         const bubble = root.querySelector(".new-user-arrow-guide__bubble");
@@ -3828,10 +3998,10 @@
             return;
         }
 
-        let target = document.querySelector(step.selector);
+        let target = resolveGuideTargetEl(step);
         if (!target) {
             for (let j = newUserArrowGuideIndex + 1; j < NEW_USER_ARROW_GUIDE_STEPS.length; j++) {
-                const t2 = document.querySelector(NEW_USER_ARROW_GUIDE_STEPS[j].selector);
+                const t2 = resolveGuideTargetEl(NEW_USER_ARROW_GUIDE_STEPS[j]);
                 if (t2) {
                     newUserArrowGuideIndex = j;
                     return layoutNewUserArrowGuideStep();
@@ -3847,12 +4017,28 @@
             /* ignore */
         }
 
-        const r = target.getBoundingClientRect();
-        const pad = Number.isFinite(step.pad) ? step.pad : 8;
-        const rx = r.left - pad;
-        const ry = r.top - pad;
-        const rw = r.width + pad * 2;
-        const rh = r.height + pad * 2;
+        const spot = compensateGuideSpotForDocumentZoom(measureGuideSpotRect(step));
+        if (!spot) {
+            if (newUserArrowGuideLayoutRetry < 8) {
+                newUserArrowGuideLayoutRetry += 1;
+                requestAnimationFrame(() =>
+                    requestAnimationFrame(() => layoutNewUserArrowGuideStep(true))
+                );
+            } else {
+                dismissFirstVisitOnboarding();
+            }
+            return;
+        }
+        newUserArrowGuideLayoutRetry = 0;
+        watchNewUserArrowGuideTarget(target);
+
+        const rx = spot.left;
+        const ry = spot.top;
+        const rw = spot.width;
+        const rh = spot.height;
+        const r = spot.raw;
+
+        applyGuideSpotlightBlock(block, spot);
 
         ring.style.display = "block";
         ring.style.left = rx + "px";
@@ -3899,19 +4085,24 @@
         bubble.style.visibility = "visible";
 
         const br = bubble.getBoundingClientRect();
-        const tcx = r.left + r.width / 2;
-        const tcy = r.top + r.height / 2;
-        const bubbleCx = br.left + br.width / 2;
+        const guideZoom = getActiveUiZoomFactor();
+        const tcx = r.left + (r.right - r.left) / 2;
+        const tcy = r.top + (r.bottom - r.top) / 2;
+        const bubbleCx = br.left / guideZoom + br.width / guideZoom / 2;
         const ringBottom = ry + rh;
+        const brTop = br.top / guideZoom;
+        const brBottom = br.bottom / guideZoom;
+        const brLeft = br.left / guideZoom;
+        const brRight = br.right / guideZoom;
         let x1 = bubbleCx;
-        let y1 = br.top;
-        if (br.top >= ringBottom - 4) {
-            y1 = br.top;
-        } else if (br.bottom <= ry + 4) {
-            y1 = br.bottom;
+        let y1 = brTop;
+        if (brTop >= ringBottom - 4) {
+            y1 = brTop;
+        } else if (brBottom <= ry + 4) {
+            y1 = brBottom;
         } else {
-            y1 = br.top + br.height / 2;
-            x1 = br.left > rx + rw ? br.left : br.right;
+            y1 = brTop + (brBottom - brTop) / 2;
+            x1 = brLeft > rx + rw ? brLeft : brRight;
         }
         const x2 = tcx;
         const y2 = tcy;
@@ -3948,6 +4139,7 @@
             newUserArrowGuideRelayoutTimer = 0;
         }
         newUserArrowGuideIndex = 0;
+        newUserArrowGuideLayoutRetry = 0;
         const drawer = $("editor-lyrics-drawer");
         newUserArrowGuideDrawerWasOpen = drawer ? !!drawer.open : false;
         newUserArrowGuideActive = true;
@@ -4937,9 +5129,36 @@
     }
 
     /** 列表/分类：搜索匹配标题、歌词与标签 */
+    function songNeedsAutoUnnamedLabel(title) {
+        const t = String(title || "").trim();
+        return !t || t === "未命名";
+    }
+
+    function getSongCreatedAtMs(song, fallbackIndex) {
+        const n = Number(song && song.createdAt);
+        if (Number.isFinite(n) && n > 0) return n;
+        return typeof fallbackIndex === "number" && fallbackIndex >= 0 ? fallbackIndex : 0;
+    }
+
+    function getAutoUnnamedSongOrder() {
+        return state.songs
+            .map((s, i) => ({ s, at: getSongCreatedAtMs(s, i) }))
+            .filter(({ s }) => songNeedsAutoUnnamedLabel(s.title))
+            .sort((a, b) => a.at - b.at || String(a.s.id).localeCompare(String(b.s.id)));
+    }
+
+    function getSongDisplayTitle(song) {
+        if (!song) return "未命名";
+        const raw = String(song.title || "").trim();
+        if (!songNeedsAutoUnnamedLabel(raw)) return raw;
+        const order = getAutoUnnamedSongOrder();
+        const ix = order.findIndex(({ s }) => s.id === song.id);
+        return ix >= 0 ? `未命名${ix + 1}` : "未命名";
+    }
+
     function songTitleMatchesSearch(song, keyLower) {
         if (!keyLower) return true;
-        const title = String(song.title || "").toLowerCase();
+        const title = String(getSongDisplayTitle(song) || "").toLowerCase();
         const lyrics = String(song.lyrics || "").toLowerCase();
         const tags = String(song.tags || "").toLowerCase();
         return title.includes(keyLower) || lyrics.includes(keyLower) || tags.includes(keyLower);
@@ -8349,6 +8568,10 @@
     function openLyricEditorDrawer() {
         const drawer = $("editor-lyrics-drawer");
         if (!drawer) return;
+        /* 程序化展开时略过本次 click 冒泡，避免「点新建诗歌」等同次点击被 outside-close 立刻收起 */
+        if (installLyricEditorDrawerOutsideClose._bound) {
+            installLyricEditorDrawerOutsideClose._suppressUntil = Date.now() + 500;
+        }
         drawer.open = true;
         syncLyricDrawerOverlayClass();
         scheduleFitLyricEditorFont();
@@ -8357,6 +8580,31 @@
         } catch (_e) {
             $("lyric-editor-large")?.focus();
         }
+    }
+
+    /** 换歌前静默写入当前诗歌（歌词 + 投屏样式），不再弹确认框 */
+    function flushCurrentSongEditsBeforeSwitch() {
+        if (isDisplay || isLeader) return;
+        if (!isEditorDirty()) return;
+        syncEditorToSong();
+        persistCurrentSongPresentationFromUi(state.currentSongId);
+        const song = currentSong();
+        if (song) {
+            try {
+                reconcilePlaybackSequenceAfterLyricsChange(song, { toast: false });
+            } catch (_e) {
+                /* ignore */
+            }
+        }
+        try {
+            saveSongs();
+        } catch (_e2) {
+            /* ignore */
+        }
+        clearLyricDraft();
+        captureEditorPersistBaseline();
+        capturePresentationStyleBaseline();
+        updateEditorUnsavedIndicator();
     }
 
     function revertEditorToPersistBaseline() {
@@ -10670,7 +10918,7 @@
         const pendingDelete = libraryPendingDeleteId === song.id;
         if (pendingDelete) row.classList.add("song-item--confirm-delete");
 
-        const titleHtml = highlightSearchHtml(song.title || "未命名", keyLower);
+        const titleHtml = highlightSearchHtml(getSongDisplayTitle(song), keyLower);
         const pageCount = splitPages(song.lyrics, state.ui.defaultLines).length;
         const tagLine = String(song.tags || "").trim() || "—";
         const tagsHtml = highlightSearchHtml(tagLine, keyLower);
@@ -10967,6 +11215,34 @@ ${deleteBtnHtml}
         }
     }
 
+    function scrollSongLibraryItemIntoView(row) {
+        if (!row || !document.contains(row)) return;
+        try {
+            row.scrollIntoView({
+                block: "nearest",
+                behavior: prefersReducedMotion() ? "auto" : "smooth"
+            });
+        } catch (_e) {
+            row.scrollIntoView();
+        }
+    }
+
+    function flashSongLibraryItem(songId) {
+        if (songId == null || songId === "") return;
+        const list = $("song-list");
+        if (!list) return;
+        const sid = String(songId);
+        const row = list.querySelector(`.song-item[data-song-id="${CSS.escape(sid)}"]`);
+        if (!row) return;
+        row.classList.remove("song-item--just-created");
+        void row.offsetWidth;
+        row.classList.add("song-item--just-created");
+        scrollSongLibraryItemIntoView(row);
+        setTimeout(() => {
+            if (document.contains(row)) row.classList.remove("song-item--just-created");
+        }, SONG_ADD_BTN_FEEDBACK_MS);
+    }
+
     function renderPlaylist(opts) {
         reconcilePlaylistState();
         const highlightSongId = opts && opts.highlightSongId;
@@ -10990,7 +11266,7 @@ ${deleteBtnHtml}
             }
             li.draggable = true;
             li.dataset.idx = String(idx);
-            li.innerHTML = `<span>${escapeHtml(song.title || "未命名")}</span><button class="playlist-remove-btn" title="移出" aria-label="移出播放列表">✕</button>`;
+            li.innerHTML = `<span>${escapeHtml(getSongDisplayTitle(song))}</span><button class="playlist-remove-btn" title="移出" aria-label="移出播放列表">✕</button>`;
             li.addEventListener("click", (e) => {
                 if (e.target.closest(".playlist-remove-btn")) return;
                 state.playlist.running = true;
@@ -14215,25 +14491,8 @@ ${deleteBtnHtml}
             }
             return;
         }
-        if (!isDisplay && !isLeader && !(opts && opts.skipUnsavedCheck) && isEditorDirty()) {
-            promptUnsavedBeforeSwitch().then((action) => {
-                if (action === "cancel") return;
-                if (action === "save") {
-                    saveCurrentLyrics({ silent: true });
-                    persistCurrentSongPresentationFromUi(state.currentSongId);
-                    saveSongs();
-                    capturePresentationStyleBaseline();
-                    switchSongCore(songId, { ...(opts || {}), skipUnsavedCheck: true });
-                    return;
-                }
-                if (action === "discard") {
-                    revertEditorToPersistBaseline();
-                    revertPresentationStyleToBaseline();
-                    capturePresentationStyleBaseline();
-                    switchSongCore(songId, { ...(opts || {}), skipUnsavedCheck: true });
-                }
-            });
-            return;
+        if (!isDisplay && !isLeader && !(opts && opts.skipUnsavedCheck)) {
+            flushCurrentSongEditsBeforeSwitch();
         }
         switchSongCore(songId, opts);
     }
@@ -14907,19 +15166,24 @@ ${deleteBtnHtml}
             key: "",
             tempo: "",
             notes: "",
-            tags: ""
+            tags: "",
+            createdAt: Date.now()
         };
         const currentIndex = Math.max(0, state.songs.findIndex((s) => s.id === state.currentSongId));
         state.songs.splice(currentIndex + 1, 0, song);
         saveSongs();
+        renderSongList();
         switchSong(song.id);
-        showToast("✅ 已新建诗歌，请编辑歌词", $("add-song-btn"));
-        queueMicrotask(() => {
-            const inp = $("song-title-input");
-            if (inp) {
-                inp.focus();
-                inp.select();
-            }
+        requestAnimationFrame(() => {
+            openLyricEditorDrawer();
+            queueMicrotask(() => {
+                const inp = $("song-title-input");
+                if (inp) {
+                    inp.focus();
+                    inp.select();
+                }
+            });
+            requestAnimationFrame(() => flashSongLibraryItem(song.id));
         });
     }
 

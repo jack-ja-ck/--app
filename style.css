@@ -4457,6 +4457,23 @@ body.worship-audience-projection #popup-blocked-banner {
     border-left-color: white;
     box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12) inset;
 }
+.song-item--just-created {
+    animation: song-item-just-created 1s ease forwards;
+}
+@keyframes song-item-just-created {
+    0% {
+        box-shadow: 0 0 0 2px rgba(212, 175, 55, 0.9), 0 0 18px rgba(212, 175, 55, 0.45);
+    }
+    100% {
+        box-shadow: none;
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .song-item--just-created {
+        animation: none;
+        box-shadow: 0 0 0 2px rgba(212, 175, 55, 0.65);
+    }
+}
 .song-item.active .song-item-title::before {
     content: "";
     display: inline-block;

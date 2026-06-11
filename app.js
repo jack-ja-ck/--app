@@ -8549,9 +8549,30 @@
         });
     }
 
+    function syncAdvDrawerOpenBodyClass() {
+        const toggle = $("adv-drawer-toggle");
+        document.body.classList.toggle("is-adv-drawer-open", !!toggle?.checked);
+    }
+
+    function installSmoothUiEnhancements() {
+        if (installSmoothUiEnhancements._bound) return;
+        installSmoothUiEnhancements._bound = true;
+        const advToggle = $("adv-drawer-toggle");
+        if (advToggle) {
+            advToggle.addEventListener("change", syncAdvDrawerOpenBodyClass);
+            syncAdvDrawerOpenBodyClass();
+        }
+        document.querySelectorAll(".adv-drawer-open-btn").forEach((btn) => {
+            btn.addEventListener("click", () => {
+                requestAnimationFrame(syncAdvDrawerOpenBodyClass);
+            });
+        });
+    }
+
     function openAdvDrawerTransitionSection() {
         const toggle = $("adv-drawer-toggle");
         if (toggle) toggle.checked = true;
+        syncAdvDrawerOpenBodyClass();
         const section = document.querySelector('[data-adv-acc-id="transition"]');
         if (section) {
             section.classList.add("is-open");
@@ -23576,6 +23597,7 @@ const linesHtml = rawLines
             renderPlaylist();
             worshipIntroProgress(0.64);
             bindEvents();
+            installSmoothUiEnhancements();
             initNetworkStatusBanner();
             installGalleryPlaybackInteractions();
             initUiZoom();

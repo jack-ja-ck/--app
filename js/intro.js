@@ -202,14 +202,23 @@
             curtainSeam.style.transition = "none";
             curtainSeam.style.opacity = "0";
         }
+        if (intro) intro.classList.add("is-curtain-open");
     }
 
     function clearCurtainReveal(keepOpen) {
-        document.body.classList.remove("intro-reveal", "intro-reveal-app", "intro-curtain-animating");
+        document.body.classList.remove("intro-curtain-animating");
         if (intro) {
-            intro.classList.remove("intro-reveal", "is-curtain-animating", "is-content-fading");
+            intro.classList.remove("is-curtain-animating", "is-content-fading");
         }
-        if (!keepOpen) resetCurtainStyles();
+        if (keepOpen) {
+            /* 幕布已拉开：保留透明底与 intro-reveal，避免闪黑 */
+            return;
+        }
+        document.body.classList.remove("intro-reveal", "intro-reveal-app");
+        if (intro) {
+            intro.classList.remove("intro-reveal", "is-curtain-open");
+        }
+        resetCurtainStyles();
     }
 
     function waitFrames(n) {

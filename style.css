@@ -10740,7 +10740,8 @@ body.intro-active {
 body.intro-active #app {
     pointer-events: none;
     opacity: 0;
-    transition: opacity 0.42s cubic-bezier(0.33, 0.02, 0.15, 1);
+    /* 主界面在幕布下直接显示，勿淡入，避免拉开时与幕布不同步闪一下 */
+    transition: none;
 }
 body.intro-active.intro-reveal-app #app {
     opacity: 1;
@@ -10766,12 +10767,16 @@ body.intro-active .worship-intro {
     visibility: visible;
 }
 body.intro-active.intro-reveal .worship-intro,
-.worship-intro.intro-reveal {
+.worship-intro.intro-reveal,
+.worship-intro.is-curtain-open {
     background: transparent;
 }
 body.intro-curtain-animating #song-library,
 body.intro-curtain-animating #editor-area,
-body.intro-curtain-animating #preview-panel {
+body.intro-curtain-animating #preview-panel,
+body:has(.worship-intro:not(.is-done)) #song-library,
+body:has(.worship-intro:not(.is-done)) #editor-area,
+body:has(.worship-intro:not(.is-done)) #preview-panel {
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
 }
@@ -10785,6 +10790,7 @@ body.intro-curtain-animating .worship-intro .vfill::after {
 .worship-intro.is-done {
     pointer-events: none;
     opacity: 0;
+    background: transparent !important;
 }
 
 .worship-intro .curtain {
@@ -11018,4 +11024,65 @@ body.intro-active .intro-click-hint {
 @media (prefers-reduced-motion: reduce) {
     .worship-intro .vfill::before,
     .worship-intro .vfill::after { animation: none; }
+}
+
+/* ========== 流畅度优化（开场 / 编辑 / 投屏 / 设置） ========== */
+#song-library,
+#editor-area,
+#preview-panel {
+    transform: translateZ(0);
+    backface-visibility: hidden;
+}
+
+body.intro-active.intro-reveal-app #app {
+    pointer-events: auto;
+}
+
+.worship-intro.is-done {
+    visibility: hidden;
+    background: transparent !important;
+    transition:
+        opacity 0.32s cubic-bezier(0.33, 0.02, 0.15, 1),
+        visibility 0s linear 0.35s;
+}
+
+#layout-page-gallery .gallery-page-card {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 112px;
+}
+
+body.is-adv-drawer-open #song-library,
+body.is-adv-drawer-open #editor-area,
+body:has(#adv-drawer-toggle:checked) #song-library,
+body:has(#adv-drawer-toggle:checked) #editor-area,
+body:has(#editor-lyrics-drawer.editor-lyrics-drawer--overlay[open]) #song-library,
+body:has(#editor-lyrics-drawer.editor-lyrics-drawer--overlay[open]) #editor-area {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+#adv-drawer-toggle:checked ~ .adv-drawer-panel {
+    will-change: transform;
+}
+
+body.is-monitor-dragging #preview-panel,
+body.is-monitor-resizing #preview-panel {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+.adv-drawer-scroll,
+#speaker-view,
+#layout-page-gallery {
+    overflow-anchor: none;
+    -webkit-overflow-scrolling: touch;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    #layout-page-gallery .gallery-page-card,
+    .adv-drawer-panel,
+    .adv-drawer-scrim,
+    body.intro-active #app {
+        transition-duration: 0.01ms !important;
+    }
 }

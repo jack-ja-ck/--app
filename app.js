@@ -80,7 +80,25 @@
     /** 上传背景时超过此大小则提示用户（仍允许上传） */
     const BG_UPLOAD_WARN_IMAGE_BYTES = 8 * 1024 * 1024;
     const BG_UPLOAD_WARN_VIDEO_BYTES = 40 * 1024 * 1024;
+    const VIDEO_BG_MAX_WIDTH = 1920;
+    const VIDEO_BG_MAX_HEIGHT = 1080;
+    const VIDEO_BG_SKIP_OPTIMIZE_MAX_BYTES = 40 * 1024 * 1024;
+    const VIDEO_BG_STD_CRF = 23;
+    const VIDEO_BG_HD_CRF = 20;
     const FREE_BG_MODAL_VERSION = "2";
+
+    try {
+        globalThis.WorshipConstants = {
+            VIDEO_BG_MAX_WIDTH,
+            VIDEO_BG_MAX_HEIGHT,
+            VIDEO_BG_SKIP_OPTIMIZE_MAX_BYTES,
+            VIDEO_BG_STD_CRF,
+            VIDEO_BG_HD_CRF,
+            BG_UPLOAD_WARN_VIDEO_BYTES
+        };
+    } catch (_wc) {
+        /* ignore */
+    }
 
     function appendWorshipErrorLogEntry(info) {
         try {
@@ -119,14 +137,30 @@
     });
 
     function inferMediaTypeFromDataUrl(dataUrl) {
+        if (dataUrl instanceof Blob) {
+            return String(dataUrl.type || "").startsWith("video/") ? "video" : "image";
+        }
         const s = String(dataUrl || "");
         if (/^data:video\//i.test(s)) return "video";
         /** 部分浏览器导出的本地视频为 octet-stream，需按视频处理（见 isLikelyThemeConsoleVideoDataUrl） */
         if (/^data:application\/octet-stream[;,]/i.test(s)) return "video";
         return "image";
     }
+
+    function worshipBgMediaKey(media, itemId) {
+        if (media instanceof Blob) {
+            const id = String(itemId || "").trim();
+            return id ? `worship-blob:${id}` : `worship-blob:${media.size}:${media.type}`;
+        }
+        return String(media || "").trim();
+    }
+
     try {
         globalThis.inferMediaTypeFromDataUrl = inferMediaTypeFromDataUrl;
+        globalThis.WorshipDomUtils = Object.assign(globalThis.WorshipDomUtils || {}, {
+            inferMediaTypeFromDataUrl,
+            worshipBgMediaKey
+        });
     } catch (_e) {
         /* ignore */
     }
@@ -148,6 +182,7 @@
     const IDB_STORE_THEME = "themeBackground";
     const IDB_STORE_UPLOADED = "uploadedBackgrounds";
     const IDB_THEME_ROW_ID = "__theme_bg__";
+    const IDB_THEME_VIDEO_ROW_ID = "__theme_console_video__";
 
     let _bgUseIdbFallbackLs = false;
     let _idbThemeBgCache = "";
@@ -156,6 +191,16 @@
     let _themeBgSlotsCache = [];
     let _themeBgActiveId = "";
     let _themeConsoleVideoDataUrl = "";
+    let _themeConsoleVideoBlob = null;
+
+    function bgMediaIsPresent(media) {
+        if (media instanceof Blob) return true;
+        return !!String(media || "").trim();
+    }
+
+    function worshipBgMediaKeyForItem(media, itemId) {
+        return worshipBgMediaKey(media, itemId);
+    }
 
     function promiseReq(req) {
         return new Promise((resolve, reject) => {
@@ -214,6 +259,25 @@
         await promiseTx(tx);
     }
 
+    async function idbReadThemeConsoleVideo(db) {
+        const tx = db.transaction(IDB_STORE_THEME, "readonly");
+        const row = await promiseReq(tx.objectStore(IDB_STORE_THEME).get(IDB_THEME_VIDEO_ROW_ID));
+        if (!row || !row.videoData) return null;
+        return row.videoData;
+    }
+
+    async function idbWriteThemeConsoleVideo(db, videoData) {
+        const tx = db.transaction(IDB_STORE_THEME, "readwrite");
+        tx.objectStore(IDB_STORE_THEME).put({ id: IDB_THEME_VIDEO_ROW_ID, videoData });
+        await promiseTx(tx);
+    }
+
+    async function idbClearThemeConsoleVideo(db) {
+        const tx = db.transaction(IDB_STORE_THEME, "readwrite");
+        tx.objectStore(IDB_STORE_THEME).delete(IDB_THEME_VIDEO_ROW_ID);
+        await promiseTx(tx);
+    }
+
     async function idbReadAllUploaded(db) {
         const tx = db.transaction(IDB_STORE_UPLOADED, "readonly");
         const rows = await promiseReq(tx.objectStore(IDB_STORE_UPLOADED).getAll());
@@ -269,6 +333,11 @@
             const db = await openWorshipBgDatabase();
             await migrateLocalStorageBackgroundsToIndexedDb(db);
             _idbThemeBgCache = await idbReadThemeBg(db);
+            const themeVid = await idbReadThemeConsoleVideo(db);
+            if (themeVid) {
+                _themeConsoleVideoBlob = themeVid;
+                _themeConsoleVideoDataUrl = "";
+            }
             const rawUploaded = await idbReadAllUploaded(db);
             _idbUploadedCache = normalizeUploadedBackgroundsArray(rawUploaded);
             if (rawUploaded.filter((x) => x && x.id && x.imageData).length > UPLOADED_BACKGROUNDS_MAX) {
@@ -475,10 +544,10 @@
         return !uploadedBackgroundCapacityMessage(mediaType, items);
     }
 
-    function releaseUploadedBackgroundVideoResources(imageData) {
-        const url = String(imageData || "").trim();
-        if (!url) return;
-        const pooled = _galleryLiveVideoByUrl.get(url);
+    function releaseUploadedBackgroundVideoResources(imageData, itemId) {
+        const key = worshipBgMediaKeyForItem(imageData, itemId);
+        if (!key) return;
+        const pooled = _galleryLiveVideoByUrl.get(key);
         if (pooled) {
             try {
                 pooled.pause();
@@ -505,7 +574,7 @@
             } catch (_e4) {
                 /* ignore */
             }
-            _galleryLiveVideoByUrl.delete(url);
+            _galleryLiveVideoByUrl.delete(key);
         }
     }
 
@@ -532,7 +601,7 @@
             removed &&
             (state.ui.bgImageId === id || state.ui.bgImage === removed.imageData);
         if (removed && isUploadedItemVideo(removed)) {
-            releaseUploadedBackgroundVideoResources(removed.imageData);
+            releaseUploadedBackgroundVideoResources(removed.imageData, removed.id);
         }
         saveUploadedBackgrounds(arr);
         pruneBgThumbUsageForId(id);
@@ -816,6 +885,7 @@
     }
 
     function loadThemeConsoleVideoFromStorage() {
+        if (_themeConsoleVideoBlob instanceof Blob) return;
         try {
             const s = String(localStorage.getItem(WORSHIP_THEME_VIDEO_LS) || "").trim();
             _themeConsoleVideoDataUrl = isLikelyThemeConsoleVideoDataUrl(s) ? s : "";
@@ -827,9 +897,34 @@
         }
     }
 
-    function persistThemeConsoleVideo(dataUrl) {
-        const s = String(dataUrl || "").trim();
+    function persistThemeConsoleVideo(media) {
+        const ta = $("worship-console-theme-video-upload-btn") || themeBgSlotUploadToastAnchor();
+        if (media instanceof Blob) {
+            _themeConsoleVideoBlob = media;
+            _themeConsoleVideoDataUrl = "";
+            try {
+                localStorage.removeItem(WORSHIP_THEME_VIDEO_LS);
+            } catch (_e) {
+                /* ignore */
+            }
+            if (_bgUseIdbFallbackLs) {
+                showToast("视频过大，请使用支持本地数据库的浏览器", ta);
+                return;
+            }
+            openWorshipBgDatabase()
+                .then((db) => idbWriteThemeConsoleVideo(db, media))
+                .catch((err) => {
+                    console.warn("persistThemeConsoleVideo blob", err);
+                    showToast("主题视频保存失败", ta);
+                });
+            return;
+        }
+        const s = String(media || "").trim();
         _themeConsoleVideoDataUrl = isLikelyThemeConsoleVideoDataUrl(s) ? s : "";
+        _themeConsoleVideoBlob = null;
+        openWorshipBgDatabase()
+            .then((db) => idbClearThemeConsoleVideo(db))
+            .catch(() => {});
         try {
             if (_themeConsoleVideoDataUrl) localStorage.setItem(WORSHIP_THEME_VIDEO_LS, _themeConsoleVideoDataUrl);
             else localStorage.removeItem(WORSHIP_THEME_VIDEO_LS);
@@ -841,18 +936,23 @@
             } catch (_e2) {
                 /* ignore */
             }
-            showToast(
-                "视频过大无法保存（空间不足）",
-                $("worship-console-theme-video-upload-btn") || themeBgSlotUploadToastAnchor()
-            );
+            showToast("视频过大无法保存（空间不足）", ta);
         }
     }
 
     function isThemeConsoleVideoActive() {
+        if (_themeConsoleVideoBlob instanceof Blob) return true;
         return isLikelyThemeConsoleVideoDataUrl(_themeConsoleVideoDataUrl);
     }
 
+    function getThemeConsoleVideoMedia() {
+        if (_themeConsoleVideoBlob instanceof Blob) return _themeConsoleVideoBlob;
+        const s = String(_themeConsoleVideoDataUrl || "").trim();
+        return isLikelyThemeConsoleVideoDataUrl(s) ? s : "";
+    }
+
     function clearThemeConsoleVideoOnly() {
+        _themeConsoleVideoBlob = null;
         persistThemeConsoleVideo("");
         applyThemeBackground();
         showToast("已移除主题背景视频", $("worship-console-theme-video-upload-btn") || themeBgSlotUploadToastAnchor());
@@ -894,50 +994,46 @@
         if (!files || !files.length) return;
         const list = Array.from(files);
         const ta = $("worship-console-theme-video-upload-btn") || themeBgSlotUploadToastAnchor();
+        const optimizeApi = globalThis.WorshipVideoBgOptimize;
 
-        (async () => {
-            let ok = 0;
-            let skipped = 0;
-            for (const file of list) {
-                const name = String(file.name || "").toLowerCase();
-                const okExt = /\.(mp4|webm|mov)$/i.test(name);
-                const mime = String(file.type || "").toLowerCase();
-                const okMime =
-                    mime === "video/mp4" ||
-                    mime === "video/webm" ||
-                    mime === "video/quicktime" ||
-                    /^video\/(mp4|webm|quicktime)$/i.test(mime);
-                if (!okExt && !okMime) {
-                    skipped++;
-                    continue;
+        const isAllowedThemeVideo = (file) => {
+            const name = String(file.name || "").toLowerCase();
+            const okExt = /\.(mp4|webm|mov)$/i.test(name);
+            const mime = String(file.type || "").toLowerCase();
+            const okMime =
+                mime === "video/mp4" ||
+                mime === "video/webm" ||
+                mime === "video/quicktime" ||
+                /^video\/(mp4|webm|quicktime)$/i.test(mime);
+            return okExt || okMime;
+        };
+
+        let queued = 0;
+        for (const file of list) {
+            if (!isAllowedThemeVideo(file)) continue;
+            if (!optimizeApi || typeof optimizeApi.enqueueVideoBackgroundJob !== "function") continue;
+            queued++;
+            optimizeApi.enqueueVideoBackgroundJob({
+                file,
+                toastAnchor: ta,
+                showToast: showToast,
+                onSuccess: async (result) => {
+                    persistThemeConsoleVideo(result.blob);
+                    applyThemeBackground();
                 }
-                let dataUrl;
-                try {
-                    dataUrl = await readLocalFileAsDataURL(file);
-                } catch {
-                    skipped++;
-                    continue;
-                }
-                if (!dataUrl || !isLikelyThemeConsoleVideoDataUrl(dataUrl)) {
-                    skipped++;
-                    continue;
-                }
-                persistThemeConsoleVideo(dataUrl);
-                applyThemeBackground();
-                ok++;
-            }
-            input.value = "";
-            if (ok > 0) {
-                showToast(
-                    list.length === 1
-                        ? "主题背景视频已更新"
-                        : `已应用所选视频（${ok} 个成功${skipped ? `，${skipped} 个已跳过` : ""}）`,
-                    ta
-                );
-            } else {
-                showToast("请上传 .mp4、.webm 或 .mov 视频", ta);
-            }
-        })();
+            });
+        }
+        input.value = "";
+        if (queued > 0) {
+            showToast(
+                queued === 1
+                    ? "主题视频已在后台优化，请留意右侧进度条"
+                    : `${queued} 个主题视频已在后台优化`,
+                ta
+            );
+        } else {
+            showToast("请上传 .mp4、.webm 或 .mov 视频", ta);
+        }
     }
 
     function appendThemeVideoSlotToGrid(grid) {
@@ -5932,7 +6028,13 @@
                 vidEl.controls = false;
                 vidEl.setAttribute("playsinline", "");
                 vidEl.setAttribute("webkit-playsinline", "true");
-                vidEl.src = _themeConsoleVideoDataUrl;
+                const themeMedia = getThemeConsoleVideoMedia();
+                if (typeof globalThis.projectionAssignVideoBgSrc === "function") {
+                    globalThis.projectionAssignVideoBgSrc(vidEl, themeMedia, "__theme_console_video__");
+                } else {
+                    vidEl.src =
+                        themeMedia instanceof Blob ? URL.createObjectURL(themeMedia) : String(themeMedia || "");
+                }
                 vidEl.style.display = "block";
                 vidEl.style.opacity = String(op);
                 void vidEl.play?.().catch(() => {});
@@ -6013,8 +6115,23 @@
      * 从视频 Data URL 截取封面：loadedmetadata 后从 0.5s 起每 0.5s 尝试截帧，过暗或过于单调则继续，最多到 5s；均不合格则用 0.5s 帧兜底。
      */
     function extractVideoCoverFromDataUrl(dataUrl) {
+        if (dataUrl instanceof Blob) {
+            const blobUrl = URL.createObjectURL(dataUrl);
+            return extractVideoCoverFromDataUrl(blobUrl).finally(() => {
+                try {
+                    URL.revokeObjectURL(blobUrl);
+                } catch (_e) {
+                    /* ignore */
+                }
+            });
+        }
         const src = String(dataUrl || "").trim();
-        if (!src || (!/^data:video\//i.test(src) && !isLikelyThemeConsoleVideoDataUrl(src))) {
+        if (
+            !src ||
+            (!/^data:video\//i.test(src) &&
+                !/^blob:/i.test(src) &&
+                !isLikelyThemeConsoleVideoDataUrl(src))
+        ) {
             return Promise.resolve("");
         }
 
@@ -6482,7 +6599,8 @@
         const s = state.songs.find((x) => x.id === songId);
         if (!s) return;
         s.bgType = state.ui.bgType;
-        s.bgImage = state.ui.bgImage || "";
+        const uiImg = state.ui.bgImage;
+        s.bgImage = uiImg instanceof Blob ? "" : uiImg || "";
         s.bgImageId = state.ui.bgImageId || "";
         s.bgMediaType = state.ui.bgMediaType === "video" ? "video" : "image";
     }
@@ -6881,13 +6999,14 @@
         }
     }
 
-    function addUploadedBackgroundAndApply(imageData, mediaTypeHint) {
-        const data = String(imageData || "").trim();
+    function addUploadedBackgroundAndApply(imageData, mediaTypeHint, optimizeMeta) {
+        const isBlob = imageData instanceof Blob;
+        const data = isBlob ? imageData : String(imageData || "").trim();
         if (!data) return false;
         const hinted = mediaTypeHint === "video" || mediaTypeHint === "image" ? mediaTypeHint : null;
         let arr = getUploadedBackgrounds().slice();
         let chosenId = "";
-        const existing = arr.find((x) => x && x.imageData === data);
+        const existing = isBlob ? null : arr.find((x) => x && x.imageData === data);
         if (existing) {
             chosenId = existing.id;
         } else {
@@ -6898,22 +7017,26 @@
                 return false;
             }
             chosenId = bgItemId();
-            arr = [{
+            const row = {
                 id: chosenId,
                 imageData: data,
                 mediaType: mt,
                 tags: [],
                 timestamp: Date.now(),
                 shared: false
-            }, ...arr];
+            };
+            if (optimizeMeta && typeof optimizeMeta === "object") row.optimizeMeta = optimizeMeta;
+            arr = [row, ...arr];
             saveUploadedBackgrounds(arr);
         }
         state.ui.bgType = "image";
         state.ui.bgImage = data;
         state.ui.bgImageId = chosenId;
         state.ui.bgMediaType = existing
-            ? (existing.mediaType === "video" ? "video" : inferMediaTypeFromDataUrl(existing.imageData))
-            : (hinted || inferMediaTypeFromDataUrl(data));
+            ? existing.mediaType === "video" || inferMediaTypeFromDataUrl(existing.imageData) === "video"
+                ? "video"
+                : inferMediaTypeFromDataUrl(existing.imageData)
+            : hinted || inferMediaTypeFromDataUrl(data);
         state.ui.lyricsBgShareToCloud = false;
         recordBgThumbUsage(chosenId);
         renderUploadedBackgrounds();
@@ -8894,18 +9017,27 @@
         if (!slice || slice.bgMediaType !== "video") return "";
         let c = getUploadedVideoCoverByImageId(slice.bgImageId);
         if (c) return c;
-        const blob = String(slice.bgImage || "").trim();
-        if (!blob) return "";
+        const id = String(slice.bgImageId || "").trim();
+        if (id) {
+            const byId = getUploadedBackgrounds().find((x) => x && x.id === id);
+            if (byId && String(byId.coverImage || "").trim()) return String(byId.coverImage).trim();
+        }
+        const blob = slice.bgImage;
+        if (!bgMediaIsPresent(blob)) return "";
         const items = getUploadedBackgrounds();
-        const it = items.find((x) => x && isUploadedItemVideo(x) && String(x.imageData || "") === blob);
+        const it = items.find((x) => {
+            if (!x || !isUploadedItemVideo(x)) return false;
+            if (blob instanceof Blob && x.imageData instanceof Blob) return x.id === id;
+            return String(x.imageData || "") === String(blob || "");
+        });
         return String(it?.coverImage || "").trim();
     }
 
     /** 画廊/预览共用：同一视频 URL 只保留一个解码中的 <video>，翻页时迁移 DOM 而非重建 src */
-    function assignCardVideoBgSrc(videoEl, dataUrl) {
+    function assignCardVideoBgSrc(videoEl, dataUrl, itemId) {
         if (!videoEl) return;
         if (typeof globalThis.projectionAssignVideoBgSrc === "function") {
-            globalThis.projectionAssignVideoBgSrc(videoEl, dataUrl);
+            globalThis.projectionAssignVideoBgSrc(videoEl, dataUrl, itemId);
             return;
         }
         const want = String(dataUrl || "").trim();
@@ -8920,10 +9052,10 @@
         void videoEl.play().catch(() => {});
     }
 
-    function obtainGalleryLiveVideo(url) {
-        const want = String(url || "").trim();
-        if (!want) return null;
-        let v = _galleryLiveVideoByUrl.get(want);
+    function obtainGalleryLiveVideo(media, itemId) {
+        const key = worshipBgMediaKeyForItem(media, itemId);
+        if (!key && !bgMediaIsPresent(media)) return null;
+        let v = _galleryLiveVideoByUrl.get(key);
         if (!v) {
             v = document.createElement("video");
             v.className = "card-video-bg gallery-live-video-shared";
@@ -8936,8 +9068,8 @@
             v.style.cssText =
                 "position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;" +
                 "z-index:0;pointer-events:none;opacity:1;";
-            _galleryLiveVideoByUrl.set(want, v);
-            assignCardVideoBgSrc(v, want);
+            _galleryLiveVideoByUrl.set(key, v);
+            assignCardVideoBgSrc(v, media, itemId);
         }
         return v;
     }
@@ -8962,7 +9094,9 @@
     }
 
     function mountGalleryLiveVideoOnCard(card, slice, mountOpts) {
-        const want = String(slice?.bgImage || "").trim();
+        const media = slice?.bgImage;
+        const itemId = slice?.bgImageId || "";
+        if (!bgMediaIsPresent(media)) return;
         const dedicated = !!(mountOpts && mountOpts.dedicated);
         card.querySelectorAll(".card-video-bg:not(.gallery-live-video-shared)").forEach((el) => {
             try {
@@ -8992,12 +9126,12 @@
             } else {
                 applyGalleryVideoPosterOnCard(card, slice);
             }
-            assignCardVideoBgSrc(v, want);
+            assignCardVideoBgSrc(v, media, itemId);
             v.style.opacity = "1";
             if (v.paused || v.ended) void v.play().catch(() => {});
             return;
         }
-        const v = obtainGalleryLiveVideo(want);
+        const v = obtainGalleryLiveVideo(media, itemId);
         if (!v || !card) return;
         applyGalleryVideoPosterOnCard(card, slice);
         if (v.parentElement !== card) {
@@ -18224,30 +18358,58 @@ ${deleteBtnHtml}
             if (!files || !files.length) return;
             const toastAnchor = $("upload-bg-btn");
             const list = Array.from(files);
+            const optimizeApi = globalThis.WorshipVideoBgOptimize;
             ensureBgImageInputAcceptsVideo();
-            const largeCount = list.filter((file) => {
-                const name = String(file.name || "").toLowerCase();
-                const isVideo =
-                    String(file.type || "").startsWith("video/") ||
-                    /\.(mp4|webm|mov|m4v|ogv|ogg|mkv|avi)$/i.test(name);
-                const limit = isVideo ? BG_UPLOAD_WARN_VIDEO_BYTES : BG_UPLOAD_WARN_IMAGE_BYTES;
-                return (Number(file.size) || 0) > limit;
-            }).length;
-            if (largeCount) {
-                showToast(
-                    `有 ${largeCount} 个文件偏大，可能影响加载与投屏流畅度，建议压缩后再用`,
-                    toastAnchor
-                );
-            }
             let ok = 0;
             let readFail = 0;
             let saveFail = 0;
             let capFail = 0;
+            let queuedVideo = 0;
+
+            const afterBgAdded = () => {
+                updateUIFromState();
+                updateAll();
+                saveSettings();
+                switchBgTabTo("mine");
+            };
+
             (async () => {
                 for (const file of list) {
                     const name = String(file.name || "").toLowerCase();
                     const videoByExt = /\.(mp4|webm|mov|m4v|ogv|ogg|mkv|avi)$/i.test(name);
                     const videoByMime = String(file.type || "").startsWith("video/");
+                    const isVidFile =
+                        (optimizeApi && typeof optimizeApi.isVideoFile === "function" && optimizeApi.isVideoFile(file)) ||
+                        videoByMime ||
+                        videoByExt;
+
+                    if (isVidFile && optimizeApi && typeof optimizeApi.enqueueVideoBackgroundJob === "function") {
+                        const capBeforeRead = uploadedBackgroundCapacityMessage("video");
+                        if (capBeforeRead) {
+                            capFail++;
+                            showToast(capBeforeRead, toastAnchor);
+                            continue;
+                        }
+                        queuedVideo++;
+                        optimizeApi.enqueueVideoBackgroundJob({
+                            file,
+                            toastAnchor,
+                            showToast: showToast,
+                            onSuccess: async (result) => {
+                                try {
+                                    if (addUploadedBackgroundAndApply(result.blob, "video", result.meta)) {
+                                        ok++;
+                                        afterBgAdded();
+                                    } else capFail++;
+                                } catch (err) {
+                                    console.warn(err);
+                                    saveFail++;
+                                }
+                            }
+                        });
+                        continue;
+                    }
+
                     const mtGuess = videoByMime || videoByExt ? "video" : "image";
                     const capBeforeRead = uploadedBackgroundCapacityMessage(mtGuess);
                     if (capBeforeRead) {
@@ -18266,18 +18428,26 @@ ${deleteBtnHtml}
                         /^data:video\//i.test(dataUrl) || isLikelyThemeConsoleVideoDataUrl(dataUrl);
                     const mt = videoByMime || videoByExt || videoByDataUrl ? "video" : "image";
                     try {
-                        if (addUploadedBackgroundAndApply(dataUrl, mt)) ok++;
-                        else capFail++;
+                        if (addUploadedBackgroundAndApply(dataUrl, mt)) {
+                            ok++;
+                            afterBgAdded();
+                        } else capFail++;
                     } catch (err) {
                         console.warn(err);
                         saveFail++;
                     }
                 }
-                if (ok) {
-                    updateUIFromState();
-                    updateAll();
-                    saveSettings();
-                    switchBgTabTo("mine");
+
+                if (queuedVideo) {
+                    showToast(
+                        queuedVideo === 1
+                            ? "视频已在后台优化，请留意右侧进度条"
+                            : `${queuedVideo} 个视频已在后台优化，请留意右侧进度条`,
+                        toastAnchor
+                    );
+                }
+
+                if (ok && !queuedVideo) {
                     const silentSingleOk = list.length === 1 && !readFail && !saveFail && !capFail;
                     if (!silentSingleOk) {
                         const parts = [`成功添加 ${ok} 个`];
@@ -18286,7 +18456,7 @@ ${deleteBtnHtml}
                         if (capFail) parts.push(`${capFail} 个因已达上限未加入`);
                         showToast(parts.join("，"), toastAnchor);
                     }
-                } else if (readFail || saveFail) {
+                } else if (!ok && !queuedVideo && (readFail || saveFail)) {
                     showToast(capFail && !readFail && !saveFail ? "已达上传上限，请先删除旧背景" : "未能添加背景", toastAnchor);
                 }
                 input.value = "";

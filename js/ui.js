@@ -780,9 +780,22 @@ function isVideoBgDataUrl(s) {
     return false;
 }
 
-function projectionAssignVideoBgSrc(videoEl, dataUrl) {
-    const want = String(dataUrl || "").trim();
-    if (!videoEl || !want) return;
+function projectionAssignVideoBgSrc(videoEl, mediaRef, itemId) {
+    if (!videoEl || !mediaRef) return;
+    const domUtils = globalThis.WorshipDomUtils;
+    const mediaKeyFn = domUtils && domUtils.worshipBgMediaKey;
+    let want = "";
+    let blobDirect = null;
+    if (mediaRef instanceof Blob) {
+        blobDirect = mediaRef;
+        want =
+            typeof mediaKeyFn === "function"
+                ? mediaKeyFn(mediaRef, itemId)
+                : `worship-blob:${String(itemId || "") || mediaRef.size}:${mediaRef.type}`;
+    } else {
+        want = String(mediaRef || "").trim();
+        if (!want) return;
+    }
     const prev = String(videoEl.dataset.worshipBgUrl || "");
     if (prev === want && videoEl.src && videoEl.readyState >= 2 && !videoEl.ended) {
         videoEl.style.opacity = "1";
@@ -800,6 +813,23 @@ function projectionAssignVideoBgSrc(videoEl, dataUrl) {
         if (videoEl.readyState >= 2) kickPlay();
         else videoEl.addEventListener("loadeddata", kickPlay, { once: true });
     };
+    if (blobDirect) {
+        if (videoEl._worshipVideoBlobKey === want && videoEl._worshipVideoBlobUrl) {
+            applySrc(videoEl._worshipVideoBlobUrl);
+            return;
+        }
+        if (videoEl._worshipVideoBlobUrl) {
+            try {
+                URL.revokeObjectURL(videoEl._worshipVideoBlobUrl);
+            } catch (_e) {
+                /* ignore */
+            }
+        }
+        videoEl._worshipVideoBlobUrl = URL.createObjectURL(blobDirect);
+        videoEl._worshipVideoBlobKey = want;
+        applySrc(videoEl._worshipVideoBlobUrl);
+        return;
+    }
     if (isVideoBgDataUrl(want)) {
         if (videoEl._worshipVideoBlobKey === want && videoEl._worshipVideoBlobUrl) {
             applySrc(videoEl._worshipVideoBlobUrl);
@@ -897,7 +927,7 @@ globalThis.drawBg = function (ts) {
             cancelAnimationFrame(globalThis.projectionRaf);
             globalThis.projectionRaf = 0;
         }
-        projectionAssignVideoBgSrc(dispV, bgState.imageData);
+        projectionAssignVideoBgSrc(dispV, bgState.imageData, bgState.bgImageId);
         globalThis.projectionLastTs = ts;
         return;
     }

@@ -787,8 +787,10 @@
 
             this.tRex.update(100, Trex.status.CRASHED);
 
-            // Game over panel.
-            if (!this.gameOverPanel) {
+            // 自定义中文失败界面（见 index.html）；不再绘制像素 GAME OVER。
+            if (typeof window.worshipDinoOnGameOver === "function") {
+                window.worshipDinoOnGameOver();
+            } else if (!this.gameOverPanel) {
                 this.gameOverPanel = new GameOverPanel(this.canvas,
                     this.spriteDef.TEXT_SPRITE, this.spriteDef.RESTART,
                     this.dimensions);

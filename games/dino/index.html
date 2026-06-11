@@ -5,16 +5,33 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0,maximum-scale=1.0, user-scalable=no">
     <title>恐龙跑酷小游戏</title>
-    <link rel="stylesheet" href="index.css">
+    <link rel="stylesheet" href="index.css?v=24">
     <script src="index.js"></script>
 </head>
 
 <body id="t" class="offline">
     <button type="button" id="dino-exit-btn" class="dino-exit-btn" title="关闭并返回主页面（Esc）" aria-label="关闭">×</button>
     <p class="dino-attribution">开源小游戏 · 详见 LICENSE</p>
-    <div id="messageBox" class="sendmessage">
-         <h1 class="dino-start-hint">按空格键开始</h1>
-         <div class="niokbutton" onclick="okbuttonsend()"></div>
+    <div id="dino-start-overlay" class="dino-start-overlay" role="status" aria-live="polite">
+        <p class="dino-start-lead">是让我看看怎么个事！</p>
+        <p class="dino-start-hint">按空格键开始</p>
+    </div>
+    <div id="dino-game-over" class="dino-modal dino-modal--fail" hidden>
+        <div class="dino-modal-card dino-modal-card--fail" role="dialog" aria-modal="true" aria-labelledby="dino-game-over-title">
+            <div class="dino-modal-hero" aria-hidden="true">🦖</div>
+            <p id="dino-game-over-title" class="dino-modal-message">那真是太可惜了呢！要不再来试试呢！</p>
+            <div class="dino-modal-actions">
+                <button type="button" id="dino-quit-btn" class="dino-modal-btn dino-modal-btn--quit">算了吧！</button>
+                <button type="button" id="dino-retry-btn" class="dino-modal-btn dino-modal-btn--retry">再试试！</button>
+            </div>
+        </div>
+    </div>
+    <div id="dino-farewell" class="dino-modal dino-modal--farewell" hidden>
+        <div class="dino-modal-card dino-modal-card--farewell" role="dialog" aria-modal="true" aria-labelledby="dino-farewell-title">
+            <div class="dino-modal-hero dino-modal-hero--wave" aria-hidden="true">👋</div>
+            <p id="dino-farewell-title" class="dino-modal-message dino-modal-message--farewell">那好吧，那我们下次见呢！拜拜哦！</p>
+            <button type="button" id="dino-farewell-ok" class="dino-modal-btn dino-modal-btn--farewell">好的！</button>
+        </div>
     </div>
     <div id="main-frame-error" class="interstitial-wrapper">
         <div id="main-content">
@@ -50,18 +67,84 @@
     }
     window.addEventListener("beforeunload", notifyOpenerDinoClosed);
     document.getElementById("dino-exit-btn")?.addEventListener("click", closeDinoAndReturnToMain);
+
+    var gameOverEl = document.getElementById("dino-game-over");
+    var farewellEl = document.getElementById("dino-farewell");
+    var dinoUiBlocking = false;
+
+    function isDinoModalOpen() {
+        return (
+            (gameOverEl && !gameOverEl.hidden) ||
+            (farewellEl && !farewellEl.hidden)
+        );
+    }
+
+    function hideDinoStartHint() {
+        var overlay = document.getElementById("dino-start-overlay");
+        if (overlay) overlay.hidden = true;
+    }
+
+    function worshipDinoRetry() {
+        if (gameOverEl) gameOverEl.hidden = true;
+        if (farewellEl) farewellEl.hidden = true;
+        dinoUiBlocking = false;
+        hideDinoStartHint();
+        var runner = window.Runner && window.Runner.instance_;
+        if (runner && typeof runner.restart === "function") {
+            runner.restart();
+        }
+    }
+
+    function worshipDinoShowFarewell() {
+        if (gameOverEl) gameOverEl.hidden = true;
+        if (farewellEl) farewellEl.hidden = false;
+        dinoUiBlocking = true;
+    }
+
+    window.worshipDinoOnGameOver = function () {
+        if (gameOverEl) gameOverEl.hidden = false;
+        if (farewellEl) farewellEl.hidden = true;
+        dinoUiBlocking = true;
+        hideDinoStartHint();
+    };
+
+    document.getElementById("dino-retry-btn")?.addEventListener("click", worshipDinoRetry);
+    document.getElementById("dino-quit-btn")?.addEventListener("click", worshipDinoShowFarewell);
+    document.getElementById("dino-farewell-ok")?.addEventListener("click", closeDinoAndReturnToMain);
+
     document.addEventListener("keydown", function (evt) {
         evt = evt || window.event;
         var key = evt.key || "";
         if (key === "Escape" || evt.keyCode === 27) {
             evt.preventDefault();
+            if (farewellEl && !farewellEl.hidden) {
+                closeDinoAndReturnToMain();
+                return;
+            }
+            if (gameOverEl && !gameOverEl.hidden) {
+                worshipDinoShowFarewell();
+                return;
+            }
             closeDinoAndReturnToMain();
             return;
         }
-        if (evt.keyCode === 32) {
-            var box = document.getElementById("messageBox");
-            if (box) box.style.visibility = "hidden";
+        if (dinoUiBlocking || isDinoModalOpen()) {
+            if (evt.keyCode === 32) {
+                evt.preventDefault();
+                evt.stopPropagation();
+            }
+            return;
         }
+        if (evt.keyCode === 32) {
+            hideDinoStartHint();
+        }
+    }, true);
+
+    document.addEventListener("keydown", function (evt) {
+        evt = evt || window.event;
+        if (evt.keyCode !== 32) return;
+        if (dinoUiBlocking || isDinoModalOpen()) return;
+        hideDinoStartHint();
     });
 </script>
     

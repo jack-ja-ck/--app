@@ -1,4 +1,4 @@
-const CACHE_NAME = "worship-app-v23";
+const CACHE_NAME = "worship-app-v24";
 const NETWORK_FIRST_PATHS = [
   "/index.html",
   "/app.js",

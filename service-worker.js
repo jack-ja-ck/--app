@@ -1,4 +1,4 @@
-const CACHE_NAME = "worship-app-v22";
+const CACHE_NAME = "worship-app-v23";
 const NETWORK_FIRST_PATHS = [
   "/index.html",
   "/app.js",
@@ -62,7 +62,16 @@ const ASSETS = [
   "js/data.js",
   "js/actions.js",
   "js/fonts.js",
-  "js/font-loader.js"
+  "js/font-loader.js",
+  "games/dino/index.html",
+  "games/dino/index.js",
+  "games/dino/index.css",
+  "games/dino/LICENSE",
+  "games/dino/ATTRIBUTION.md",
+  "games/dino/assets/default_100_percent/100-offline-sprite.png",
+  "games/dino/assets/default_100_percent/100-error-offline.png",
+  "games/dino/assets/default_200_percent/200-offline-sprite.png",
+  "games/dino/assets/default_200_percent/200-error-offline.png"
 ];
 
 self.addEventListener("install", (event) => {

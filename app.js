@@ -17273,6 +17273,119 @@ ${deleteBtnHtml}
         /* ignore */
     }
 
+    const WORSHIP_DINO_GAME_WIN_NAME = "worship_dino_game";
+    let worshipDinoGameWin = null;
+    let worshipDinoGameWinWatch = null;
+
+    function clearWorshipDinoGameWinWatch() {
+        if (worshipDinoGameWinWatch) {
+            clearInterval(worshipDinoGameWinWatch);
+            worshipDinoGameWinWatch = null;
+        }
+    }
+
+    function onWorshipDinoGameWindowClosed() {
+        worshipDinoGameWin = null;
+        clearWorshipDinoGameWinWatch();
+    }
+
+    function getDinoGameWindowPlacement() {
+        const scr = window.screen;
+        const availLeft = Number(scr.availLeft) || 0;
+        const availTop = Number(scr.availTop) || 0;
+        const availWidth = Math.max(640, Number(scr.availWidth) || 1280);
+        const availHeight = Math.max(400, Number(scr.availHeight) || 720);
+        const width = Math.floor(availWidth * 0.96);
+        const height = Math.floor(availHeight * 0.96);
+        const left = availLeft + Math.max(0, Math.floor((availWidth - width) / 2));
+        const top = availTop + Math.max(0, Math.floor((availHeight - height) / 2));
+        return { left, top, width, height };
+    }
+
+    function applyDinoGameWindowPlacement(win, placement) {
+        if (!win || win.closed) return;
+        const { left, top, width, height } = placement;
+        const apply = () => {
+            if (!win || win.closed) return;
+            try {
+                win.moveTo(left, top);
+                win.resizeTo(width, height);
+                win.focus();
+            } catch (_e) {
+                /* ignore */
+            }
+        };
+        apply();
+        setTimeout(apply, 120);
+        setTimeout(apply, 400);
+    }
+
+    function watchWorshipDinoGameWindow(win) {
+        clearWorshipDinoGameWinWatch();
+        worshipDinoGameWinWatch = setInterval(() => {
+            if (!worshipDinoGameWin || worshipDinoGameWin.closed) {
+                onWorshipDinoGameWindowClosed();
+            }
+        }, 400);
+    }
+
+    function closeWorshipDinoGameWindow() {
+        clearWorshipDinoGameWinWatch();
+        const w = worshipDinoGameWin;
+        worshipDinoGameWin = null;
+        if (!w || w.closed) return;
+        try {
+            w.close();
+        } catch (_e) {
+            /* ignore */
+        }
+    }
+
+    function openWorshipDinoGameWindow() {
+        closeWorshipDinoGameWindow();
+        const placement = getDinoGameWindowPlacement();
+        const { left, top, width, height } = placement;
+        const feats = [
+            `left=${left}`,
+            `top=${top}`,
+            `width=${width}`,
+            `height=${height}`,
+            "menubar=no",
+            "toolbar=no",
+            "status=no",
+            "scrollbars=no",
+            "resizable=yes"
+        ].join(",");
+        const targetUrl = "./games/dino/index.html";
+        let win = null;
+        try {
+            win = window.open(targetUrl, WORSHIP_DINO_GAME_WIN_NAME, feats);
+        } catch (err) {
+            console.warn("openWorshipDinoGameWindow", err);
+        }
+        if (!win) {
+            try {
+                win = window.open(targetUrl, WORSHIP_DINO_GAME_WIN_NAME);
+            } catch (err2) {
+                console.warn("openWorshipDinoGameWindow fallback", err2);
+            }
+        }
+        if (!win) {
+            showPopupBlockedBanner();
+            showToast("无法打开小游戏窗口，请允许弹窗", $("open-dino-game-btn"));
+            return null;
+        }
+        worshipDinoGameWin = win;
+        try {
+            globalThis.__worshipOnDinoGameClosed = onWorshipDinoGameWindowClosed;
+        } catch (_e) {
+            /* ignore */
+        }
+        applyDinoGameWindowPlacement(win, placement);
+        watchWorshipDinoGameWindow(win);
+        return win;
+    }
+
     function openDisplayOnSecondScreen(url, windowName, toastAnchor) {
         const { left, top, width, height } = getDisplayWindowPlacement();
         const feats = [
@@ -17773,6 +17886,7 @@ ${deleteBtnHtml}
         on("ui-zoom-in-adv", "click", () => nudgeUiZoom(UI_ZOOM_STEP));
         on("ui-zoom-reset", "click", () => restoreUiZoomAuto());
         on("ui-zoom-restore-auto", "click", () => restoreUiZoomAuto());
+        on("open-dino-game-btn", "click", () => openWorshipDinoGameWindow());
         on("publish-song-btn", "click", publishSong);
         on("reset-current-song", "click", () => {
             setLyricEditorValueProgrammatically(DEFAULT_LYRICS);

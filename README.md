@@ -20,26 +20,25 @@
 3. 点击"主领视图"按钮打开主领提词界面
 4. 在手机浏览器中访问同一页面即可同步控制
 
+```
 ## 开源协议
 
 本项目基于 MIT 许可证开源。
 
+你可以自由使用、修改、分发本软件，包括用于商业用途，只需保留版权声明。
+欢迎爱心人士进行修改，让此工具为更多人带去方便！
+
+详见 [LICENSE](./LICENSE) 文件。
+
 Copyright (c) 2026 敬拜投屏工具
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+## 如何贡献
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+欢迎提交 Issue 反馈问题，或提交 Pull Request 一起改进。
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+- 发现问题：在 GitHub Issues 中描述
+- 改进代码：Fork 后修改，提交 Pull Request
+
+## 第三方服务
+
+本项目使用了以下免费服务，部署时需自行注册并替换配置：
